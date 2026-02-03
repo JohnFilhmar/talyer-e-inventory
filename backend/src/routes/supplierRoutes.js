@@ -12,7 +12,7 @@ const createSupplierValidation = [
   body('code').optional().isLength({ max: 50 }).withMessage('Code cannot exceed 50 characters'),
   body('contact.personName').optional().isString().isLength({ max: 100 }).withMessage('Contact person name cannot exceed 100 characters'),
   body('contact.phone').optional().isString().isLength({ max: 20 }).withMessage('Phone cannot exceed 20 characters'),
-  body('contact.email').optional().isEmail().withMessage('Invalid email format'),
+  body('contact.email').optional().isEmail({ allow_utf8_local_part: false }).withMessage('Invalid email format'),
   body('contact.website').optional().isURL().withMessage('Invalid website URL'),
   body('address.street').optional().isString().isLength({ max: 200 }).withMessage('Street cannot exceed 200 characters'),
   body('address.city').optional().isString().isLength({ max: 100 }).withMessage('City cannot exceed 100 characters'),

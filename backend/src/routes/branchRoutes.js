@@ -49,7 +49,7 @@ const createBranchValidation = [
     .matches(/^[\d\s\-\+\(\)]+$/).withMessage('Invalid phone number format'),
   body('contact.email')
     .optional()
-    .isEmail().withMessage('Invalid email format')
+    .isEmail({ allow_utf8_local_part: false }).withMessage('Invalid email format')
     .normalizeEmail(),
   body('manager')
     .optional()
@@ -75,7 +75,7 @@ const updateBranchValidation = [
     .matches(/^[A-Z0-9-]+$/).withMessage('Branch code must be uppercase alphanumeric with hyphens only'),
   body('contact.email')
     .optional()
-    .isEmail().withMessage('Invalid email format')
+    .isEmail({ allow_utf8_local_part: false }).withMessage('Invalid email format')
     .normalizeEmail(),
   body('manager')
     .optional()

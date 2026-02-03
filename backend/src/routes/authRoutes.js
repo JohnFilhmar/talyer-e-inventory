@@ -61,7 +61,7 @@ const loginValidation = [
   body('email')
     .trim()
     .notEmpty().withMessage('Email is required')
-    .isEmail().withMessage('Please provide a valid email'),
+    .isEmail({ allow_utf8_local_part: false }).withMessage('Please provide a valid email'),
   body('password')
     .notEmpty().withMessage('Password is required'),
   validate
@@ -78,7 +78,7 @@ const forgotPasswordValidation = [
   body('email')
     .trim()
     .notEmpty().withMessage('Email is required')
-    .isEmail().withMessage('Please provide a valid email'),
+    .isEmail({ allow_utf8_local_part: false }).withMessage('Please provide a valid email'),
   validate
 ];
 

@@ -23,7 +23,7 @@ const createServiceValidation = [
   body('branch').notEmpty().withMessage('Branch is required').isMongoId().withMessage('Invalid branch ID'),
   body('customer.name').trim().notEmpty().withMessage('Customer name is required').isLength({ max: 100 }).withMessage('Customer name cannot exceed 100 characters'),
   phoneValidator,
-  body('customer.email').optional({ checkFalsy: true }).isEmail().withMessage('Invalid email address'),
+  body('customer.email').optional({ checkFalsy: true }).isEmail({ allow_utf8_local_part: false }).withMessage('Invalid email address'),
   body('customer.address').optional().isLength({ max: 200 }).withMessage('Address cannot exceed 200 characters'),
   body('description').trim().notEmpty().withMessage('Service description is required'),
   body('priority').optional().isIn(['low', 'normal', 'high', 'urgent']).withMessage('Invalid priority'),

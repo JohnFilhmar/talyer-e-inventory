@@ -58,7 +58,7 @@ const createUserValidation = [
   body('email')
     .trim()
     .notEmpty().withMessage('Email is required')
-    .isEmail().withMessage('Please provide a valid email')
+    .isEmail({ allow_utf8_local_part: false }).withMessage('Please provide a valid email')
     .normalizeEmail(),
   body('password')
     .notEmpty().withMessage('Password is required')
@@ -82,7 +82,7 @@ const updateUserValidation = [
   body('email')
     .optional()
     .trim()
-    .isEmail().withMessage('Please provide a valid email')
+    .isEmail({ allow_utf8_local_part: false }).withMessage('Please provide a valid email')
     .normalizeEmail(),
   body('role')
     .optional()

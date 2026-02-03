@@ -24,7 +24,7 @@ const createOrderValidation = [
   body('customer.name').trim().notEmpty().withMessage('Customer name is required')
     .isLength({ max: 100 }).withMessage('Customer name cannot exceed 100 characters'),
   body('customer.phone').optional().trim().isLength({ max: 20 }).withMessage('Phone cannot exceed 20 characters'),
-  body('customer.email').optional().trim().isEmail().withMessage('Invalid email format'),
+  body('customer.email').optional().trim().isEmail({ allow_utf8_local_part: false }).withMessage('Invalid email format'),
   body('items').isArray({ min: 1 }).withMessage('At least one item is required'),
   body('items.*.product').isMongoId().withMessage('Invalid product ID'),
   body('items.*.quantity').isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
