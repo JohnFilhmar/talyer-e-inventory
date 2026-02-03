@@ -71,4 +71,4 @@ pids
 .yarn/install-state.gz
 
 # Redis
-.rdb
+**/**.rdb

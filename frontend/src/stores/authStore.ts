@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { User } from '@/types/auth';
 import { authService } from '@/lib/services/authService';
 import { clearTokens } from '@/lib/tokenStorage';
+import { setInitializationPromise, clearInitializationPromise } from '@/lib/apiClient';
 
 /**
  * Auth store state interface
@@ -155,30 +156,41 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
     setLoading(true);
 
-    try {
-      // Try to refresh token (backend reads httpOnly cookie and returns user data)
-      const refreshResponse = await authService.refreshToken();
+    // Create initialization promise and share with apiClient
+    const initPromise = (async () => {
+      try {
+        // Try to refresh token (backend reads httpOnly cookie and returns user data)
+        const refreshResponse = await authService.refreshToken();
 
-      if (refreshResponse.success && refreshResponse.data?.accessToken) {
-        // Token refreshed successfully, user data is included in response
-        if (refreshResponse.data.user) {
-          setUser(refreshResponse.data.user);
-        } else {
-          // Fallback: fetch user profile if not included
+        if (refreshResponse.success && refreshResponse.data?.accessToken) {
+          // Token is automatically set in authService.refreshToken()
+          // Now fetch user profile with the new token
           const profileResponse = await authService.getProfile();
           if (profileResponse.success && profileResponse.data) {
             setUser(profileResponse.data);
+          } else {
+            // If profile fetch fails, clear session
+            clearTokens();
+            setUser(null);
           }
+        } else {
+          // No valid refresh token
+          clearTokens();
+          setUser(null);
         }
+      } catch {
+        // No valid session, user needs to login
+        clearTokens();
+        setUser(null);
+      } finally {
+        setLoading(false);
+        set({ isInitialized: true });
+        clearInitializationPromise();
       }
-    } catch {
-      // No valid session, user needs to login
-      clearTokens();
-      setUser(null);
-    } finally {
-      setLoading(false);
-      set({ isInitialized: true });
-    }
+    })();
+
+    setInitializationPromise(initPromise);
+    await initPromise;
   },
 }));
 

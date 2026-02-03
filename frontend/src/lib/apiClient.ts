@@ -1,5 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { getAccessToken, setAccessToken, clearTokens } from './tokenStorage';
+import { getAccessToken, setAccessToken, clearTokens, hasAccessToken } from './tokenStorage';
 import type { ApiResponse } from '@/types/api';
 import type { RefreshTokenResponse } from '@/types/auth';
 
@@ -24,6 +24,23 @@ const apiClient = axios.create({
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];
 
+// Promise to track initialization state
+let initializationPromise: Promise<void> | null = null;
+
+/**
+ * Set initialization promise (called by authStore)
+ */
+export const setInitializationPromise = (promise: Promise<void>): void => {
+  initializationPromise = promise;
+};
+
+/**
+ * Clear initialization promise after completion
+ */
+export const clearInitializationPromise = (): void => {
+  initializationPromise = null;
+};
+
 /**
  * Subscribe to token refresh completion
  */
@@ -43,7 +60,12 @@ const onTokenRefreshed = (token: string): void => {
  * Request interceptor: Attach access token to all requests
  */
 apiClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
+  async (config: InternalAxiosRequestConfig) => {
+    // Wait for initialization to complete before making requests
+    if (initializationPromise && !hasAccessToken()) {
+      await initializationPromise;
+    }
+    
     const token = getAccessToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
