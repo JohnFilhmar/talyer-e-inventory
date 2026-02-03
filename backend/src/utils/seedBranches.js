@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const Branch = require('../models/Branch');
-require('dotenv').config();
 
 const branches = [
   {
