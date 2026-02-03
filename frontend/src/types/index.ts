@@ -9,5 +9,3 @@ export * from './product';
 export * from './stock';
 export * from './supplier';
 export * from './sales';
-export * from './service';
-export * from './user';
