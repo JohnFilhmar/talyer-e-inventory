@@ -14,10 +14,15 @@ const IMAGE_CONFIG = {
   OUTPUT_FORMAT: 'jpeg',
 };
 
-// Ensure uploads directory exists
+// Ensure uploads directory exists (skip on read-only filesystems like Vercel)
 const uploadsDir = path.join(process.cwd(), 'uploads', 'products');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+} catch (error) {
+  // Ignore on serverless/read-only filesystems
+  console.warn('Could not create uploads directory (read-only filesystem):', error.message);
 }
 
 // Configure multer storage (memory storage for processing with sharp)
