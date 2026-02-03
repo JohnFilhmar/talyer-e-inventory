@@ -1,6 +1,6 @@
-const express = require('express');
-const { body } = require('express-validator');
-const {
+import express from 'express';
+import { body } from 'express-validator';
+import {
   register,
   registerCustomer,
   login,
@@ -9,9 +9,9 @@ const {
   forgotPassword,
   resetPassword,
   getMe,
-} = require('../controllers/authController');
-const { protect } = require('../middleware/auth');
-const validate = require('../middleware/validate');
+} from '../controllers/authController.js';
+import { protect } from '../middleware/auth.js';
+import validate from '../middleware/validate.js';
 
 const router = express.Router();
 
@@ -103,4 +103,4 @@ router.post('/reset-password', resetPasswordValidation, resetPassword);
 router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 
-module.exports = router;
+export default router;

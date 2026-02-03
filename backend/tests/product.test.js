@@ -1,10 +1,11 @@
-const request = require('supertest');
-const express = require('express');
-const dbHandler = require('./setup/dbHandler');
-const { createTestUser, createTestAdmin } = require('./setup/testHelpers');
-const productRoutes = require('../src/routes/productRoutes');
-const Product = require('../src/models/Product');
-const Category = require('../src/models/Category');
+import request from 'supertest';
+import express from 'express';
+import * as dbHandler from './setup/dbHandler.js';
+import { createTestUser, createTestAdmin } from './setup/testHelpers.js';
+import productRoutes from '../src/routes/productRoutes.js';
+import Product from '../src/models/Product.js';
+import Category from '../src/models/Category.js';
+import Branch from '../src/models/Branch.js';
 
 // Create Express app for testing
 const app = express();
@@ -53,7 +54,6 @@ describe('Product API Tests', () => {
 
   beforeEach(async () => {
     // Create branch first for non-admin users
-    const Branch = require('../src/models/Branch');
     branch = await Branch.create({
       name: 'Test Branch',
       code: 'TEST-001',

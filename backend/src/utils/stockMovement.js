@@ -1,5 +1,6 @@
-const StockMovement = require('../models/StockMovement');
-const Stock = require('../models/Stock');
+import mongoose from 'mongoose';
+import StockMovement from '../models/StockMovement.js';
+import Stock from '../models/Stock.js';
 
 /**
  * Stock Movement Utility
@@ -34,7 +35,7 @@ async function createMovement({
 }) {
   // Get the stock document if only ID was provided
   let stockDoc = stock;
-  if (typeof stock === 'string' || stock instanceof require('mongoose').Types.ObjectId) {
+  if (typeof stock === 'string' || stock instanceof mongoose.Types.ObjectId) {
     stockDoc = await Stock.findById(stock);
     if (!stockDoc) {
       throw new Error('Stock record not found');
@@ -118,8 +119,4 @@ const MOVEMENT_TYPES = {
   INITIAL: 'initial',
 };
 
-module.exports = {
-  createMovement,
-  createMovementWithOldQuantity,
-  MOVEMENT_TYPES,
-};
+export { createMovement, createMovementWithOldQuantity, MOVEMENT_TYPES };

@@ -1,11 +1,11 @@
-require('dotenv').config();
-const express = require('express');
-const cookieParser = require('cookie-parser');
-const path = require('path');
-const connectDB = require('./config/database');
-const { connectRedis } = require('./config/redis');
-const errorHandler = require('./middleware/errorHandler');
-const { CORS } = require('./config/constants');
+import 'dotenv/config';
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import path from 'path';
+import connectDB from './config/database.js';
+import { connectRedis } from './config/redis.js';
+import errorHandler from './middleware/errorHandler.js';
+import { CORS } from './config/constants.js';
 
 // Initialize express app
 const app = express();
@@ -65,15 +65,15 @@ app.use((req, res, next) => {
 });
 
 // Import routes
-const authRoutes = require('./routes/authRoutes');
-const userRoutes = require('./routes/userRoutes');
-const branchRoutes = require('./routes/branchRoutes');
-const categoryRoutes = require('./routes/categoryRoutes');
-const productRoutes = require('./routes/productRoutes');
-const stockRoutes = require('./routes/stockRoutes');
-const supplierRoutes = require('./routes/supplierRoutes');
-const salesRoutes = require('./routes/salesRoutes');
-const serviceRoutes = require('./routes/serviceRoutes');
+import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import branchRoutes from './routes/branchRoutes.js';
+import categoryRoutes from './routes/categoryRoutes.js';
+import productRoutes from './routes/productRoutes.js';
+import stockRoutes from './routes/stockRoutes.js';
+import supplierRoutes from './routes/supplierRoutes.js';
+import salesRoutes from './routes/salesRoutes.js';
+import serviceRoutes from './routes/serviceRoutes.js';
 
 // Mount routes
 app.use('/api/auth', authRoutes);
@@ -149,4 +149,4 @@ const startServer = async () => {
 
 startServer();
 
-module.exports = app;
+export default app;

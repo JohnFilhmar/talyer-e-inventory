@@ -1,7 +1,7 @@
-const User = require('../models/User');
-const Branch = require('../models/Branch');
-const asyncHandler = require('../utils/asyncHandler');
-const ApiResponse = require('../utils/apiResponse');
+import User from '../models/User.js';
+import Branch from '../models/Branch.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import ApiResponse from '../utils/apiResponse.js';
 
 // @desc    Get all users (paginated with filters)
 // @route   GET /api/users
@@ -314,12 +314,12 @@ const changeUserPassword = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, 200, 'Password changed successfully. User will need to login again.');
 });
 
-module.exports = {
+export {
   getUsers,
   getUser,
   createUser,
   updateUser,
   deactivateUser,
   activateUser,
-  changeUserPassword,
+  changeUserPassword
 };

@@ -1,20 +1,20 @@
-const Stock = require('../models/Stock');
-const Product = require('../models/Product');
-const Branch = require('../models/Branch');
-const StockTransfer = require('../models/StockTransfer');
-const StockMovement = require('../models/StockMovement');
-const asyncHandler = require('../utils/asyncHandler');
-const ApiResponse = require('../utils/apiResponse');
-const CacheUtil = require('../utils/cache');
-const { createMovementWithOldQuantity, MOVEMENT_TYPES } = require('../utils/stockMovement');
-const { CACHE_TTL, USER_ROLES, PAGINATION } = require('../config/constants');
+import Stock from '../models/Stock.js';
+import Product from '../models/Product.js';
+import Branch from '../models/Branch.js';
+import StockTransfer from '../models/StockTransfer.js';
+import StockMovement from '../models/StockMovement.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import ApiResponse from '../utils/apiResponse.js';
+import CacheUtil from '../utils/cache.js';
+import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
+import { CACHE_TTL, USER_ROLES, PAGINATION } from '../config/constants.js';
 
 /**
  * @desc    Get all stock records with filters
  * @route   GET /api/stock
  * @access  Private (Admin, Salesperson)
  */
-exports.getAllStock = asyncHandler(async (req, res) => {
+export const getAllStock = asyncHandler(async (req, res) => {
   const {
     branch,
     product,
@@ -73,7 +73,7 @@ exports.getAllStock = asyncHandler(async (req, res) => {
  * @route   GET /api/stock/branch/:branchId
  * @access  Private
  */
-exports.getBranchStock = asyncHandler(async (req, res) => {
+export const getBranchStock = asyncHandler(async (req, res) => {
   const { branchId } = req.params;
   const { category, lowStock, page = 1, limit = 50 } = req.query;
 
@@ -136,7 +136,7 @@ exports.getBranchStock = asyncHandler(async (req, res) => {
  * @route   GET /api/stock/product/:productId
  * @access  Private
  */
-exports.getProductStock = asyncHandler(async (req, res) => {
+export const getProductStock = asyncHandler(async (req, res) => {
   const { productId } = req.params;
 
   const product = await Product.findById(productId);
@@ -184,7 +184,7 @@ exports.getProductStock = asyncHandler(async (req, res) => {
  * @route   GET /api/stock/low-stock
  * @access  Private (Admin, Salesperson)
  */
-exports.getLowStock = asyncHandler(async (req, res) => {
+export const getLowStock = asyncHandler(async (req, res) => {
   const { branch } = req.query;
 
   const query = {
@@ -214,7 +214,7 @@ exports.getLowStock = asyncHandler(async (req, res) => {
  * @route   POST /api/stock/restock
  * @access  Private (Admin, Salesperson)
  */
-exports.restockProduct = asyncHandler(async (req, res) => {
+export const restockProduct = asyncHandler(async (req, res) => {
   const {
     product,
     branch,
@@ -306,7 +306,7 @@ exports.restockProduct = asyncHandler(async (req, res) => {
  * @route   POST /api/stock/adjust
  * @access  Private (Admin only)
  */
-exports.adjustStock = asyncHandler(async (req, res) => {
+export const adjustStock = asyncHandler(async (req, res) => {
   const { product, branch, adjustment, reason } = req.body;
 
   if (!reason) {
@@ -361,7 +361,7 @@ exports.adjustStock = asyncHandler(async (req, res) => {
  * @access  Private (Admin, Salesperson)
  * @note    This does NOT change prices - only adds quantity
  */
-exports.restockById = asyncHandler(async (req, res) => {
+export const restockById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { quantity, supplierId, notes } = req.body;
 
@@ -415,7 +415,7 @@ exports.restockById = asyncHandler(async (req, res) => {
  * @route   PUT /api/stock/:id/adjust
  * @access  Private (Admin only)
  */
-exports.adjustById = asyncHandler(async (req, res) => {
+export const adjustById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { quantity, reason, notes } = req.body;
 
@@ -468,7 +468,7 @@ exports.adjustById = asyncHandler(async (req, res) => {
  * @route   POST /api/stock/transfers
  * @access  Private (Admin, Branch Manager)
  */
-exports.createStockTransfer = asyncHandler(async (req, res) => {
+export const createStockTransfer = asyncHandler(async (req, res) => {
   const { product, fromBranch, toBranch, quantity, notes } = req.body;
 
   // Validate branches are different
@@ -528,7 +528,7 @@ exports.createStockTransfer = asyncHandler(async (req, res) => {
  * @route   PUT /api/stock/transfers/:id
  * @access  Private (Admin, Branch Manager)
  */
-exports.updateStockTransferStatus = asyncHandler(async (req, res) => {
+export const updateStockTransferStatus = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -666,7 +666,7 @@ exports.updateStockTransferStatus = asyncHandler(async (req, res) => {
  * @route   GET /api/stock/transfers
  * @access  Private
  */
-exports.getStockTransfers = asyncHandler(async (req, res) => {
+export const getStockTransfers = asyncHandler(async (req, res) => {
   const { branch, status, page = 1, limit = 20 } = req.query;
 
   const query = {};
@@ -714,7 +714,7 @@ exports.getStockTransfers = asyncHandler(async (req, res) => {
  * @route   GET /api/stock/transfers/:id
  * @access  Private
  */
-exports.getStockTransfer = asyncHandler(async (req, res) => {
+export const getStockTransfer = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const transfer = await StockTransfer.findById(id)
@@ -744,7 +744,7 @@ exports.getStockTransfer = asyncHandler(async (req, res) => {
  * @route   GET /api/stock/movements
  * @access  Private (Admin)
  */
-exports.getMovements = asyncHandler(async (req, res) => {
+export const getMovements = asyncHandler(async (req, res) => {
   const { 
     type, 
     branch, 
@@ -811,7 +811,7 @@ exports.getMovements = asyncHandler(async (req, res) => {
  * @route   GET /api/stock/movements/stock/:stockId
  * @access  Private (Admin, Salesperson)
  */
-exports.getMovementsByStock = asyncHandler(async (req, res) => {
+export const getMovementsByStock = asyncHandler(async (req, res) => {
   const { stockId } = req.params;
   const { page = 1, limit = 20 } = req.query;
 
@@ -857,7 +857,7 @@ exports.getMovementsByStock = asyncHandler(async (req, res) => {
  * @route   GET /api/stock/movements/product/:productId
  * @access  Private (Admin, Salesperson)
  */
-exports.getMovementsByProduct = asyncHandler(async (req, res) => {
+export const getMovementsByProduct = asyncHandler(async (req, res) => {
   const { productId } = req.params;
   const { branch, page = 1, limit = 20 } = req.query;
 
@@ -903,7 +903,7 @@ exports.getMovementsByProduct = asyncHandler(async (req, res) => {
  * @route   GET /api/stock/movements/branch/:branchId
  * @access  Private (Admin + Branch Access)
  */
-exports.getMovementsByBranch = asyncHandler(async (req, res) => {
+export const getMovementsByBranch = asyncHandler(async (req, res) => {
   const { branchId } = req.params;
   const { type, startDate, endDate, page = 1, limit = 20 } = req.query;
 

@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const stockSchema = new mongoose.Schema(
   {
@@ -126,4 +126,4 @@ stockSchema.methods.deductStock = async function(quantity) {
 
 const Stock = mongoose.model('Stock', stockSchema);
 
-module.exports = Stock;
+export default Stock;

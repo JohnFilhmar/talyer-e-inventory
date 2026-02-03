@@ -1,10 +1,10 @@
-const request = require('supertest');
-const express = require('express');
-const dbHandler = require('./setup/dbHandler');
-const { createTestUser, createTestAdmin } = require('./setup/testHelpers');
-const branchRoutes = require('../src/routes/branchRoutes');
-const Branch = require('../src/models/Branch');
-const User = require('../src/models/User');
+import request from 'supertest';
+import express from 'express';
+import * as dbHandler from './setup/dbHandler.js';
+import { createTestUser, createTestAdmin } from './setup/testHelpers.js';
+import branchRoutes from '../src/routes/branchRoutes.js';
+import Branch from '../src/models/Branch.js';
+import User from '../src/models/User.js';
 
 // Create Express app for testing
 const app = express();

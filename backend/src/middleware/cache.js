@@ -1,5 +1,5 @@
-const CacheUtil = require('../utils/cache');
-const { CACHE_TTL } = require('../config/constants');
+import CacheUtil from '../utils/cache.js';
+import { CACHE_TTL } from '../config/constants.js';
 
 /**
  * Middleware to cache GET responses
@@ -53,4 +53,4 @@ const cacheMiddleware = (keyPrefix, ttl = CACHE_TTL.MEDIUM) => {
   };
 };
 
-module.exports = cacheMiddleware;
+export default cacheMiddleware;

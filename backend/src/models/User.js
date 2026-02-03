@@ -1,5 +1,6 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
+import mongoose from 'mongoose';
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 const userSchema = new mongoose.Schema(
   {
@@ -44,8 +45,8 @@ const userSchema = new mongoose.Schema(
           // Skip validation if no branchId (admin/customer can have no branch)
           if (!branchId) return true;
           
-          // Check if branch exists
-          const Branch = require('./Branch');
+          // Dynamically import Branch model to avoid circular dependency
+          const { default: Branch } = await import('./Branch.js');
           const branch = await Branch.findById(branchId);
           return branch !== null;
         },
@@ -111,10 +112,10 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 // Method to generate reset password token
 userSchema.methods.getResetPasswordToken = function () {
   // Generate token
-  const resetToken = require('crypto').randomBytes(32).toString('hex');
+  const resetToken = crypto.randomBytes(32).toString('hex');
 
   // Hash token and set to resetPasswordToken field
-  this.resetPasswordToken = require('crypto')
+  this.resetPasswordToken = crypto
     .createHash('sha256')
     .update(resetToken)
     .digest('hex');
@@ -127,4 +128,4 @@ userSchema.methods.getResetPasswordToken = function () {
 
 const User = mongoose.model('User', userSchema);
 
-module.exports = User;
+export default User;

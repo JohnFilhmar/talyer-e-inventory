@@ -1,11 +1,11 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const { body, param, query } = require('express-validator');
-const stockController = require('../controllers/stockController');
-const { protect, authorize } = require('../middleware/auth');
-const { USER_ROLES } = require('../config/constants');
-const { checkBranchAccess } = require('../middleware/branchAccess');
-const handleValidationErrors = require('../middleware/validationHandler');
+import { body, param, query } from 'express-validator';
+import * as stockController from '../controllers/stockController.js';
+import { protect, authorize } from '../middleware/auth.js';
+import { USER_ROLES } from '../config/constants.js';
+import { checkBranchAccess } from '../middleware/branchAccess.js';
+import handleValidationErrors from '../middleware/validationHandler.js';
 
 // Validation rules
 const restockValidation = [
@@ -229,4 +229,4 @@ router.put(
   stockController.adjustById
 );
 
-module.exports = router;
+export default router;

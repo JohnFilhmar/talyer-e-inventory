@@ -1,5 +1,5 @@
-const { getRedisClient } = require('../config/redis');
-const { CACHE_TTL } = require('../config/constants');
+import { getRedisClient } from '../config/redis.js';
+import { CACHE_TTL } from '../config/constants.js';
 
 class CacheUtil {
   /**
@@ -108,4 +108,4 @@ class CacheUtil {
   }
 }
 
-module.exports = CacheUtil;
+export default CacheUtil;

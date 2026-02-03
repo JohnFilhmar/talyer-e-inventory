@@ -1,6 +1,6 @@
-const express = require('express');
-const { body, param, query } = require('express-validator');
-const {
+import express from 'express';
+import { body, param, query } from 'express-validator';
+import {
   getUsers,
   getUser,
   createUser,
@@ -8,9 +8,9 @@ const {
   deactivateUser,
   activateUser,
   changeUserPassword,
-} = require('../controllers/userController');
-const { protect, authorize } = require('../middleware/auth');
-const validate = require('../middleware/validate');
+} from '../controllers/userController.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validate from '../middleware/validate.js';
 
 const router = express.Router();
 
@@ -128,4 +128,4 @@ router.patch('/:id/activate', userIdValidation, activateUser);
 // Password change route
 router.patch('/:id/password', changePasswordValidation, changeUserPassword);
 
-module.exports = router;
+export default router;

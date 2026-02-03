@@ -1,20 +1,20 @@
-const ServiceOrder = require('../models/ServiceOrder');
-const Stock = require('../models/Stock');
-const Product = require('../models/Product');
-const Transaction = require('../models/Transaction');
-const User = require('../models/User');
-const asyncHandler = require('../utils/asyncHandler');
-const ApiResponse = require('../utils/apiResponse');
-const CacheUtil = require('../utils/cache');
-const { PAGINATION } = require('../config/constants');
-const { createMovementWithOldQuantity, MOVEMENT_TYPES } = require('../utils/stockMovement');
+import ServiceOrder from '../models/ServiceOrder.js';
+import Stock from '../models/Stock.js';
+import Product from '../models/Product.js';
+import Transaction from '../models/Transaction.js';
+import User from '../models/User.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import ApiResponse from '../utils/apiResponse.js';
+import CacheUtil from '../utils/cache.js';
+import { PAGINATION } from '../config/constants.js';
+import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
 
 /**
  * @desc    Get all service orders with filters
  * @route   GET /api/services
  * @access  Private (Admin, Salesperson, Mechanic)
  */
-exports.getServiceOrders = asyncHandler(async (req, res) => {
+export const getServiceOrders = asyncHandler(async (req, res) => {
   const {
     branch,
     status,
@@ -93,7 +93,7 @@ exports.getServiceOrders = asyncHandler(async (req, res) => {
  * @route   GET /api/services/my-jobs
  * @access  Private (Mechanic)
  */
-exports.getMyJobs = asyncHandler(async (req, res) => {
+export const getMyJobs = asyncHandler(async (req, res) => {
   const { status, page = 1, limit = 20 } = req.query;
 
   const query = {
@@ -136,7 +136,7 @@ exports.getMyJobs = asyncHandler(async (req, res) => {
  * @route   GET /api/services/:id
  * @access  Private
  */
-exports.getServiceOrder = asyncHandler(async (req, res) => {
+export const getServiceOrder = asyncHandler(async (req, res) => {
   const order = await ServiceOrder.findById(req.params.id)
     .populate('branch', 'name code address phone')
     .populate('assignedTo', 'name email phone')
@@ -164,7 +164,7 @@ exports.getServiceOrder = asyncHandler(async (req, res) => {
  * @route   POST /api/services
  * @access  Private (Admin, Salesperson)
  */
-exports.createServiceOrder = asyncHandler(async (req, res) => {
+export const createServiceOrder = asyncHandler(async (req, res) => {
   const {
     branch,
     customer,
@@ -253,7 +253,7 @@ exports.createServiceOrder = asyncHandler(async (req, res) => {
  * @route   PUT /api/services/:id/assign
  * @access  Private (Admin, Manager)
  */
-exports.assignMechanic = asyncHandler(async (req, res) => {
+export const assignMechanic = asyncHandler(async (req, res) => {
   const { mechanicId } = req.body;
   const order = await ServiceOrder.findById(req.params.id);
 
@@ -306,7 +306,7 @@ exports.assignMechanic = asyncHandler(async (req, res) => {
  * @route   PUT /api/services/:id/status
  * @access  Private (Admin, Mechanic)
  */
-exports.updateServiceOrderStatus = asyncHandler(async (req, res) => {
+export const updateServiceOrderStatus = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -428,7 +428,7 @@ exports.updateServiceOrderStatus = asyncHandler(async (req, res) => {
  * @route   PUT /api/services/:id/parts
  * @access  Private (Admin, Mechanic)
  */
-exports.updatePartsUsed = asyncHandler(async (req, res) => {
+export const updatePartsUsed = asyncHandler(async (req, res) => {
   const { partsUsed } = req.body;
   const order = await ServiceOrder.findById(req.params.id);
 
@@ -513,7 +513,7 @@ exports.updatePartsUsed = asyncHandler(async (req, res) => {
  * @route   PUT /api/services/:id/payment
  * @access  Private (Admin, Salesperson)
  */
-exports.updatePayment = asyncHandler(async (req, res) => {
+export const updatePayment = asyncHandler(async (req, res) => {
   const { paymentMethod, amountPaid } = req.body;
   const order = await ServiceOrder.findById(req.params.id);
 
@@ -583,7 +583,7 @@ exports.updatePayment = asyncHandler(async (req, res) => {
  * @route   DELETE /api/services/:id
  * @access  Private (Admin only)
  */
-exports.cancelServiceOrder = asyncHandler(async (req, res) => {
+export const cancelServiceOrder = asyncHandler(async (req, res) => {
   const order = await ServiceOrder.findById(req.params.id);
 
   if (!order) {
@@ -617,7 +617,7 @@ exports.cancelServiceOrder = asyncHandler(async (req, res) => {
  * @route   GET /api/services/:id/invoice
  * @access  Private
  */
-exports.getServiceInvoice = asyncHandler(async (req, res) => {
+export const getServiceInvoice = asyncHandler(async (req, res) => {
   const order = await ServiceOrder.findById(req.params.id)
     .populate('branch', 'name code address phone email')
     .populate('assignedTo', 'name')

@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const branchSchema = new mongoose.Schema(
   {
@@ -128,4 +128,4 @@ branchSchema.methods.getFullAddress = function() {
 
 const Branch = mongoose.model('Branch', branchSchema);
 
-module.exports = Branch;
+export default Branch;

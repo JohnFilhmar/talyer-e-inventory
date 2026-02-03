@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 /**
  * Stock Movement Schema
@@ -155,4 +155,4 @@ stockMovementSchema.set('toObject', { virtuals: true });
 
 const StockMovement = mongoose.model('StockMovement', stockMovementSchema);
 
-module.exports = StockMovement;
+export default StockMovement;

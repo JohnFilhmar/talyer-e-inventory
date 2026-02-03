@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const supplierSchema = new mongoose.Schema(
   {
@@ -92,4 +92,4 @@ supplierSchema.pre('save', function(next) {
 
 const Supplier = mongoose.model('Supplier', supplierSchema);
 
-module.exports = Supplier;
+export default Supplier;

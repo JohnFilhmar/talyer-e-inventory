@@ -1,16 +1,16 @@
-const Category = require('../models/Category');
-const Product = require('../models/Product');
-const asyncHandler = require('../utils/asyncHandler');
-const ApiResponse = require('../utils/apiResponse');
-const CacheUtil = require('../utils/cache');
-const { CACHE_TTL } = require('../config/constants');
+import Category from '../models/Category.js';
+import Product from '../models/Product.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import ApiResponse from '../utils/apiResponse.js';
+import CacheUtil from '../utils/cache.js';
+import { CACHE_TTL } from '../config/constants.js';
 
 /**
  * @desc    Get all categories
  * @route   GET /api/categories
  * @access  Private
  */
-exports.getCategories = asyncHandler(async (req, res) => {
+export const getCategories = asyncHandler(async (req, res) => {
   const { parent, active, includeChildren } = req.query;
 
   // Build query
@@ -52,7 +52,7 @@ exports.getCategories = asyncHandler(async (req, res) => {
  * @route   GET /api/categories/:id
  * @access  Private
  */
-exports.getCategory = asyncHandler(async (req, res) => {
+export const getCategory = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   // Check cache
@@ -88,7 +88,7 @@ exports.getCategory = asyncHandler(async (req, res) => {
  * @route   GET /api/categories/:id/children
  * @access  Private
  */
-exports.getCategoryChildren = asyncHandler(async (req, res) => {
+export const getCategoryChildren = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const children = await Category.find({ parent: id, isActive: true })
@@ -108,7 +108,7 @@ exports.getCategoryChildren = asyncHandler(async (req, res) => {
  * @route   POST /api/categories
  * @access  Private (Admin only)
  */
-exports.createCategory = asyncHandler(async (req, res) => {
+export const createCategory = asyncHandler(async (req, res) => {
   const { name, code, description, parent, image, color, sortOrder } = req.body;
 
   // If parent is provided, check if it exists
@@ -151,7 +151,7 @@ exports.createCategory = asyncHandler(async (req, res) => {
  * @route   PUT /api/categories/:id
  * @access  Private (Admin only)
  */
-exports.updateCategory = asyncHandler(async (req, res) => {
+export const updateCategory = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   let category = await Category.findById(id);
@@ -192,7 +192,7 @@ exports.updateCategory = asyncHandler(async (req, res) => {
  * @route   DELETE /api/categories/:id
  * @access  Private (Admin only)
  */
-exports.deleteCategory = asyncHandler(async (req, res) => {
+export const deleteCategory = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const category = await Category.findById(id);

@@ -1,19 +1,19 @@
-const SalesOrder = require('../models/SalesOrder');
-const Stock = require('../models/Stock');
-const Product = require('../models/Product');
-const Transaction = require('../models/Transaction');
-const asyncHandler = require('../utils/asyncHandler');
-const ApiResponse = require('../utils/apiResponse');
-const CacheUtil = require('../utils/cache');
-const { PAGINATION } = require('../config/constants');
-const { createMovementWithOldQuantity, MOVEMENT_TYPES } = require('../utils/stockMovement');
+import SalesOrder from '../models/SalesOrder.js';
+import Stock from '../models/Stock.js';
+import Product from '../models/Product.js';
+import Transaction from '../models/Transaction.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import ApiResponse from '../utils/apiResponse.js';
+import CacheUtil from '../utils/cache.js';
+import { PAGINATION } from '../config/constants.js';
+import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
 
 /**
  * @desc    Get all sales orders with filters
  * @route   GET /api/sales
  * @access  Private (Admin, Salesperson)
  */
-exports.getSalesOrders = asyncHandler(async (req, res) => {
+export const getSalesOrders = asyncHandler(async (req, res) => {
   const {
     branch,
     status,
@@ -78,7 +78,7 @@ exports.getSalesOrders = asyncHandler(async (req, res) => {
  * @route   GET /api/sales/:id
  * @access  Private
  */
-exports.getSalesOrder = asyncHandler(async (req, res) => {
+export const getSalesOrder = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const order = await SalesOrder.findById(id)
@@ -103,7 +103,7 @@ exports.getSalesOrder = asyncHandler(async (req, res) => {
  * @route   GET /api/sales/branch/:branchId
  * @access  Private
  */
-exports.getSalesOrdersByBranch = asyncHandler(async (req, res) => {
+export const getSalesOrdersByBranch = asyncHandler(async (req, res) => {
   const { branchId } = req.params;
   const { status, startDate, endDate, page = 1, limit = 20 } = req.query;
 
@@ -154,7 +154,7 @@ exports.getSalesOrdersByBranch = asyncHandler(async (req, res) => {
  * @route   POST /api/sales
  * @access  Private (Admin, Salesperson)
  */
-exports.createSalesOrder = asyncHandler(async (req, res) => {
+export const createSalesOrder = asyncHandler(async (req, res) => {
   const {
     branch,
     customer,
@@ -268,7 +268,7 @@ exports.createSalesOrder = asyncHandler(async (req, res) => {
  * @route   PUT /api/sales/:id/status
  * @access  Private (Admin, Salesperson)
  */
-exports.updateSalesOrderStatus = asyncHandler(async (req, res) => {
+export const updateSalesOrderStatus = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -402,7 +402,7 @@ exports.updateSalesOrderStatus = asyncHandler(async (req, res) => {
  * @route   PUT /api/sales/:id/payment
  * @access  Private (Admin, Salesperson)
  */
-exports.updateSalesOrderPayment = asyncHandler(async (req, res) => {
+export const updateSalesOrderPayment = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { amountPaid, paymentMethod } = req.body;
 
@@ -446,7 +446,7 @@ exports.updateSalesOrderPayment = asyncHandler(async (req, res) => {
  * @route   DELETE /api/sales/:id
  * @access  Private (Admin only)
  */
-exports.deleteSalesOrder = asyncHandler(async (req, res) => {
+export const deleteSalesOrder = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const order = await SalesOrder.findById(id);
@@ -493,7 +493,7 @@ exports.deleteSalesOrder = asyncHandler(async (req, res) => {
  * @route   GET /api/sales/:id/invoice
  * @access  Private
  */
-exports.getSalesOrderInvoice = asyncHandler(async (req, res) => {
+export const getSalesOrderInvoice = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const order = await SalesOrder.findById(id)
@@ -545,7 +545,7 @@ exports.getSalesOrderInvoice = asyncHandler(async (req, res) => {
  * @route   GET /api/sales/stats
  * @access  Private (Admin, Salesperson)
  */
-exports.getSalesStatistics = asyncHandler(async (req, res) => {
+export const getSalesStatistics = asyncHandler(async (req, res) => {
   const { branch, startDate, endDate } = req.query;
 
   const query = {};

@@ -1,9 +1,9 @@
-const User = require('../models/User');
-const asyncHandler = require('../utils/asyncHandler');
-const { generateToken, generateRefreshToken } = require('../utils/jwt');
-const ApiResponse = require('../utils/apiResponse');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
+import User from '../models/User.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import { generateToken, generateRefreshToken } from '../utils/jwt.js';
+import ApiResponse from '../utils/apiResponse.js';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 // Cookie options for refresh token
 const getRefreshTokenCookieOptions = () => ({
@@ -335,7 +335,7 @@ const getMe = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, 200, 'User retrieved successfully', user);
 });
 
-module.exports = {
+export {
   register,
   registerCustomer,
   login,
@@ -343,5 +343,5 @@ module.exports = {
   logout,
   forgotPassword,
   resetPassword,
-  getMe,
+  getMe
 };

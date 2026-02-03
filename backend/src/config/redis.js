@@ -1,4 +1,4 @@
-const redis = require('redis');
+import redis from 'redis';
 
 let redisClient = null;
 
@@ -56,4 +56,4 @@ process.on('SIGINT', async () => {
   }
 });
 
-module.exports = { connectRedis, getRedisClient };
+export { connectRedis, getRedisClient };

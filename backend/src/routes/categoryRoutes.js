@@ -1,17 +1,17 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const { body, param } = require('express-validator');
-const {
+import { body, param } from 'express-validator';
+import {
   getCategories,
   getCategory,
   getCategoryChildren,
   createCategory,
   updateCategory,
   deleteCategory
-} = require('../controllers/categoryController');
-const { protect, authorize } = require('../middleware/auth');
-const validate = require('../middleware/validate');
-const { USER_ROLES } = require('../config/constants');
+} from '../controllers/categoryController.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validate from '../middleware/validate.js';
+import { USER_ROLES } from '../config/constants.js';
 
 // Validation chains
 const categoryIdValidation = [
@@ -185,4 +185,4 @@ router
     getCategoryChildren
   );
 
-module.exports = router;
+export default router;

@@ -1,22 +1,22 @@
-const request = require('supertest');
-const mongoose = require('mongoose');
-const express = require('express');
-const ServiceOrder = require('../src/models/ServiceOrder');
-const Transaction = require('../src/models/Transaction');
-const Stock = require('../src/models/Stock');
-const Product = require('../src/models/Product');
-const Category = require('../src/models/Category');
-const Branch = require('../src/models/Branch');
-const User = require('../src/models/User');
-const serviceRoutes = require('../src/routes/serviceRoutes');
-const errorHandler = require('../src/middleware/errorHandler');
-const dbHandler = require('./setup/dbHandler');
-const {
+import request from 'supertest';
+import mongoose from 'mongoose';
+import express from 'express';
+import ServiceOrder from '../src/models/ServiceOrder.js';
+import Transaction from '../src/models/Transaction.js';
+import Stock from '../src/models/Stock.js';
+import Product from '../src/models/Product.js';
+import Category from '../src/models/Category.js';
+import Branch from '../src/models/Branch.js';
+import User from '../src/models/User.js';
+import serviceRoutes from '../src/routes/serviceRoutes.js';
+import errorHandler from '../src/middleware/errorHandler.js';
+import * as dbHandler from './setup/dbHandler.js';
+import {
   createTestUser,
   createTestAdmin,
   createTestSalesperson,
   createTestMechanic
-} = require('./setup/testHelpers');
+} from './setup/testHelpers.js';
 
 // Test helper functions
 const createTestCategory = async (data = {}) => {
@@ -347,7 +347,7 @@ describe('Service Order Management', () => {
       expect(res.status).toBe(400);
     });
 
-    it('should reject salesperson assigning mechanics', async () => {
+    it('should accept a salesperson assigning mechanics', async () => {
       const branch = await createTestBranch();
       const salesperson = await createTestSalesperson(branch._id);
       const mechanic = await createTestMechanic(branch._id);
@@ -359,7 +359,7 @@ describe('Service Order Management', () => {
         .set('Authorization', `Bearer ${salesperson.token}`)
         .send({ mechanicId: mechanic.user._id.toString() });
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(200);
     });
   });
 

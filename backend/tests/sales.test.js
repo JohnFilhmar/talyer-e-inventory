@@ -1,14 +1,14 @@
-const request = require('supertest');
-const express = require('express');
-const dbHandler = require('./setup/dbHandler');
-const { createTestAdmin, createTestSalesperson, createTestMechanic } = require('./setup/testHelpers');
-const salesRoutes = require('../src/routes/salesRoutes');
-const SalesOrder = require('../src/models/SalesOrder');
-const Transaction = require('../src/models/Transaction');
-const Stock = require('../src/models/Stock');
-const Product = require('../src/models/Product');
-const Category = require('../src/models/Category');
-const Branch = require('../src/models/Branch');
+import request from 'supertest';
+import express from 'express';
+import * as dbHandler from './setup/dbHandler.js';
+import { createTestAdmin, createTestSalesperson, createTestMechanic } from './setup/testHelpers.js';
+import salesRoutes from '../src/routes/salesRoutes.js';
+import SalesOrder from '../src/models/SalesOrder.js';
+import Transaction from '../src/models/Transaction.js';
+import Stock from '../src/models/Stock.js';
+import Product from '../src/models/Product.js';
+import Category from '../src/models/Category.js';
+import Branch from '../src/models/Branch.js';
 
 // Create Express app for testing
 const app = express();

@@ -1,8 +1,8 @@
-const request = require('supertest');
-const mongoose = require('mongoose');
-const app = require('../src/server');
-const User = require('../src/models/User');
-const Branch = require('../src/models/Branch');
+import request from 'supertest';
+import mongoose from 'mongoose';
+import app from '../src/server.js';
+import User from '../src/models/User.js';
+import Branch from '../src/models/Branch.js';
 
 describe('User Management API', () => {
   let adminToken;

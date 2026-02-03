@@ -1,9 +1,9 @@
-const request = require('supertest');
-const express = require('express');
-const dbHandler = require('./setup/dbHandler');
-const { createTestUser, createTestAdmin } = require('./setup/testHelpers');
-const authRoutes = require('../src/routes/authRoutes');
-const User = require('../src/models/User');
+import request from 'supertest';
+import express from 'express';
+import * as dbHandler from './setup/dbHandler.js';
+import { createTestUser, createTestAdmin } from './setup/testHelpers.js';
+import authRoutes from '../src/routes/authRoutes.js';
+import User from '../src/models/User.js';
 
 // Create Express app for testing
 const app = express();
@@ -677,7 +677,7 @@ describe('Auth API - Reset Password', () => {
       });
 
       // Manually set an expired reset token
-      const crypto = require('crypto');
+      const { default: crypto } = await import('crypto');
       const resetToken = crypto.randomBytes(32).toString('hex');
       user.resetPasswordToken = crypto
         .createHash('sha256')

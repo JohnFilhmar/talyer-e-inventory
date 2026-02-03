@@ -1,16 +1,16 @@
-const Product = require('../models/Product');
-const Category = require('../models/Category');
-const asyncHandler = require('../utils/asyncHandler');
-const ApiResponse = require('../utils/apiResponse');
-const CacheUtil = require('../utils/cache');
-const { CACHE_TTL, PAGINATION } = require('../config/constants');
+import Product from '../models/Product.js';
+import Category from '../models/Category.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import ApiResponse from '../utils/apiResponse.js';
+import CacheUtil from '../utils/cache.js';
+import { CACHE_TTL, PAGINATION } from '../config/constants.js';
 
 /**
  * @desc    Get all products with filters
  * @route   GET /api/products
  * @access  Private
  */
-exports.getProducts = asyncHandler(async (req, res) => {
+export const getProducts = asyncHandler(async (req, res) => {
   const {
     category,
     brand,
@@ -88,7 +88,7 @@ exports.getProducts = asyncHandler(async (req, res) => {
  * @route   GET /api/products/:id
  * @access  Private
  */
-exports.getProduct = asyncHandler(async (req, res) => {
+export const getProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   // Check cache
@@ -116,7 +116,7 @@ exports.getProduct = asyncHandler(async (req, res) => {
  * @route   GET /api/products/search
  * @access  Private
  */
-exports.searchProducts = asyncHandler(async (req, res) => {
+export const searchProducts = asyncHandler(async (req, res) => {
   const { q, limit = 10 } = req.query;
 
   if (!q) {
@@ -155,7 +155,7 @@ exports.searchProducts = asyncHandler(async (req, res) => {
  * @route   POST /api/products
  * @access  Private (Admin only)
  */
-exports.createProduct = asyncHandler(async (req, res) => {
+export const createProduct = asyncHandler(async (req, res) => {
   const {
     sku,
     name,
@@ -217,7 +217,7 @@ exports.createProduct = asyncHandler(async (req, res) => {
  * @route   PUT /api/products/:id
  * @access  Private (Admin only)
  */
-exports.updateProduct = asyncHandler(async (req, res) => {
+export const updateProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   let product = await Product.findById(id);
@@ -253,7 +253,7 @@ exports.updateProduct = asyncHandler(async (req, res) => {
  * @route   DELETE /api/products/:id
  * @access  Private (Admin only)
  */
-exports.deleteProduct = asyncHandler(async (req, res) => {
+export const deleteProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const product = await Product.findById(id);
@@ -279,7 +279,7 @@ exports.deleteProduct = asyncHandler(async (req, res) => {
   );
 });
 
-const { deleteImageFile, getFilenameFromUrl } = require('../middleware/imageUpload');
+import { deleteImageFile, getFilenameFromUrl } from '../middleware/imageUpload.js';
 
 /**
  * @desc    Add product image (via file upload)
@@ -287,7 +287,7 @@ const { deleteImageFile, getFilenameFromUrl } = require('../middleware/imageUplo
  * @access  Private (Admin only)
  * @note    Accepts FormData with 'image' field and optional 'isPrimary' field
  */
-exports.addProductImage = asyncHandler(async (req, res) => {
+export const addProductImage = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { isPrimary } = req.body;
 
@@ -334,7 +334,7 @@ exports.addProductImage = asyncHandler(async (req, res) => {
  * @route   POST /api/products/:id/images/url
  * @access  Private (Admin only)
  */
-exports.addProductImageUrl = asyncHandler(async (req, res) => {
+export const addProductImageUrl = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { url, isPrimary } = req.body;
 
@@ -372,7 +372,7 @@ exports.addProductImageUrl = asyncHandler(async (req, res) => {
  * @route   DELETE /api/products/:id/images/:imageId
  * @access  Private (Admin only)
  */
-exports.deleteProductImage = asyncHandler(async (req, res) => {
+export const deleteProductImage = asyncHandler(async (req, res) => {
   const { id, imageId } = req.params;
 
   const product = await Product.findById(id);

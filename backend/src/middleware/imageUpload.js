@@ -1,8 +1,8 @@
-const multer = require('multer');
-const sharp = require('sharp');
-const path = require('path');
-const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
+import multer from 'multer';
+import sharp from 'sharp';
+import path from 'path';
+import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 
 // Configuration constants
 const IMAGE_CONFIG = {
@@ -15,7 +15,7 @@ const IMAGE_CONFIG = {
 };
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../../uploads/products');
+const uploadsDir = path.join(process.cwd(), 'uploads', 'products');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -157,11 +157,11 @@ const handleUploadError = (err, req, res, next) => {
   next();
 };
 
-module.exports = {
+export {
   uploadSingleImage,
   processImage,
   handleUploadError,
   deleteImageFile,
   getFilenameFromUrl,
-  IMAGE_CONFIG,
+  IMAGE_CONFIG
 };

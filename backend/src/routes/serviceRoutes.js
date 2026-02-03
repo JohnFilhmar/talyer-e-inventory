@@ -1,10 +1,10 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const { body } = require('express-validator');
-const serviceController = require('../controllers/serviceController');
-const { protect, authorize } = require('../middleware/auth');
-const validationHandler = require('../middleware/validationHandler');
-const { isValidPhoneNumber, normalizePhoneNumber } = require('../utils/phoneValidation');
+import { body } from 'express-validator';
+import * as serviceController from '../controllers/serviceController.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validationHandler from '../middleware/validationHandler.js';
+import { isValidPhoneNumber, normalizePhoneNumber } from '../utils/phoneValidation.js';
 
 // Custom phone number validator
 const phoneValidator = body('customer.phone')
@@ -146,4 +146,4 @@ router.delete(
   serviceController.cancelServiceOrder
 );
 
-module.exports = router;
+export default router;

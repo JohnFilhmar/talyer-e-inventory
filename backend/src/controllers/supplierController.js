@@ -1,15 +1,15 @@
-const Supplier = require('../models/Supplier');
-const asyncHandler = require('../utils/asyncHandler');
-const ApiResponse = require('../utils/apiResponse');
-const CacheUtil = require('../utils/cache');
-const { CACHE_TTL, PAGINATION } = require('../config/constants');
+import Supplier from '../models/Supplier.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import ApiResponse from '../utils/apiResponse.js';
+import CacheUtil from '../utils/cache.js';
+import { CACHE_TTL, PAGINATION } from '../config/constants.js';
 
 /**
  * @desc    Get all suppliers
  * @route   GET /api/suppliers
  * @access  Private (Admin, Salesperson)
  */
-exports.getSuppliers = asyncHandler(async (req, res) => {
+export const getSuppliers = asyncHandler(async (req, res) => {
   const { active, search, page = 1, limit = PAGINATION.DEFAULT_LIMIT } = req.query;
 
   const query = {};
@@ -54,7 +54,7 @@ exports.getSuppliers = asyncHandler(async (req, res) => {
  * @route   GET /api/suppliers/:id
  * @access  Private (Admin, Salesperson)
  */
-exports.getSupplier = asyncHandler(async (req, res) => {
+export const getSupplier = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const supplier = await Supplier.findById(id);
@@ -71,7 +71,7 @@ exports.getSupplier = asyncHandler(async (req, res) => {
  * @route   POST /api/suppliers
  * @access  Private (Admin only)
  */
-exports.createSupplier = asyncHandler(async (req, res) => {
+export const createSupplier = asyncHandler(async (req, res) => {
   try {
     const supplier = await Supplier.create(req.body);
 
@@ -97,7 +97,7 @@ exports.createSupplier = asyncHandler(async (req, res) => {
  * @route   PUT /api/suppliers/:id
  * @access  Private (Admin only)
  */
-exports.updateSupplier = asyncHandler(async (req, res) => {
+export const updateSupplier = asyncHandler(async (req, res) => {
   try {
     let supplier = await Supplier.findById(req.params.id);
 
@@ -133,7 +133,7 @@ exports.updateSupplier = asyncHandler(async (req, res) => {
  * @route   DELETE /api/suppliers/:id
  * @access  Private (Admin only)
  */
-exports.deleteSupplier = asyncHandler(async (req, res) => {
+export const deleteSupplier = asyncHandler(async (req, res) => {
   const supplier = await Supplier.findById(req.params.id);
 
   if (!supplier) {

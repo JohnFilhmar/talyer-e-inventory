@@ -1,7 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const { body, param, query } = require('express-validator');
-const {
+import { body, param, query } from 'express-validator';
+import {
   getProducts,
   getProduct,
   searchProducts,
@@ -11,11 +11,11 @@ const {
   addProductImage,
   addProductImageUrl,
   deleteProductImage
-} = require('../controllers/productController');
-const { protect, authorize } = require('../middleware/auth');
-const validate = require('../middleware/validate');
-const { uploadSingleImage, processImage, handleUploadError } = require('../middleware/imageUpload');
-const { USER_ROLES } = require('../config/constants');
+} from '../controllers/productController.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validate from '../middleware/validate.js';
+import { uploadSingleImage, processImage, handleUploadError } from '../middleware/imageUpload.js';
+import { USER_ROLES } from '../config/constants.js';
 
 // Validation chains
 const productIdValidation = [
@@ -308,4 +308,4 @@ router
     deleteProductImage
   );
 
-module.exports = router;
+export default router;

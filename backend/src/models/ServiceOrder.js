@@ -1,5 +1,5 @@
-const mongoose = require('mongoose');
-const { PHONE_REGEX, normalizePhoneNumber } = require('../utils/phoneValidation');
+import mongoose from 'mongoose';
+import { PHONE_REGEX, normalizePhoneNumber } from '../utils/phoneValidation.js';
 
 const serviceOrderSchema = new mongoose.Schema(
   {
@@ -226,4 +226,4 @@ serviceOrderSchema.pre('save', function(next) {
 
 const ServiceOrder = mongoose.model('ServiceOrder', serviceOrderSchema);
 
-module.exports = ServiceOrder;
+export default ServiceOrder;

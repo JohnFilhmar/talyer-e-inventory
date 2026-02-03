@@ -1,5 +1,5 @@
-const ApiResponse = require('../utils/apiResponse');
-const { USER_ROLES } = require('../config/constants');
+import ApiResponse from '../utils/apiResponse.js';
+import { USER_ROLES } from '../config/constants.js';
 
 /**
  * Middleware to check if user has access to a specific branch
@@ -43,7 +43,4 @@ const ownBranchOnly = (req, res, next) => {
   next();
 };
 
-module.exports = {
-  checkBranchAccess,
-  ownBranchOnly
-};
+export { checkBranchAccess, ownBranchOnly };

@@ -1,18 +1,18 @@
-const express = require('express');
-const { body, param } = require('express-validator');
-const {
+import express from 'express';
+import { body, param } from 'express-validator';
+import {
   getBranches,
   getBranch,
   createBranch,
   updateBranch,
   deleteBranch,
-  getBranchStats
-} = require('../controllers/branchController');
-const { protect, authorize } = require('../middleware/auth');
-const { checkBranchAccess } = require('../middleware/branchAccess');
-const validate = require('../middleware/validate');
-const cacheMiddleware = require('../middleware/cache');
-const { USER_ROLES, CACHE_TTL } = require('../config/constants');
+  getBranchStats,
+} from '../controllers/branchController.js';
+import { protect, authorize } from '../middleware/auth.js';
+import { checkBranchAccess } from '../middleware/branchAccess.js';
+import validate from '../middleware/validate.js';
+import cacheMiddleware from '../middleware/cache.js';
+import { USER_ROLES, CACHE_TTL } from '../config/constants.js';
 
 const router = express.Router();
 
@@ -132,4 +132,4 @@ router.delete(
   deleteBranch
 );
 
-module.exports = router;
+export default router;

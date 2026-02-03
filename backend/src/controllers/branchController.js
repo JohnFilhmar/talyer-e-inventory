@@ -1,16 +1,16 @@
-const Branch = require('../models/Branch');
-const User = require('../models/User');
-const asyncHandler = require('../utils/asyncHandler');
-const ApiResponse = require('../utils/apiResponse');
-const CacheUtil = require('../utils/cache');
-const { CACHE_TTL, USER_ROLES } = require('../config/constants');
+import Branch from '../models/Branch.js';
+import User from '../models/User.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import ApiResponse from '../utils/apiResponse.js';
+import CacheUtil from '../utils/cache.js';
+import { CACHE_TTL, USER_ROLES } from '../config/constants.js';
 
 /**
  * @desc    Get all branches
  * @route   GET /api/branches
  * @access  Private (All authenticated users)
  */
-exports.getBranches = asyncHandler(async (req, res) => {
+export const getBranches = asyncHandler(async (req, res) => {
   const { active, city, search, page = 1, limit = 20 } = req.query;
 
   // Build query
@@ -83,7 +83,7 @@ exports.getBranches = asyncHandler(async (req, res) => {
  * @route   GET /api/branches/:id
  * @access  Private (All authenticated users)
  */
-exports.getBranch = asyncHandler(async (req, res) => {
+export const getBranch = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const branch = await Branch.findById(id)
@@ -102,7 +102,7 @@ exports.getBranch = asyncHandler(async (req, res) => {
  * @route   POST /api/branches
  * @access  Private (Admin only)
  */
-exports.createBranch = asyncHandler(async (req, res) => {
+export const createBranch = asyncHandler(async (req, res) => {
   const {
     name,
     code,
@@ -151,7 +151,7 @@ exports.createBranch = asyncHandler(async (req, res) => {
  * @route   PUT /api/branches/:id
  * @access  Private (Admin only)
  */
-exports.updateBranch = asyncHandler(async (req, res) => {
+export const updateBranch = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   let branch = await Branch.findById(id);
@@ -196,7 +196,7 @@ exports.updateBranch = asyncHandler(async (req, res) => {
  * @route   DELETE /api/branches/:id
  * @access  Private (Admin only)
  */
-exports.deleteBranch = asyncHandler(async (req, res) => {
+export const deleteBranch = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const branch = await Branch.findById(id);
@@ -237,7 +237,7 @@ exports.deleteBranch = asyncHandler(async (req, res) => {
  * @route   GET /api/branches/:id/stats
  * @access  Private (Admin, Branch Manager)
  */
-exports.getBranchStats = asyncHandler(async (req, res) => {
+export const getBranchStats = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   const branch = await Branch.findById(id);

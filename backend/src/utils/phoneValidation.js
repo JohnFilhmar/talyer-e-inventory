@@ -102,10 +102,4 @@ function getPhoneValidationError(phone) {
   return null;
 }
 
-module.exports = {
-  PHONE_REGEX,
-  isValidPhoneNumber,
-  normalizePhoneNumber,
-  formatPhoneDisplay,
-  getPhoneValidationError,
-};
+export { PHONE_REGEX, isValidPhoneNumber, normalizePhoneNumber, formatPhoneDisplay, getPhoneValidationError };

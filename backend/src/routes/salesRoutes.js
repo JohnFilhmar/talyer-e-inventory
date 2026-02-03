@@ -1,6 +1,6 @@
-const express = require('express');
-const { body, param } = require('express-validator');
-const {
+import express from 'express';
+import { body, param } from 'express-validator';
+import {
   getSalesOrders,
   getSalesOrder,
   getSalesOrdersByBranch,
@@ -10,11 +10,11 @@ const {
   deleteSalesOrder,
   getSalesOrderInvoice,
   getSalesStatistics
-} = require('../controllers/salesController');
-const { protect, authorize } = require('../middleware/auth');
-const { checkBranchAccess } = require('../middleware/branchAccess');
-const validate = require('../middleware/validate');
-const { USER_ROLES } = require('../config/constants');
+} from '../controllers/salesController.js';
+import { protect, authorize } from '../middleware/auth.js';
+import { checkBranchAccess } from '../middleware/branchAccess.js';
+import validate from '../middleware/validate.js';
+import { USER_ROLES } from '../config/constants.js';
 
 const router = express.Router();
 
@@ -147,4 +147,4 @@ router.delete(
   deleteSalesOrder
 );
 
-module.exports = router;
+export default router;

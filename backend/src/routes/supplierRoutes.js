@@ -1,10 +1,10 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const { body, param } = require('express-validator');
-const supplierController = require('../controllers/supplierController');
-const { protect, authorize } = require('../middleware/auth');
-const { USER_ROLES } = require('../config/constants');
-const handleValidationErrors = require('../middleware/validationHandler');
+import { body, param } from 'express-validator';
+import * as supplierController from '../controllers/supplierController.js';
+import { protect, authorize } from '../middleware/auth.js';
+import { USER_ROLES } from '../config/constants.js';
+import handleValidationErrors from '../middleware/validationHandler.js';
 
 // Validation rules
 const createSupplierValidation = [
@@ -85,4 +85,4 @@ router.delete(
   supplierController.deleteSupplier
 );
 
-module.exports = router;
+export default router;

@@ -1,5 +1,5 @@
-const mongoose = require('mongoose');
-const Branch = require('../models/Branch');
+import mongoose from 'mongoose';
+import Branch from '../models/Branch.js';
 
 const branches = [
   {

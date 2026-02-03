@@ -1,5 +1,5 @@
-const User = require('../../src/models/User');
-const { generateToken, generateRefreshToken } = require('../../src/utils/jwt');
+import User from '../../src/models/User.js';
+import { generateToken, generateRefreshToken } from '../../src/utils/jwt.js';
 
 /**
  * Create a test user with JWT tokens
@@ -82,7 +82,7 @@ const createTestMechanic = async (branchId = null, userData = {}) => {
   });
 };
 
-module.exports = {
+export {
   createTestUser,
   createTestAdmin,
   createTestSalesperson,

@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const stockTransferSchema = new mongoose.Schema(
   {
@@ -88,4 +88,4 @@ stockTransferSchema.pre('save', function(next) {
 
 const StockTransfer = mongoose.model('StockTransfer', stockTransferSchema);
 
-module.exports = StockTransfer;
+export default StockTransfer;
