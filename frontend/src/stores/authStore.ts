@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import type { User } from '@/types/auth';
 import { authService } from '@/lib/services/authService';
-import { clearTokens } from '@/lib/tokenStorage';
-import { setInitializationPromise, clearInitializationPromise } from '@/lib/apiClient';
+import { clearTokens, hasAccessToken } from '@/lib/tokenStorage';
 
 /**
  * Auth store state interface
@@ -146,7 +145,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   /**
    * Initialize auth state on app load
-   * Attempts to restore session using refresh token (httpOnly cookie)
+   * Attempts to restore session using refresh token (httpOnly cookie) or access token from localStorage
    */
   initialize: async () => {
     const { setUser, setLoading } = get();
@@ -156,41 +155,42 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
     setLoading(true);
 
-    // Create initialization promise and share with apiClient
-    const initPromise = (async () => {
-      try {
-        // Try to refresh token (backend reads httpOnly cookie and returns user data)
-        const refreshResponse = await authService.refreshToken();
-
-        if (refreshResponse.success && refreshResponse.data?.accessToken) {
-          // Token is automatically set in authService.refreshToken()
-          // Now fetch user profile with the new token
-          const profileResponse = await authService.getProfile();
-          if (profileResponse.success && profileResponse.data) {
-            setUser(profileResponse.data);
-          } else {
-            // If profile fetch fails, clear session
-            clearTokens();
-            setUser(null);
-          }
+    try {
+      // Check if we have an access token in localStorage
+      if (hasAccessToken()) {
+        // We have a token, try to get user profile
+        const profileResponse = await authService.getProfile();
+        if (profileResponse.success && profileResponse.data) {
+          setUser(profileResponse.data);
+          return;
+        }
+      }
+      
+      // No valid token or profile fetch failed, try to refresh
+      const refreshResponse = await authService.refreshToken();
+      if (refreshResponse.success && refreshResponse.data?.accessToken) {
+        // Token refreshed successfully, get user profile
+        const profileResponse = await authService.getProfile();
+        if (profileResponse.success && profileResponse.data) {
+          setUser(profileResponse.data);
         } else {
-          // No valid refresh token
+          // Profile fetch failed, clear session
           clearTokens();
           setUser(null);
         }
-      } catch {
-        // No valid session, user needs to login
+      } else {
+        // No valid refresh token
         clearTokens();
         setUser(null);
-      } finally {
-        setLoading(false);
-        set({ isInitialized: true });
-        clearInitializationPromise();
       }
-    })();
-
-    setInitializationPromise(initPromise);
-    await initPromise;
+    } catch {
+      // No valid session, user needs to login
+      clearTokens();
+      setUser(null);
+    } finally {
+      setLoading(false);
+      set({ isInitialized: true });
+    }
   },
 }));
 
