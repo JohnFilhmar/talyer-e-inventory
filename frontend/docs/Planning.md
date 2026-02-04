@@ -58,7 +58,7 @@ Principles:
 
 - Token handling:
   - Access token: stored in memory (and optionally LocalStorage as fallback).
-  - Refresh token: retrieved via `/api/auth/refresh-token` on 401; store only if backend mandates client-side storage.
+  - Refresh token: retrieved via `/auth/refresh-token` on 401; store only if backend mandates client-side storage.
 - Axios interceptors:
   - Request: attach `Authorization: Bearer <accessToken>`.
   - Response: if 401 and refresh token exists, attempt refresh then retry.
@@ -80,130 +80,130 @@ Principles:
 All responses follow `ApiResponse`. Samples are abbreviated for clarity but accurate per backend tests/docs.
 
 ### Auth
-- POST `/api/auth/register`
+- POST `/auth/register`
   - Request: `{ name, email, password, role?, branch? }`
   - Response: `data: { user: { _id, name, email, role, branch? } }`
-- POST `/api/auth/login`
+- POST `/auth/login`
   - Request: `{ email, password }`
   - Response: `data: { accessToken, refreshToken, user: { _id, name, email, role, branch? } }`
-- GET `/api/auth/me`
+- GET `/auth/me`
   - Response: `data: { _id, name, email, role, branch? }`
-- POST `/api/auth/refresh-token`
+- POST `/auth/refresh-token`
   - Request: `{ refreshToken }`
   - Response: `data: { accessToken }`
-- POST `/api/auth/logout`
+- POST `/auth/logout`
   - Headers: `Authorization`
   - Response: `message: 'Logged out'`
-- POST `/api/auth/forgot-password`
+- POST `/auth/forgot-password`
   - Request: `{ email }`
-- POST `/api/auth/reset-password`
+- POST `/auth/reset-password`
   - Request: `{ token, newPassword }`
 
 ### Branches
-- GET `/api/branches`
+- GET `/branches`
   - Query: `active?, city?, search?, page?, limit?`
   - Response: `data: Branch[], pagination`
-- GET `/api/branches/:id`
+- GET `/branches/:id`
   - Response: `data: Branch`
-- POST `/api/branches` (admin)
+- POST `/branches` (admin)
   - Request: `{ name, code, address:{street,city,province,postalCode?}, contact:{phone,email?}, manager?, settings? }`
-- PUT `/api/branches/:id` (admin)
+- PUT `/branches/:id` (admin)
   - Request: partial updates
-- DELETE `/api/branches/:id` (admin)
+- DELETE `/branches/:id` (admin)
   - Response: `data: { isActive: false }`
-- GET `/api/branches/:id/stats`
+- GET `/branches/:id/stats`
   - Response: `data: { staff:{ total, active, inactive }, inventory:{...}, sales:{...} }`
 
 ### Categories
-- GET `/api/categories`
+- GET `/categories`
   - Query: `includeChildren?, active?`
-- GET `/api/categories/:id`
+- GET `/categories/:id`
   - Response includes `fullPath`, `children`, `productCount`
-- GET `/api/categories/:id/children`
-- POST `/api/categories` (admin)
+- GET `/categories/:id/children`
+- POST `/categories` (admin)
   - Request: `{ name, description?, parent?, color?, sortOrder? }`
-- PUT `/api/categories/:id` (admin)
-- DELETE `/api/categories/:id` (admin)
+- PUT `/categories/:id` (admin)
+- DELETE `/categories/:id` (admin)
   - Business rules: cannot delete with products or children
 
 ### Products
-- GET `/api/products`
+- GET `/products`
   - Query: `category?, brand?, active?, discontinued?, minPrice?, maxPrice?, page?, limit?, sortBy?, sortOrder?`
-- GET `/api/products/search`
+- GET `/products/search`
   - Query: `q, limit?`
-- GET `/api/products/:id`
-- POST `/api/products` (admin)
+- GET `/products/:id`
+- POST `/products` (admin)
   - Request: `{ name, category, brand?, model?, costPrice, sellingPrice, barcode?, images?, specifications?, tags? }`
   - Response includes `sku`, `primaryImage`, `profitMargin`
-- PUT `/api/products/:id` (admin)
-- DELETE `/api/products/:id` (admin) — soft delete
-- POST `/api/products/:id/images` (admin)
+- PUT `/products/:id` (admin)
+- DELETE `/products/:id` (admin) — soft delete
+- POST `/products/:id/images` (admin)
   - Request: `{ url, isPrimary? }`
-- DELETE `/api/products/:id/images/:imageId` (admin)
+- DELETE `/products/:id/images/:imageId` (admin)
 
 ### Stock & Transfers
-- GET `/api/stock`
+- GET `/stock`
   - Query: `branch?, product?, lowStock?, outOfStock?, page?, limit?`
-- GET `/api/stock/branch/:branchId`
-- GET `/api/stock/product/:productId`
+- GET `/stock/branch/:branchId`
+- GET `/stock/product/:productId`
   - Response: cross-branch summary `{ totalQuantity, totalReserved, totalAvailable, branches:[{branch, quantity, sellingPrice}] }`
-- GET `/api/stock/low-stock` — items with `quantity <= reorderPoint`
-- POST `/api/stock/restock` (admin/sales)
+- GET `/stock/low-stock` — items with `quantity <= reorderPoint`
+- POST `/stock/restock` (admin/sales)
   - Request: `{ product, branch, quantity, costPrice, sellingPrice, reorderPoint?, reorderQuantity?, supplier?, location? }`
-- POST `/api/stock/adjust` (admin)
+- POST `/stock/adjust` (admin)
   - Request: `{ product, branch, adjustment, reason }`
-- POST `/api/stock/transfers` (admin/branch manager)
+- POST `/stock/transfers` (admin/branch manager)
   - Request: `{ product, fromBranch, toBranch, quantity, notes? }`
-- PUT `/api/stock/transfers/:id` (admin/branch manager)
+- PUT `/stock/transfers/:id` (admin/branch manager)
   - Request: `{ status }` — `pending → in-transit → completed`; `cancelled` allowed
-- GET `/api/stock/transfers`
+- GET `/stock/transfers`
   - Query: `branch?, status?, page?, limit?`
-- GET `/api/stock/transfers/:id`
+- GET `/stock/transfers/:id`
 
 ### Suppliers
-- GET `/api/suppliers`
+- GET `/suppliers`
   - Query: `active?, search?, page?, limit?`
-- GET `/api/suppliers/:id`
-- POST `/api/suppliers` (admin)
+- GET `/suppliers/:id`
+- POST `/suppliers` (admin)
   - Request: `{ name, code?, contact?, address?, paymentTerms?, creditLimit?, notes? }`
-- PUT `/api/suppliers/:id` (admin)
-- DELETE `/api/suppliers/:id` (admin) — deactivate
+- PUT `/suppliers/:id` (admin)
+- DELETE `/suppliers/:id` (admin) — deactivate
 
 ### Sales Orders (MVP Critical)
-- GET `/api/sales`
+- GET `/sales`
   - Query: `branch?, status?, paymentStatus?, startDate?, endDate?, page?, limit?`
-- GET `/api/sales/:id`
-- GET `/api/sales/branch/:branchId`
-- POST `/api/sales` (admin/sales)
+- GET `/sales/:id`
+- GET `/sales/branch/:branchId`
+- POST `/sales` (admin/sales)
   - Request: `{ branch, customer:{name,phone,email?,address?}, items:[{product, quantity, discount?}], taxRate?, discount?, paymentMethod, amountPaid?, notes? }`
   - Behavior: reserves stock, uses branch-specific `Stock.sellingPrice`, auto-calculates totals & payment status
-- PUT `/api/sales/:id/status` (admin/sales own branch)
+- PUT `/sales/:id/status` (admin/sales own branch)
   - Request: `{ status }` — transitions: `pending→processing→completed`; `pending/processing→cancelled`
   - On `completed`: deduct stock; create `Transaction` if `payment.status='paid'`
-- PUT `/api/sales/:id/payment` (admin/sales)
+- PUT `/sales/:id/payment` (admin/sales)
   - Request: `{ amountPaid?, paymentMethod? }` — recalculates status & change
-- DELETE `/api/sales/:id` (admin) — cancel, release reserved stock
-- GET `/api/sales/:id/invoice`
-- GET `/api/sales/stats`
+- DELETE `/sales/:id` (admin) — cancel, release reserved stock
+- GET `/sales/:id/invoice`
+- GET `/sales/stats`
 
 ### Service Orders (Secondary Revenue)
-- GET `/api/services`
+- GET `/services`
   - Query: `branch?, status?, priority?, assignedTo?, paymentStatus?, startDate?, endDate?, page?, limit?`
-- GET `/api/services/my-jobs` (mechanic)
-- GET `/api/services/:id`
-- GET `/api/services/:id/invoice`
-- POST `/api/services` (admin/sales)
+- GET `/services/my-jobs` (mechanic)
+- GET `/services/:id`
+- GET `/services/:id/invoice`
+- POST `/services` (admin/sales)
   - Request: `{ branch, customer:{name,phone,email?,address?}, vehicle?, description, diagnosis?, assignedTo?, priority?, laborCost?, otherCharges?, scheduledAt?, notes? }`
   - Behavior: sets `status='scheduled'` if `assignedTo` provided; totals auto-calculated
-- PUT `/api/services/:id/assign` (admin/manager)
+- PUT `/services/:id/assign` (admin/manager)
   - Request: `{ mechanicId }`
-- PUT `/api/services/:id/status` (admin/mechanic assigned)
+- PUT `/services/:id/status` (admin/mechanic assigned)
   - Request: `{ status }` — validated transitions; `completed` deducts `partsUsed` from stock and creates `Transaction` if paid
-- PUT `/api/services/:id/parts` (admin/mechanic assigned)
+- PUT `/services/:id/parts` (admin/mechanic assigned)
   - Request: `{ partsUsed:[{ product, quantity, unitPrice, sku?, name? }] }`
-- PUT `/api/services/:id/payment` (admin/sales)
+- PUT `/services/:id/payment` (admin/sales)
   - Request: `{ amountPaid?, method? }`
-- DELETE `/api/services/:id` (admin) — cancel
+- DELETE `/services/:id` (admin) — cancel
 
 ---
 

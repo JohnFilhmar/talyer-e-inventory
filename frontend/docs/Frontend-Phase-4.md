@@ -26,7 +26,7 @@ Phase 4 implements stock management across branches, supplier management, stock 
 
 Before starting this phase:
 - [x] Phases 1-3 complete (auth, branches, products working)
-- [ ] Review backend Phase 4 docs and `/api/stock`, `/api/suppliers` endpoints
+- [ ] Review backend Phase 4 docs and `/stock`, `/suppliers` endpoints
 - [ ] Understand stock reservation vs available quantity
 - [ ] Understand transfer workflow (pending/in-transit/completed/cancelled)
 
@@ -599,56 +599,56 @@ import type { Stock, StockTransfer, RestockRequest, AdjustStockRequest, CreateTr
 
 export const stockService = {
   async getAll(query: any = {}): Promise<PaginatedResponse<Stock>> {
-    const { data } = await apiClient.get<ApiResponse<Stock[]>>('/api/stock', { params: query });
+    const { data } = await apiClient.get<ApiResponse<Stock[]>>('/stock', { params: query });
     return { data: data.data || [], pagination: data.pagination };
   },
 
   async getByBranch(branchId: string): Promise<Stock[]> {
-    const { data } = await apiClient.get<ApiResponse<Stock[]>>(`/api/stock/branch/${branchId}`);
+    const { data } = await apiClient.get<ApiResponse<Stock[]>>(`/stock/branch/${branchId}`);
     return data.data || [];
   },
 
   async getByProduct(productId: string): Promise<any> {
-    const { data } = await apiClient.get<ApiResponse<any>>(`/api/stock/product/${productId}`);
+    const { data } = await apiClient.get<ApiResponse<any>>(`/stock/product/${productId}`);
     return data.data;
   },
 
   async getLowStock(): Promise<Stock[]> {
-    const { data } = await apiClient.get<ApiResponse<Stock[]>>('/api/stock/low-stock');
+    const { data } = await apiClient.get<ApiResponse<Stock[]>>('/stock/low-stock');
     return data.data || [];
   },
 
   async restock(restockData: RestockRequest): Promise<Stock> {
-    const { data } = await apiClient.post<ApiResponse<Stock>>('/api/stock/restock', restockData);
+    const { data } = await apiClient.post<ApiResponse<Stock>>('/stock/restock', restockData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to restock');
     return data.data;
   },
 
   async adjust(adjustData: AdjustStockRequest): Promise<Stock> {
-    const { data } = await apiClient.post<ApiResponse<Stock>>('/api/stock/adjust', adjustData);
+    const { data } = await apiClient.post<ApiResponse<Stock>>('/stock/adjust', adjustData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to adjust stock');
     return data.data;
   },
 
   async createTransfer(transferData: CreateTransferRequest): Promise<StockTransfer> {
-    const { data } = await apiClient.post<ApiResponse<StockTransfer>>('/api/stock/transfers', transferData);
+    const { data } = await apiClient.post<ApiResponse<StockTransfer>>('/stock/transfers', transferData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to create transfer');
     return data.data;
   },
 
   async updateTransferStatus(transferId: string, status: string): Promise<StockTransfer> {
-    const { data } = await apiClient.put<ApiResponse<StockTransfer>>(`/api/stock/transfers/${transferId}`, { status });
+    const { data } = await apiClient.put<ApiResponse<StockTransfer>>(`/stock/transfers/${transferId}`, { status });
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to update transfer');
     return data.data;
   },
 
   async getTransfers(query: any = {}): Promise<PaginatedResponse<StockTransfer>> {
-    const { data } = await apiClient.get<ApiResponse<StockTransfer[]>>('/api/stock/transfers', { params: query });
+    const { data } = await apiClient.get<ApiResponse<StockTransfer[]>>('/stock/transfers', { params: query });
     return { data: data.data || [], pagination: data.pagination };
   },
 
   async getTransferById(transferId: string): Promise<StockTransfer> {
-    const { data } = await apiClient.get<ApiResponse<StockTransfer>>(`/api/stock/transfers/${transferId}`);
+    const { data } = await apiClient.get<ApiResponse<StockTransfer>>(`/stock/transfers/${transferId}`);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to fetch transfer');
     return data.data;
   },
@@ -671,30 +671,30 @@ import type { Supplier, CreateSupplierRequest } from '../types';
 
 export const supplierService = {
   async getAll(query: any = {}): Promise<PaginatedResponse<Supplier>> {
-    const { data } = await apiClient.get<ApiResponse<Supplier[]>>('/api/suppliers', { params: query });
+    const { data } = await apiClient.get<ApiResponse<Supplier[]>>('/suppliers', { params: query });
     return { data: data.data || [], pagination: data.pagination };
   },
 
   async getById(id: string): Promise<Supplier> {
-    const { data } = await apiClient.get<ApiResponse<Supplier>>(`/api/suppliers/${id}`);
+    const { data } = await apiClient.get<ApiResponse<Supplier>>(`/suppliers/${id}`);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to fetch supplier');
     return data.data;
   },
 
   async create(supplierData: CreateSupplierRequest): Promise<Supplier> {
-    const { data } = await apiClient.post<ApiResponse<Supplier>>('/api/suppliers', supplierData);
+    const { data } = await apiClient.post<ApiResponse<Supplier>>('/suppliers', supplierData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to create supplier');
     return data.data;
   },
 
   async update(id: string, supplierData: Partial<CreateSupplierRequest>): Promise<Supplier> {
-    const { data } = await apiClient.put<ApiResponse<Supplier>>(`/api/suppliers/${id}`, supplierData);
+    const { data } = await apiClient.put<ApiResponse<Supplier>>(`/suppliers/${id}`, supplierData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to update supplier');
     return data.data;
   },
 
   async deactivate(id: string): Promise<void> {
-    const { data } = await apiClient.delete(`/api/suppliers/${id}`);
+    const { data } = await apiClient.delete(`/suppliers/${id}`);
     if (!data.success) throw new Error(data.message || 'Failed to deactivate supplier');
   },
 };
@@ -713,17 +713,17 @@ import useSWR from 'swr';
 import { stockService } from '../services/stockService';
 
 export const useStock = (query: any = {}) => {
-  const { data, error, mutate } = useSWR(['/api/stock', query], () => stockService.getAll(query));
+  const { data, error, mutate } = useSWR(['/stock', query], () => stockService.getAll(query));
   return { stock: data?.data || [], pagination: data?.pagination, isLoading: !data && !error, error, refresh: mutate };
 };
 
 export const useLowStock = () => {
-  const { data, error, mutate } = useSWR('/api/stock/low-stock', () => stockService.getLowStock());
+  const { data, error, mutate } = useSWR('/stock/low-stock', () => stockService.getLowStock());
   return { lowStock: data || [], isLoading: !data && !error, error, refresh: mutate };
 };
 
 export const useStockTransfers = (query: any = {}) => {
-  const { data, error, mutate } = useSWR(['/api/stock/transfers', query], () => stockService.getTransfers(query));
+  const { data, error, mutate } = useSWR(['/stock/transfers', query], () => stockService.getTransfers(query));
   return { transfers: data?.data || [], pagination: data?.pagination, isLoading: !data && !error, error, refresh: mutate };
 };
 ```
@@ -734,12 +734,12 @@ import useSWR from 'swr';
 import { supplierService } from '../services/supplierService';
 
 export const useSuppliers = (query: any = {}) => {
-  const { data, error, mutate } = useSWR(['/api/suppliers', query], () => supplierService.getAll(query));
+  const { data, error, mutate } = useSWR(['/suppliers', query], () => supplierService.getAll(query));
   return { suppliers: data?.data || [], pagination: data?.pagination, isLoading: !data && !error, error, refresh: mutate };
 };
 
 export const useSupplier = (id: string) => {
-  const { data, error, mutate } = useSWR(id ? `/api/suppliers/${id}` : null, () => supplierService.getById(id));
+  const { data, error, mutate } = useSWR(id ? `/suppliers/${id}` : null, () => supplierService.getById(id));
   return { supplier: data, isLoading: !data && !error, error, refresh: mutate };
 };
 ```

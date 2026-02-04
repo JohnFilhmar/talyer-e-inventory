@@ -165,13 +165,13 @@ Phase 2 implements complete branch management functionality for the E-Talyer Inv
 
 | Endpoint | Method | Purpose | Auth |
 |----------|--------|---------|------|
-| `/api/branches` | GET | List branches with filters | All authenticated |
-| `/api/branches/:id` | GET | Get single branch | All authenticated |
-| `/api/branches` | POST | Create branch | Admin only |
-| `/api/branches/:id` | PUT | Update branch | Admin only |
-| `/api/branches/:id` | DELETE | Soft delete (deactivate) | Admin only |
-| `/api/branches/:id/stats` | GET | Get branch statistics | Admin/Manager |
-| `/api/users` | GET | Get users for manager dropdown | Admin only |
+| `/branches` | GET | List branches with filters | All authenticated |
+| `/branches/:id` | GET | Get single branch | All authenticated |
+| `/branches` | POST | Create branch | Admin only |
+| `/branches/:id` | PUT | Update branch | Admin only |
+| `/branches/:id` | DELETE | Soft delete (deactivate) | Admin only |
+| `/branches/:id/stats` | GET | Get branch statistics | Admin/Manager |
+| `/users` | GET | Get users for manager dropdown | Admin only |
 
 ### Cache Handling
 

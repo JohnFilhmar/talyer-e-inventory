@@ -26,7 +26,7 @@ Phase 2 implements branch management functionality, allowing admins to create, v
 
 Before starting this phase:
 - [x] Phase 1 complete (authentication working)
-- [ ] Review backend Phase 2 docs and `/api/branches` endpoints
+- [ ] Review backend Phase 2 docs and `/branches` endpoints
 - [ ] Confirm admin role can access branch management routes
 - [ ] Verify branch data structure matches backend model
 
@@ -301,7 +301,7 @@ import type { Branch, BranchStats, CreateBranchRequest, UpdateBranchRequest, Bra
 export const branchService = {
   // Get all branches with filters
   async getAll(query: BranchListQuery = {}): Promise<PaginatedResponse<Branch>> {
-    const { data } = await apiClient.get<ApiResponse<Branch[]>>('/api/branches', { params: query });
+    const { data } = await apiClient.get<ApiResponse<Branch[]>>('/branches', { params: query });
     return {
       data: data.data || [],
       pagination: data.pagination,
@@ -310,7 +310,7 @@ export const branchService = {
 
   // Get single branch by ID
   async getById(id: string): Promise<Branch> {
-    const { data } = await apiClient.get<ApiResponse<Branch>>(`/api/branches/${id}`);
+    const { data } = await apiClient.get<ApiResponse<Branch>>(`/branches/${id}`);
     if (!data.success || !data.data) {
       throw new Error(data.message || 'Failed to fetch branch');
     }
@@ -319,7 +319,7 @@ export const branchService = {
 
   // Create new branch (admin only)
   async create(branchData: CreateBranchRequest): Promise<Branch> {
-    const { data } = await apiClient.post<ApiResponse<Branch>>('/api/branches', branchData);
+    const { data } = await apiClient.post<ApiResponse<Branch>>('/branches', branchData);
     if (!data.success || !data.data) {
       throw new Error(data.message || 'Failed to create branch');
     }
@@ -328,7 +328,7 @@ export const branchService = {
 
   // Update branch (admin only)
   async update(id: string, branchData: UpdateBranchRequest): Promise<Branch> {
-    const { data } = await apiClient.put<ApiResponse<Branch>>(`/api/branches/${id}`, branchData);
+    const { data } = await apiClient.put<ApiResponse<Branch>>(`/branches/${id}`, branchData);
     if (!data.success || !data.data) {
       throw new Error(data.message || 'Failed to update branch');
     }
@@ -337,7 +337,7 @@ export const branchService = {
 
   // Deactivate branch (admin only)
   async deactivate(id: string): Promise<void> {
-    const { data } = await apiClient.delete<ApiResponse<Branch>>(`/api/branches/${id}`);
+    const { data } = await apiClient.delete<ApiResponse<Branch>>(`/branches/${id}`);
     if (!data.success) {
       throw new Error(data.message || 'Failed to deactivate branch');
     }
@@ -345,7 +345,7 @@ export const branchService = {
 
   // Get branch stats
   async getStats(id: string): Promise<BranchStats> {
-    const { data } = await apiClient.get<ApiResponse<BranchStats>>(`/api/branches/${id}/stats`);
+    const { data } = await apiClient.get<ApiResponse<BranchStats>>(`/branches/${id}/stats`);
     if (!data.success || !data.data) {
       throw new Error(data.message || 'Failed to fetch branch stats');
     }
@@ -375,7 +375,7 @@ import type { BranchListQuery } from '../types';
 
 export const useBranches = (query: BranchListQuery = {}) => {
   const { data, error, mutate } = useSWR(
-    ['/api/branches', query],
+    ['/branches', query],
     () => branchService.getAll(query),
     {
       revalidateOnFocus: true,
@@ -394,7 +394,7 @@ export const useBranches = (query: BranchListQuery = {}) => {
 
 export const useBranch = (id: string) => {
   const { data, error, mutate } = useSWR(
-    id ? `/api/branches/${id}` : null,
+    id ? `/branches/${id}` : null,
     () => branchService.getById(id),
     {
       revalidateOnFocus: true,
@@ -411,7 +411,7 @@ export const useBranch = (id: string) => {
 
 export const useBranchStats = (id: string) => {
   const { data, error, mutate } = useSWR(
-    id ? `/api/branches/${id}/stats` : null,
+    id ? `/branches/${id}/stats` : null,
     () => branchService.getStats(id),
     {
       revalidateOnFocus: false,

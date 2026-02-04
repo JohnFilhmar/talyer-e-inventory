@@ -230,7 +230,7 @@ export const userService = {
    * @deprecated Use getAllPaginated for admin user management
    */
   async getAll(): Promise<User[]> {
-    const { data } = await apiClient.get<ApiResponse<User[]>>('/api/users');
+    const { data } = await apiClient.get<ApiResponse<User[]>>('/users');
     return data.data ?? [];
   },
 
@@ -238,7 +238,7 @@ export const userService = {
    * Get managers for dropdown selection
    */
   async getManagers(): Promise<User[]> {
-    const { data } = await apiClient.get<ApiResponse<User[]>>('/api/users', {
+    const { data } = await apiClient.get<ApiResponse<User[]>>('/users', {
       params: { role: 'admin,salesperson' },
     });
     return data.data ?? [];
@@ -248,7 +248,7 @@ export const userService = {
    * Get single user by ID
    */
   async getById(id: string): Promise<UserWithBranch> {
-    const { data } = await apiClient.get<ApiResponse<UserWithBranch>>(`/api/users/${id}`);
+    const { data } = await apiClient.get<ApiResponse<UserWithBranch>>(`/users/${id}`);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to fetch user');
@@ -266,7 +266,7 @@ export const userService = {
       Object.entries(params).filter(([, value]) => value !== '' && value !== undefined)
     );
 
-    const { data } = await apiClient.get<ApiResponse<UserWithBranch[]>>('/api/users', {
+    const { data } = await apiClient.get<ApiResponse<UserWithBranch[]>>('/users', {
       params: cleanParams,
     });
 
@@ -285,7 +285,7 @@ export const userService = {
    * Create a new user (admin only)
    */
   async create(payload: CreateUserPayload): Promise<UserWithBranch> {
-    const { data } = await apiClient.post<ApiResponse<UserWithBranch>>('/api/users', payload);
+    const { data } = await apiClient.post<ApiResponse<UserWithBranch>>('/users', payload);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to create user');
@@ -298,7 +298,7 @@ export const userService = {
    * Update an existing user (admin only)
    */
   async update(id: string, payload: UpdateUserPayload): Promise<UserWithBranch> {
-    const { data } = await apiClient.put<ApiResponse<UserWithBranch>>(`/api/users/${id}`, payload);
+    const { data } = await apiClient.put<ApiResponse<UserWithBranch>>(`/users/${id}`, payload);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to update user');
@@ -313,7 +313,7 @@ export const userService = {
    */
   async deactivate(id: string): Promise<UserWithBranch> {
     const { data } = await apiClient.patch<ApiResponse<UserWithBranch>>(
-      `/api/users/${id}/deactivate`
+      `/users/${id}/deactivate`
     );
 
     if (!data.success || !data.data) {
@@ -329,7 +329,7 @@ export const userService = {
    */
   async activate(id: string): Promise<UserWithBranch> {
     const { data } = await apiClient.patch<ApiResponse<UserWithBranch>>(
-      `/api/users/${id}/activate`
+      `/users/${id}/activate`
     );
 
     if (!data.success || !data.data) {
@@ -344,7 +344,7 @@ export const userService = {
    */
   async changePassword(id: string, payload: ChangePasswordPayload): Promise<void> {
     const { data } = await apiClient.patch<ApiResponse<void>>(
-      `/api/users/${id}/password`,
+      `/users/${id}/password`,
       payload
     );
 

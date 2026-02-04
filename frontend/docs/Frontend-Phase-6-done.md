@@ -235,7 +235,7 @@ Added comprehensive phone validation for Philippine mobile numbers:
 - [x] Route-level validation (`backend/src/routes/serviceRoutes.js`)
   - `createServiceValidation` middleware array
   - express-validator custom phone validator
-  - Applied to POST `/api/services` route
+  - Applied to POST `/services` route
 
 **Phone Format:**
 - Accepted: `9XXXXXXXXX` (10 digits starting with 9)

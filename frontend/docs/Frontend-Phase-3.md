@@ -27,7 +27,7 @@ Phase 3 implements category and product management, the foundation of the invent
 
 Before starting this phase:
 - [x] Phase 1 (Auth) and Phase 2 (Branches) complete
-- [x] Review backend Phase 3 docs and `/api/categories`, `/api/products` endpoints
+- [x] Review backend Phase 3 docs and `/categories`, `/products` endpoints
 - [x] Confirm image upload strategy (**File upload with server compression chosen**)
 - [x] Understand category hierarchy (parent-child relationships)
 
@@ -309,9 +309,9 @@ Before starting this phase:
 - On product details page, admin sees "Upload Image" button
 - Click opens modal or inline form with URL input (MVP: manual URL entry)
 - Enter image URL, mark as primary (checkbox)
-- Submit: POST `/api/products/:id/images` with `{ url, isPrimary }`
+- Submit: POST `/products/:id/images` with `{ url, isPrimary }`
 - Success: Image appears in gallery, refresh product details
-- Delete: Click trash icon on thumbnail, confirmation modal, DELETE `/api/products/:id/images/:imageId`
+- Delete: Click trash icon on thumbnail, confirmation modal, DELETE `/products/:id/images/:imageId`
 
 **Component Structure:**
 ```typescript
@@ -432,32 +432,32 @@ import type { Category, CreateCategoryRequest } from '../types';
 
 export const categoryService = {
   async getAll(includeChildren = true): Promise<Category[]> {
-    const { data } = await apiClient.get<ApiResponse<Category[]>>('/api/categories', {
+    const { data } = await apiClient.get<ApiResponse<Category[]>>('/categories', {
       params: { includeChildren },
     });
     return data.data || [];
   },
 
   async getById(id: string): Promise<Category> {
-    const { data } = await apiClient.get<ApiResponse<Category>>(`/api/categories/${id}`);
+    const { data } = await apiClient.get<ApiResponse<Category>>(`/categories/${id}`);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to fetch category');
     return data.data;
   },
 
   async create(categoryData: CreateCategoryRequest): Promise<Category> {
-    const { data } = await apiClient.post<ApiResponse<Category>>('/api/categories', categoryData);
+    const { data } = await apiClient.post<ApiResponse<Category>>('/categories', categoryData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to create category');
     return data.data;
   },
 
   async update(id: string, categoryData: Partial<CreateCategoryRequest>): Promise<Category> {
-    const { data } = await apiClient.put<ApiResponse<Category>>(`/api/categories/${id}`, categoryData);
+    const { data } = await apiClient.put<ApiResponse<Category>>(`/categories/${id}`, categoryData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to update category');
     return data.data;
   },
 
   async delete(id: string): Promise<void> {
-    const { data } = await apiClient.delete(`/api/categories/${id}`);
+    const { data } = await apiClient.delete(`/categories/${id}`);
     if (!data.success) throw new Error(data.message || 'Failed to delete category');
   },
 };
@@ -482,7 +482,7 @@ import type { Product, CreateProductRequest, ProductSearchQuery } from '../types
 
 export const productService = {
   async getAll(query: ProductSearchQuery = {}): Promise<PaginatedResponse<Product>> {
-    const { data } = await apiClient.get<ApiResponse<Product[]>>('/api/products', { params: query });
+    const { data } = await apiClient.get<ApiResponse<Product[]>>('/products', { params: query });
     return {
       data: data.data || [],
       pagination: data.pagination,
@@ -490,37 +490,37 @@ export const productService = {
   },
 
   async search(q: string, limit = 10): Promise<Product[]> {
-    const { data } = await apiClient.get<ApiResponse<Product[]>>('/api/products/search', {
+    const { data } = await apiClient.get<ApiResponse<Product[]>>('/products/search', {
       params: { q, limit },
     });
     return data.data || [];
   },
 
   async getById(id: string): Promise<Product> {
-    const { data } = await apiClient.get<ApiResponse<Product>>(`/api/products/${id}`);
+    const { data } = await apiClient.get<ApiResponse<Product>>(`/products/${id}`);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to fetch product');
     return data.data;
   },
 
   async create(productData: CreateProductRequest): Promise<Product> {
-    const { data } = await apiClient.post<ApiResponse<Product>>('/api/products', productData);
+    const { data } = await apiClient.post<ApiResponse<Product>>('/products', productData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to create product');
     return data.data;
   },
 
   async update(id: string, productData: Partial<CreateProductRequest>): Promise<Product> {
-    const { data } = await apiClient.put<ApiResponse<Product>>(`/api/products/${id}`, productData);
+    const { data } = await apiClient.put<ApiResponse<Product>>(`/products/${id}`, productData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to update product');
     return data.data;
   },
 
   async delete(id: string): Promise<void> {
-    const { data } = await apiClient.delete(`/api/products/${id}`);
+    const { data } = await apiClient.delete(`/products/${id}`);
     if (!data.success) throw new Error(data.message || 'Failed to delete product');
   },
 
   async uploadImage(productId: string, imageUrl: string, isPrimary = false): Promise<Product> {
-    const { data } = await apiClient.post<ApiResponse<Product>>(`/api/products/${productId}/images`, {
+    const { data } = await apiClient.post<ApiResponse<Product>>(`/products/${productId}/images`, {
       url: imageUrl,
       isPrimary,
     });
@@ -529,7 +529,7 @@ export const productService = {
   },
 
   async deleteImage(productId: string, imageId: string): Promise<Product> {
-    const { data } = await apiClient.delete<ApiResponse<Product>>(`/api/products/${productId}/images/${imageId}`);
+    const { data } = await apiClient.delete<ApiResponse<Product>>(`/products/${productId}/images/${imageId}`);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to delete image');
     return data.data;
   },
@@ -553,7 +553,7 @@ import useSWR from 'swr';
 import { categoryService } from '../services/categoryService';
 
 export const useCategories = () => {
-  const { data, error, mutate } = useSWR('/api/categories', () => categoryService.getAll(true));
+  const { data, error, mutate } = useSWR('/categories', () => categoryService.getAll(true));
 
   return {
     categories: data || [],
@@ -572,7 +572,7 @@ import type { ProductSearchQuery } from '../types';
 
 export const useProducts = (query: ProductSearchQuery = {}) => {
   const { data, error, mutate } = useSWR(
-    ['/api/products', query],
+    ['/products', query],
     () => productService.getAll(query)
   );
 
@@ -587,7 +587,7 @@ export const useProducts = (query: ProductSearchQuery = {}) => {
 
 export const useProduct = (id: string) => {
   const { data, error, mutate } = useSWR(
-    id ? `/api/products/${id}` : null,
+    id ? `/products/${id}` : null,
     () => productService.getById(id)
   );
 

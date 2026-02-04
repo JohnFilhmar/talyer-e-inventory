@@ -90,13 +90,13 @@ The Frontend User Management feature has been successfully implemented. This pro
 
 | Frontend Action | Backend Endpoint | Method |
 |----------------|------------------|--------|
-| List users | `/api/users` | GET |
-| Get user | `/api/users/:id` | GET |
-| Create user | `/api/users` | POST |
-| Update user | `/api/users/:id` | PUT |
-| Deactivate user | `/api/users/:id/deactivate` | PATCH |
-| Activate user | `/api/users/:id/activate` | PATCH |
-| Change password | `/api/users/:id/password` | PATCH |
+| List users | `/users` | GET |
+| Get user | `/users/:id` | GET |
+| Create user | `/users` | POST |
+| Update user | `/users/:id` | PUT |
+| Deactivate user | `/users/:id/deactivate` | PATCH |
+| Activate user | `/users/:id/activate` | PATCH |
+| Change password | `/users/:id/password` | PATCH |
 
 ### Key Alignments
 - ✅ Separate deactivate/activate endpoints (NOT toggle)

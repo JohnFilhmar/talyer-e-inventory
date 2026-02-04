@@ -138,7 +138,7 @@ Create reusable components in `src/components/`:
 #### Authentication Flow
 1. **Login:**
    - User submits email/password
-   - Frontend sends to `/api/auth/login`
+   - Frontend sends to `/auth/login`
    - Backend returns `{ accessToken, refreshToken, user }`
    - Store `accessToken` in memory (React state/context)
    - Store `refreshToken` in httpOnly cookie (backend sets) or localStorage as fallback
@@ -151,12 +151,12 @@ Create reusable components in `src/components/`:
 
 3. **Token Refresh:**
    - Axios interceptor catches 401 responses
-   - Automatically calls `/api/auth/refresh-token` with refresh token
+   - Automatically calls `/auth/refresh-token` with refresh token
    - Retry failed request with new access token
    - If refresh fails: clear tokens, redirect to login
 
 4. **Logout:**
-   - Call `/api/auth/logout` to invalidate refresh token
+   - Call `/auth/logout` to invalidate refresh token
    - Clear all tokens from memory and storage
    - Redirect to login page
 

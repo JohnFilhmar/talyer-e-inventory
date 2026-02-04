@@ -29,7 +29,7 @@ Phase 5 implements the primary revenue stream: sales order management. Features 
 
 Before starting this phase:
 - [x] Phases 1-4 complete (auth, branches, products, stock working)
-- [ ] Review backend Phase 5 docs and `/api/sales` endpoints
+- [ ] Review backend Phase 5 docs and `/sales` endpoints
 - [ ] Understand stock reservation vs deduction flow
 - [ ] Understand status transitions and validation rules
 
@@ -465,46 +465,46 @@ import type { SalesOrder, CreateSalesOrderRequest, UpdatePaymentRequest, SalesOr
 
 export const salesService = {
   async getAll(query: SalesOrderQuery = {}): Promise<PaginatedResponse<SalesOrder>> {
-    const { data } = await apiClient.get<ApiResponse<SalesOrder[]>>('/api/sales', { params: query });
+    const { data } = await apiClient.get<ApiResponse<SalesOrder[]>>('/sales', { params: query });
     return { data: data.data || [], pagination: data.pagination };
   },
 
   async getById(id: string): Promise<SalesOrder> {
-    const { data } = await apiClient.get<ApiResponse<SalesOrder>>(`/api/sales/${id}`);
+    const { data } = await apiClient.get<ApiResponse<SalesOrder>>(`/sales/${id}`);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to fetch order');
     return data.data;
   },
 
   async create(orderData: CreateSalesOrderRequest): Promise<SalesOrder> {
-    const { data } = await apiClient.post<ApiResponse<SalesOrder>>('/api/sales', orderData);
+    const { data } = await apiClient.post<ApiResponse<SalesOrder>>('/sales', orderData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to create order');
     return data.data;
   },
 
   async updateStatus(id: string, status: string): Promise<SalesOrder> {
-    const { data } = await apiClient.put<ApiResponse<SalesOrder>>(`/api/sales/${id}/status`, { status });
+    const { data } = await apiClient.put<ApiResponse<SalesOrder>>(`/sales/${id}/status`, { status });
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to update status');
     return data.data;
   },
 
   async updatePayment(id: string, paymentData: UpdatePaymentRequest): Promise<SalesOrder> {
-    const { data } = await apiClient.put<ApiResponse<SalesOrder>>(`/api/sales/${id}/payment`, paymentData);
+    const { data } = await apiClient.put<ApiResponse<SalesOrder>>(`/sales/${id}/payment`, paymentData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to update payment');
     return data.data;
   },
 
   async cancel(id: string): Promise<void> {
-    const { data } = await apiClient.delete(`/api/sales/${id}`);
+    const { data } = await apiClient.delete(`/sales/${id}`);
     if (!data.success) throw new Error(data.message || 'Failed to cancel order');
   },
 
   async getInvoice(id: string): Promise<any> {
-    const { data } = await apiClient.get<ApiResponse<any>>(`/api/sales/${id}/invoice`);
+    const { data } = await apiClient.get<ApiResponse<any>>(`/sales/${id}/invoice`);
     return data.data;
   },
 
   async getStats(): Promise<any> {
-    const { data } = await apiClient.get<ApiResponse<any>>('/api/sales/stats');
+    const { data } = await apiClient.get<ApiResponse<any>>('/sales/stats');
     return data.data;
   },
 };
@@ -525,7 +525,7 @@ import { salesService } from '../services/salesService';
 import type { SalesOrderQuery } from '../types';
 
 export const useSalesOrders = (query: SalesOrderQuery = {}) => {
-  const { data, error, mutate } = useSWR(['/api/sales', query], () => salesService.getAll(query));
+  const { data, error, mutate } = useSWR(['/sales', query], () => salesService.getAll(query));
   return {
     orders: data?.data || [],
     pagination: data?.pagination,
@@ -536,7 +536,7 @@ export const useSalesOrders = (query: SalesOrderQuery = {}) => {
 };
 
 export const useSalesOrder = (id: string) => {
-  const { data, error, mutate } = useSWR(id ? `/api/sales/${id}` : null, () => salesService.getById(id));
+  const { data, error, mutate } = useSWR(id ? `/sales/${id}` : null, () => salesService.getById(id));
   return {
     order: data,
     isLoading: !data && !error,
@@ -546,7 +546,7 @@ export const useSalesOrder = (id: string) => {
 };
 
 export const useSalesStats = () => {
-  const { data, error, mutate } = useSWR('/api/sales/stats', () => salesService.getStats());
+  const { data, error, mutate } = useSWR('/sales/stats', () => salesService.getStats());
   return {
     stats: data,
     isLoading: !data && !error,

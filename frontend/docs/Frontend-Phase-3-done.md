@@ -174,27 +174,27 @@ Phase 3 implements comprehensive category and product management for the fronten
 ### Category Endpoints Used
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/api/categories` | List all categories |
-| GET | `/api/categories?parent=null&includeChildren=true` | Root categories with tree |
-| GET | `/api/categories?active=true` | Active categories (for dropdowns) |
-| GET | `/api/categories/:id` | Single category details |
-| GET | `/api/categories/:id/children` | Child categories |
-| POST | `/api/categories` | Create category (admin) |
-| PUT | `/api/categories/:id` | Update category (admin) |
-| DELETE | `/api/categories/:id` | Delete category (admin) |
+| GET | `/categories` | List all categories |
+| GET | `/categories?parent=null&includeChildren=true` | Root categories with tree |
+| GET | `/categories?active=true` | Active categories (for dropdowns) |
+| GET | `/categories/:id` | Single category details |
+| GET | `/categories/:id/children` | Child categories |
+| POST | `/categories` | Create category (admin) |
+| PUT | `/categories/:id` | Update category (admin) |
+| DELETE | `/categories/:id` | Delete category (admin) |
 
 ### Product Endpoints Used
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/api/products` | List with pagination/filters |
-| GET | `/api/products/search` | Quick search |
-| GET | `/api/products/:id` | Single product details |
-| POST | `/api/products` | Create product (admin) |
-| PUT | `/api/products/:id` | Update product (admin) |
-| DELETE | `/api/products/:id` | Soft delete product (admin) |
-| POST | `/api/products/:id/images` | Upload image file (admin) |
-| POST | `/api/products/:id/images/url` | Add image by URL (admin, legacy) |
-| DELETE | `/api/products/:id/images/:imageId` | Delete image (admin) |
+| GET | `/products` | List with pagination/filters |
+| GET | `/products/search` | Quick search |
+| GET | `/products/:id` | Single product details |
+| POST | `/products` | Create product (admin) |
+| PUT | `/products/:id` | Update product (admin) |
+| DELETE | `/products/:id` | Soft delete product (admin) |
+| POST | `/products/:id/images` | Upload image file (admin) |
+| POST | `/products/:id/images/url` | Add image by URL (admin, legacy) |
+| DELETE | `/products/:id/images/:imageId` | Delete image (admin) |
 
 ---
 
@@ -283,7 +283,7 @@ createProductSchema = z.object({
 - **Original Spec**: URL input for MVP, file upload later
 - **Implemented**: Full file upload with server-side compression (Sharp)
 - **Reason**: Better UX, backend supports both methods
-- **URL method**: Still available via `/api/products/:id/images/url` endpoint
+- **URL method**: Still available via `/products/:id/images/url` endpoint
 
 ### 2. **TanStack Query Instead of SWR**
 - **Original Spec**: SWR for caching and revalidation

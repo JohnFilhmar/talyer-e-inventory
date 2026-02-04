@@ -297,30 +297,30 @@ frontend/src/
 ### Stock Endpoints
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/stock` | Get all stock with filters |
-| GET | `/api/stock/branch/:branchId` | Get stock for specific branch |
-| GET | `/api/stock/product/:productId` | Get product stock across branches |
-| GET | `/api/stock/low-stock` | Get low stock items |
-| POST | `/api/stock/restock` | Create or update stock by product+branch |
-| PUT | `/api/stock/:stockId/restock` | Restock existing stock record |
-| PUT | `/api/stock/:stockId/adjust` | Adjust existing stock record |
+| GET | `/stock` | Get all stock with filters |
+| GET | `/stock/branch/:branchId` | Get stock for specific branch |
+| GET | `/stock/product/:productId` | Get product stock across branches |
+| GET | `/stock/low-stock` | Get low stock items |
+| POST | `/stock/restock` | Create or update stock by product+branch |
+| PUT | `/stock/:stockId/restock` | Restock existing stock record |
+| PUT | `/stock/:stockId/adjust` | Adjust existing stock record |
 
 ### Transfer Endpoints
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/stock/transfers` | Get transfers with filters |
-| GET | `/api/stock/transfers/:id` | Get single transfer |
-| POST | `/api/stock/transfers` | Create new transfer |
-| PATCH | `/api/stock/transfers/:id/status` | Update transfer status |
+| GET | `/stock/transfers` | Get transfers with filters |
+| GET | `/stock/transfers/:id` | Get single transfer |
+| POST | `/stock/transfers` | Create new transfer |
+| PATCH | `/stock/transfers/:id/status` | Update transfer status |
 
 ### Supplier Endpoints
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/suppliers` | Get all suppliers with filters |
-| GET | `/api/suppliers/:id` | Get single supplier |
-| POST | `/api/suppliers` | Create new supplier |
-| PUT | `/api/suppliers/:id` | Update supplier |
-| DELETE | `/api/suppliers/:id` | Deactivate supplier |
+| GET | `/suppliers` | Get all suppliers with filters |
+| GET | `/suppliers/:id` | Get single supplier |
+| POST | `/suppliers` | Create new supplier |
+| PUT | `/suppliers/:id` | Update supplier |
+| DELETE | `/suppliers/:id` | Deactivate supplier |
 
 ---
 
@@ -336,7 +336,7 @@ frontend/src/
 - Replaces deprecated `{ required_error, invalid_type_error }` format
 
 ### 3. Stock Creation Flow
-- `POST /api/stock/restock` creates OR updates stock by product+branch combination
+- `POST /stock/restock` creates OR updates stock by product+branch combination
 - `AddStockModal` uses `useRestock()` hook for new stock records
 - `RestockModal` uses `useRestockById()` for existing records
 

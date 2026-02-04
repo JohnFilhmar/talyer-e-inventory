@@ -334,7 +334,7 @@ apiClient.interceptors.response.use(
 
       if (refreshToken) {
         try {
-          const { data } = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/refresh-token`, {
+          const { data } = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/auth/refresh-token`, {
             refreshToken,
           });
           setAccessToken(data.data.accessToken);
@@ -433,7 +433,7 @@ import type { User, LoginRequest, LoginResponse, RegisterRequest } from '../type
 export const authService = {
   // Login
   async login(credentials: LoginRequest): Promise<User> {
-    const { data } = await apiClient.post<ApiResponse<LoginResponse>>('/api/auth/login', credentials);
+    const { data } = await apiClient.post<ApiResponse<LoginResponse>>('/auth/login', credentials);
     if (data.success && data.data) {
       setAccessToken(data.data.accessToken);
       setRefreshToken(data.data.refreshToken);
@@ -444,7 +444,7 @@ export const authService = {
 
   // Register
   async register(userData: RegisterRequest): Promise<User> {
-    const { data } = await apiClient.post<ApiResponse<{ user: User }>>('/api/auth/register', userData);
+    const { data } = await apiClient.post<ApiResponse<{ user: User }>>('/auth/register', userData);
     if (data.success && data.data) {
       return data.data.user;
     }
@@ -453,7 +453,7 @@ export const authService = {
 
   // Get current user
   async me(): Promise<User> {
-    const { data } = await apiClient.get<ApiResponse<User>>('/api/auth/me');
+    const { data } = await apiClient.get<ApiResponse<User>>('/auth/me');
     if (data.success && data.data) {
       return data.data;
     }
@@ -462,13 +462,13 @@ export const authService = {
 
   // Logout
   async logout(): Promise<void> {
-    await apiClient.post('/api/auth/logout');
+    await apiClient.post('/auth/logout');
     clearTokens();
   },
 
   // Forgot password
   async forgotPassword(email: string): Promise<void> {
-    const { data } = await apiClient.post<ApiResponse<void>>('/api/auth/forgot-password', { email });
+    const { data } = await apiClient.post<ApiResponse<void>>('/auth/forgot-password', { email });
     if (!data.success) {
       throw new Error(data.message || 'Failed to send reset link');
     }
@@ -476,7 +476,7 @@ export const authService = {
 
   // Reset password
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    const { data } = await apiClient.post<ApiResponse<void>>('/api/auth/reset-password', { token, newPassword });
+    const { data } = await apiClient.post<ApiResponse<void>>('/auth/reset-password', { token, newPassword });
     if (!data.success) {
       throw new Error(data.message || 'Failed to reset password');
     }

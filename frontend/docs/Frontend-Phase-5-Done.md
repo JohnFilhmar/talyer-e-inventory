@@ -47,15 +47,15 @@ Phase 5 implements the primary revenue stream: Sales Order Management. This phas
 **API Methods:**
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `getAll(params)` | `GET /api/sales` | Get all sales orders with filters |
-| `getById(id)` | `GET /api/sales/:id` | Get single order by ID |
-| `getByBranch(branchId, params)` | `GET /api/sales/branch/:branchId` | Get orders by branch |
-| `getStats(params)` | `GET /api/sales/stats` | Get sales statistics |
-| `create(payload)` | `POST /api/sales` | Create new sales order |
-| `updateStatus(id, payload)` | `PUT /api/sales/:id/status` | Update order status |
-| `updatePayment(id, payload)` | `PUT /api/sales/:id/payment` | Update payment info |
-| `cancel(id)` | `DELETE /api/sales/:id` | Cancel order |
-| `getInvoice(id)` | `GET /api/sales/:id/invoice` | Get invoice data |
+| `getAll(params)` | `GET /sales` | Get all sales orders with filters |
+| `getById(id)` | `GET /sales/:id` | Get single order by ID |
+| `getByBranch(branchId, params)` | `GET /sales/branch/:branchId` | Get orders by branch |
+| `getStats(params)` | `GET /sales/stats` | Get sales statistics |
+| `create(payload)` | `POST /sales` | Create new sales order |
+| `updateStatus(id, payload)` | `PUT /sales/:id/status` | Update order status |
+| `updatePayment(id, payload)` | `PUT /sales/:id/payment` | Update payment info |
+| `cancel(id)` | `DELETE /sales/:id` | Cancel order |
+| `getInvoice(id)` | `GET /sales/:id/invoice` | Get invoice data |
 
 ---
 
@@ -238,10 +238,10 @@ Phase 5 implements the primary revenue stream: Sales Order Management. This phas
 #### New Service Methods (`src/lib/services/stockService.ts`)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `getMovements(params)` | `GET /api/stock/movements` | Get all movements with filters |
-| `getMovementsByStock(stockId)` | `GET /api/stock/movements/stock/:id` | Get movements for a stock record |
-| `getMovementsByProduct(productId)` | `GET /api/stock/movements/product/:id` | Get movements for a product |
-| `getMovementsByBranch(branchId)` | `GET /api/stock/movements/branch/:id` | Get movements for a branch |
+| `getMovements(params)` | `GET /stock/movements` | Get all movements with filters |
+| `getMovementsByStock(stockId)` | `GET /stock/movements/stock/:id` | Get movements for a stock record |
+| `getMovementsByProduct(productId)` | `GET /stock/movements/product/:id` | Get movements for a product |
+| `getMovementsByBranch(branchId)` | `GET /stock/movements/branch/:id` | Get movements for a branch |
 
 #### New React Query Hooks (`src/hooks/useStock.ts`)
 | Hook | Purpose |
@@ -291,23 +291,23 @@ Phase 5 implements the primary revenue stream: Sales Order Management. This phas
 ### Sales Endpoints
 | Backend Endpoint | Frontend Coverage | Status |
 |-----------------|-------------------|--------|
-| `GET /api/sales` | `salesService.getAll()` | ✅ |
-| `GET /api/sales/:id` | `salesService.getById()` | ✅ |
-| `GET /api/sales/branch/:branchId` | `salesService.getByBranch()` | ✅ |
-| `GET /api/sales/stats` | `salesService.getStats()` | ✅ |
-| `GET /api/sales/:id/invoice` | `salesService.getInvoice()` | ✅ |
-| `POST /api/sales` | `salesService.create()` | ✅ |
-| `PUT /api/sales/:id/status` | `salesService.updateStatus()` | ✅ |
-| `PUT /api/sales/:id/payment` | `salesService.updatePayment()` | ✅ |
-| `DELETE /api/sales/:id` | `salesService.cancel()` | ✅ |
+| `GET /sales` | `salesService.getAll()` | ✅ |
+| `GET /sales/:id` | `salesService.getById()` | ✅ |
+| `GET /sales/branch/:branchId` | `salesService.getByBranch()` | ✅ |
+| `GET /sales/stats` | `salesService.getStats()` | ✅ |
+| `GET /sales/:id/invoice` | `salesService.getInvoice()` | ✅ |
+| `POST /sales` | `salesService.create()` | ✅ |
+| `PUT /sales/:id/status` | `salesService.updateStatus()` | ✅ |
+| `PUT /sales/:id/payment` | `salesService.updatePayment()` | ✅ |
+| `DELETE /sales/:id` | `salesService.cancel()` | ✅ |
 
 ### Stock Movement Endpoints (Bonus)
 | Backend Endpoint | Frontend Coverage | Status |
 |-----------------|-------------------|--------|
-| `GET /api/stock/movements` | `stockService.getMovements()` | ✅ |
-| `GET /api/stock/movements/stock/:id` | `stockService.getMovementsByStock()` | ✅ |
-| `GET /api/stock/movements/product/:id` | `stockService.getMovementsByProduct()` | ✅ |
-| `GET /api/stock/movements/branch/:id` | `stockService.getMovementsByBranch()` | ✅ |
+| `GET /stock/movements` | `stockService.getMovements()` | ✅ |
+| `GET /stock/movements/stock/:id` | `stockService.getMovementsByStock()` | ✅ |
+| `GET /stock/movements/product/:id` | `stockService.getMovementsByProduct()` | ✅ |
+| `GET /stock/movements/branch/:id` | `stockService.getMovementsByBranch()` | ✅ |
 
 ---
 

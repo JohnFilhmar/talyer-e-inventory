@@ -191,12 +191,12 @@ frontend/src/
 **Auth Endpoints Skip List:**
 ```typescript
 const AUTH_ENDPOINTS = [
-  '/api/auth/login',
-  '/api/auth/register',
-  '/api/auth/register-customer',
-  '/api/auth/refresh-token',
-  '/api/auth/forgot-password',
-  '/api/auth/reset-password',
+  '/auth/login',
+  '/auth/register',
+  '/auth/register-customer',
+  '/auth/refresh-token',
+  '/auth/forgot-password',
+  '/auth/reset-password',
 ];
 ```
 
@@ -341,8 +341,8 @@ const AUTH_ENDPOINTS = [
 **Reason:** Simpler structure for current project size, can refactor later
 
 ### 3. Customer Registration Endpoint
-**Original:** Single `/api/auth/register` endpoint  
-**Implemented:** Separate `/api/auth/register-customer` for public registration  
+**Original:** Single `/auth/register` endpoint  
+**Implemented:** Separate `/auth/register-customer` for public registration  
 **Reason:** Security - customers shouldn't be able to set their role
 
 ### 4. Refresh Token Response

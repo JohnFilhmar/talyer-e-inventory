@@ -29,7 +29,7 @@ Phase 6 implements the secondary revenue stream: service order management for ve
 
 Before starting this phase:
 - [x] Phases 1-5 complete (auth, branches, products, stock, sales working)
-- [ ] Review backend Phase 6 docs and `/api/services` endpoints
+- [ ] Review backend Phase 6 docs and `/services` endpoints
 - [ ] Understand service status transitions and mechanic access rules
 - [ ] Understand parts deduction on completion
 
@@ -574,58 +574,58 @@ import type { ServiceOrder, CreateServiceOrderRequest, UpdatePartsRequest, Servi
 
 export const serviceService = {
   async getAll(query: ServiceOrderQuery = {}): Promise<PaginatedResponse<ServiceOrder>> {
-    const { data } = await apiClient.get<ApiResponse<ServiceOrder[]>>('/api/services', { params: query });
+    const { data } = await apiClient.get<ApiResponse<ServiceOrder[]>>('/services', { params: query });
     return { data: data.data || [], pagination: data.pagination };
   },
 
   async getMyJobs(): Promise<ServiceOrder[]> {
-    const { data } = await apiClient.get<ApiResponse<ServiceOrder[]>>('/api/services/my-jobs');
+    const { data } = await apiClient.get<ApiResponse<ServiceOrder[]>>('/services/my-jobs');
     return data.data || [];
   },
 
   async getById(id: string): Promise<ServiceOrder> {
-    const { data } = await apiClient.get<ApiResponse<ServiceOrder>>(`/api/services/${id}`);
+    const { data } = await apiClient.get<ApiResponse<ServiceOrder>>(`/services/${id}`);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to fetch service order');
     return data.data;
   },
 
   async create(orderData: CreateServiceOrderRequest): Promise<ServiceOrder> {
-    const { data } = await apiClient.post<ApiResponse<ServiceOrder>>('/api/services', orderData);
+    const { data } = await apiClient.post<ApiResponse<ServiceOrder>>('/services', orderData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to create service order');
     return data.data;
   },
 
   async assignMechanic(id: string, mechanicId: string): Promise<ServiceOrder> {
-    const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(`/api/services/${id}/assign`, { mechanicId });
+    const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(`/services/${id}/assign`, { mechanicId });
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to assign mechanic');
     return data.data;
   },
 
   async updateStatus(id: string, status: string): Promise<ServiceOrder> {
-    const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(`/api/services/${id}/status`, { status });
+    const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(`/services/${id}/status`, { status });
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to update status');
     return data.data;
   },
 
   async updateParts(id: string, partsData: UpdatePartsRequest): Promise<ServiceOrder> {
-    const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(`/api/services/${id}/parts`, partsData);
+    const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(`/services/${id}/parts`, partsData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to update parts');
     return data.data;
   },
 
   async updatePayment(id: string, paymentData: any): Promise<ServiceOrder> {
-    const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(`/api/services/${id}/payment`, paymentData);
+    const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(`/services/${id}/payment`, paymentData);
     if (!data.success || !data.data) throw new Error(data.message || 'Failed to update payment');
     return data.data;
   },
 
   async cancel(id: string): Promise<void> {
-    const { data } = await apiClient.delete(`/api/services/${id}`);
+    const { data } = await apiClient.delete(`/services/${id}`);
     if (!data.success) throw new Error(data.message || 'Failed to cancel service order');
   },
 
   async getInvoice(id: string): Promise<any> {
-    const { data } = await apiClient.get<ApiResponse<any>>(`/api/services/${id}/invoice`);
+    const { data } = await apiClient.get<ApiResponse<any>>(`/services/${id}/invoice`);
     return data.data;
   },
 };
@@ -645,7 +645,7 @@ import { serviceService } from '../services/serviceService';
 import type { ServiceOrderQuery } from '../types';
 
 export const useServiceOrders = (query: ServiceOrderQuery = {}) => {
-  const { data, error, mutate } = useSWR(['/api/services', query], () => serviceService.getAll(query));
+  const { data, error, mutate } = useSWR(['/services', query], () => serviceService.getAll(query));
   return {
     orders: data?.data || [],
     pagination: data?.pagination,
@@ -656,7 +656,7 @@ export const useServiceOrders = (query: ServiceOrderQuery = {}) => {
 };
 
 export const useMyJobs = () => {
-  const { data, error, mutate } = useSWR('/api/services/my-jobs', () => serviceService.getMyJobs());
+  const { data, error, mutate } = useSWR('/services/my-jobs', () => serviceService.getMyJobs());
   return {
     jobs: data || [],
     isLoading: !data && !error,
@@ -666,7 +666,7 @@ export const useMyJobs = () => {
 };
 
 export const useServiceOrder = (id: string) => {
-  const { data, error, mutate } = useSWR(id ? `/api/services/${id}` : null, () => serviceService.getById(id));
+  const { data, error, mutate } = useSWR(id ? `/services/${id}` : null, () => serviceService.getById(id));
   return {
     order: data,
     isLoading: !data && !error,
