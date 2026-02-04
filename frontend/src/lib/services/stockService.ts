@@ -26,7 +26,7 @@ export const stockService = {
    * @param params - Filter parameters (branch, product, lowStock, outOfStock)
    */
   async getAll(params: StockListParams = {}): Promise<PaginatedResponse<Stock>> {
-    const { data } = await apiClient.get<ApiResponse<Stock[]>>('/api/stock', {
+    const { data } = await apiClient.get<ApiResponse<Stock[]>>('/stock', {
       params,
     });
 
@@ -42,7 +42,7 @@ export const stockService = {
    */
   async getByBranch(branchId: string): Promise<Stock[]> {
     const { data } = await apiClient.get<ApiResponse<Stock[]>>(
-      `/api/stock/branch/${branchId}`
+      `/stock/branch/${branchId}`
     );
 
     if (!data.success) {
@@ -58,7 +58,7 @@ export const stockService = {
    */
   async getByProduct(productId: string): Promise<ProductStockSummary> {
     const { data } = await apiClient.get<ApiResponse<ProductStockSummary>>(
-      `/api/stock/product/${productId}`
+      `/stock/product/${productId}`
     );
 
     if (!data.success || !data.data) {
@@ -73,7 +73,7 @@ export const stockService = {
    * @param params - Optional pagination
    */
   async getLowStock(params: Pick<StockListParams, 'page' | 'limit'> = {}): Promise<PaginatedResponse<Stock>> {
-    const { data } = await apiClient.get<ApiResponse<Stock[]>>('/api/stock/low-stock', {
+    const { data } = await apiClient.get<ApiResponse<Stock[]>>('/stock/low-stock', {
       params,
     });
 
@@ -89,7 +89,7 @@ export const stockService = {
    */
   async restock(payload: RestockPayload): Promise<Stock> {
     const { data } = await apiClient.post<ApiResponse<Stock>>(
-      '/api/stock/restock',
+      '/stock/restock',
       payload
     );
 
@@ -107,7 +107,7 @@ export const stockService = {
    */
   async restockById(stockId: string, payload: RestockByIdPayload): Promise<Stock> {
     const { data } = await apiClient.put<ApiResponse<Stock>>(
-      `/api/stock/${stockId}/restock`,
+      `/stock/${stockId}/restock`,
       payload
     );
 
@@ -124,7 +124,7 @@ export const stockService = {
    */
   async adjust(payload: AdjustStockPayload): Promise<Stock> {
     const { data } = await apiClient.post<ApiResponse<Stock>>(
-      '/api/stock/adjust',
+      '/stock/adjust',
       payload
     );
 
@@ -142,7 +142,7 @@ export const stockService = {
    */
   async adjustById(stockId: string, payload: AdjustStockByIdPayload): Promise<Stock> {
     const { data } = await apiClient.put<ApiResponse<Stock>>(
-      `/api/stock/${stockId}/adjust`,
+      `/stock/${stockId}/adjust`,
       payload
     );
 
@@ -161,7 +161,7 @@ export const stockService = {
    */
   async getTransfers(params: TransferListParams = {}): Promise<PaginatedResponse<StockTransfer>> {
     const { data } = await apiClient.get<ApiResponse<StockTransfer[]>>(
-      '/api/stock/transfers',
+      '/stock/transfers',
       { params }
     );
 
@@ -177,7 +177,7 @@ export const stockService = {
    */
   async getTransferById(transferId: string): Promise<StockTransfer> {
     const { data } = await apiClient.get<ApiResponse<StockTransfer>>(
-      `/api/stock/transfers/${transferId}`
+      `/stock/transfers/${transferId}`
     );
 
     if (!data.success || !data.data) {
@@ -193,7 +193,7 @@ export const stockService = {
    */
   async createTransfer(payload: CreateTransferPayload): Promise<StockTransfer> {
     const { data } = await apiClient.post<ApiResponse<StockTransfer>>(
-      '/api/stock/transfers',
+      '/stock/transfers',
       payload
     );
 
@@ -214,7 +214,7 @@ export const stockService = {
     payload: UpdateTransferStatusPayload
   ): Promise<StockTransfer> {
     const { data } = await apiClient.put<ApiResponse<StockTransfer>>(
-      `/api/stock/transfers/${transferId}`,
+      `/stock/transfers/${transferId}`,
       payload
     );
 
@@ -233,7 +233,7 @@ export const stockService = {
    */
   async getMovements(params: MovementListParams = {}): Promise<PaginatedResponse<StockMovement>> {
     const { data } = await apiClient.get<ApiResponse<StockMovement[]>>(
-      '/api/stock/movements',
+      '/stock/movements',
       { params }
     );
 
@@ -253,7 +253,7 @@ export const stockService = {
     params: Pick<MovementListParams, 'page' | 'limit'> = {}
   ): Promise<PaginatedResponse<StockMovement>> {
     const { data } = await apiClient.get<ApiResponse<StockMovement[]>>(
-      `/api/stock/movements/stock/${stockId}`,
+      `/stock/movements/stock/${stockId}`,
       { params }
     );
 
@@ -273,7 +273,7 @@ export const stockService = {
     params: Pick<MovementListParams, 'branch' | 'page' | 'limit'> = {}
   ): Promise<PaginatedResponse<StockMovement>> {
     const { data } = await apiClient.get<ApiResponse<StockMovement[]>>(
-      `/api/stock/movements/product/${productId}`,
+      `/stock/movements/product/${productId}`,
       { params }
     );
 
@@ -293,7 +293,7 @@ export const stockService = {
     params: Pick<MovementListParams, 'type' | 'startDate' | 'endDate' | 'page' | 'limit'> = {}
   ): Promise<PaginatedResponse<StockMovement>> {
     const { data } = await apiClient.get<ApiResponse<StockMovement[]>>(
-      `/api/stock/movements/branch/${branchId}`,
+      `/stock/movements/branch/${branchId}`,
       { params }
     );
 

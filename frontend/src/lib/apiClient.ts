@@ -58,12 +58,12 @@ apiClient.interceptors.request.use(
  * These endpoints return 401 for invalid credentials, not expired tokens
  */
 const AUTH_ENDPOINTS = [
-  '/api/auth/login',
-  '/api/auth/register',
-  '/api/auth/register-customer',
-  '/api/auth/refresh-token',
-  '/api/auth/forgot-password',
-  '/api/auth/reset-password',
+  '/auth/login',
+  '/auth/register',
+  '/auth/register-customer',
+  '/auth/refresh-token',
+  '/auth/forgot-password',
+  '/auth/reset-password',
 ];
 
 /**
@@ -126,7 +126,7 @@ apiClient.interceptors.response.use(
       try {
         // Call refresh endpoint - backend reads httpOnly cookie
         const { data } = await axios.post<ApiResponse<RefreshTokenResponse>>(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/auth/refresh-token`,
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/auth/refresh-token`,
           {},
           { withCredentials: true }
         );

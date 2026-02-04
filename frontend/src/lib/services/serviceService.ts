@@ -100,7 +100,7 @@ export const serviceService = {
    * @param params - Filter parameters
    */
   async getAll(params: ServiceOrderListParams = {}): Promise<PaginatedResponse<ServiceOrder>> {
-    const { data } = await apiClient.get<ApiResponse<ServiceOrder[]>>('/api/services', {
+    const { data } = await apiClient.get<ApiResponse<ServiceOrder[]>>('/services', {
       params,
     });
 
@@ -115,7 +115,7 @@ export const serviceService = {
    * @param params - Filter parameters
    */
   async getMyJobs(params: MyJobsParams = {}): Promise<PaginatedResponse<ServiceOrder>> {
-    const { data } = await apiClient.get<ApiResponse<ServiceOrder[]>>('/api/services/my-jobs', {
+    const { data } = await apiClient.get<ApiResponse<ServiceOrder[]>>('/services/my-jobs', {
       params,
     });
 
@@ -130,7 +130,7 @@ export const serviceService = {
    * @param id - Service order ID
    */
   async getById(id: string): Promise<ServiceOrder> {
-    const { data } = await apiClient.get<ApiResponse<ServiceOrder>>(`/api/services/${id}`);
+    const { data } = await apiClient.get<ApiResponse<ServiceOrder>>(`/services/${id}`);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to fetch service order');
@@ -144,7 +144,7 @@ export const serviceService = {
    * @param payload - Service order data
    */
   async create(payload: CreateServiceOrderPayload): Promise<ServiceOrder> {
-    const { data } = await apiClient.post<ApiResponse<ServiceOrder>>('/api/services', payload);
+    const { data } = await apiClient.post<ApiResponse<ServiceOrder>>('/services', payload);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to create service order');
@@ -160,7 +160,7 @@ export const serviceService = {
    */
   async assignMechanic(id: string, payload: AssignMechanicPayload): Promise<ServiceOrder> {
     const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(
-      `/api/services/${id}/assign`,
+      `/services/${id}/assign`,
       payload
     );
 
@@ -178,7 +178,7 @@ export const serviceService = {
    */
   async updateStatus(id: string, payload: UpdateServiceStatusPayload): Promise<ServiceOrder> {
     const { data } = await apiClient.put<ApiResponse<StatusUpdateResponse>>(
-      `/api/services/${id}/status`,
+      `/services/${id}/status`,
       payload
     );
 
@@ -196,7 +196,7 @@ export const serviceService = {
    */
   async updateParts(id: string, payload: UpdatePartsPayload): Promise<ServiceOrder> {
     const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(
-      `/api/services/${id}/parts`,
+      `/services/${id}/parts`,
       payload
     );
 
@@ -214,7 +214,7 @@ export const serviceService = {
    */
   async updatePayment(id: string, payload: UpdateServicePaymentPayload): Promise<ServiceOrder> {
     const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(
-      `/api/services/${id}/payment`,
+      `/services/${id}/payment`,
       payload
     );
 
@@ -233,7 +233,7 @@ export const serviceService = {
   async updateCharges(id: string, payload: UpdateChargesPayload): Promise<ServiceOrder> {
     // This uses the same payment endpoint for charges
     const { data } = await apiClient.put<ApiResponse<ServiceOrder>>(
-      `/api/services/${id}/payment`,
+      `/services/${id}/payment`,
       payload
     );
 
@@ -249,7 +249,7 @@ export const serviceService = {
    * @param id - Service order ID
    */
   async cancel(id: string): Promise<CancelResponse> {
-    const { data } = await apiClient.delete<ApiResponse<CancelResponse>>(`/api/services/${id}`);
+    const { data } = await apiClient.delete<ApiResponse<CancelResponse>>(`/services/${id}`);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to cancel service order');
@@ -264,7 +264,7 @@ export const serviceService = {
    */
   async getInvoice(id: string): Promise<ServiceInvoice> {
     const { data } = await apiClient.get<ApiResponse<ServiceInvoice>>(
-      `/api/services/${id}/invoice`
+      `/services/${id}/invoice`
     );
 
     if (!data.success || !data.data) {
@@ -279,7 +279,7 @@ export const serviceService = {
    * Fetched globally and filtered client-side
    */
   async getMechanics(): Promise<User[]> {
-    const { data } = await apiClient.get<ApiResponse<User[]>>('/api/users');
+    const { data } = await apiClient.get<ApiResponse<User[]>>('/users');
 
     if (!data.success) {
       throw new Error(data.message ?? 'Failed to fetch users');

@@ -20,7 +20,7 @@ export const userService = {
    * Get paginated list of users with filters (admin only)
    */
   async getUsers(params: UserListParams = {}): Promise<UserListResponse> {
-    const { data } = await apiClient.get<ApiResponse<User[]>>('/api/users', {
+    const { data } = await apiClient.get<ApiResponse<User[]>>('/users', {
       params,
     });
 
@@ -45,7 +45,7 @@ export const userService = {
    * Get all users (admin only) - legacy method for compatibility
    */
   async getAll(): Promise<AuthUser[]> {
-    const { data } = await apiClient.get<ApiResponse<AuthUser[]>>('/api/users');
+    const { data } = await apiClient.get<ApiResponse<AuthUser[]>>('/users');
 
     if (!data.success) {
       throw new Error(data.message ?? 'Failed to fetch users');
@@ -59,7 +59,7 @@ export const userService = {
    * This is used for the manager dropdown in branch forms
    */
   async getManagers(): Promise<ManagerListResponse> {
-    const { data } = await apiClient.get<ApiResponse<AuthUser[]>>('/api/users');
+    const { data } = await apiClient.get<ApiResponse<AuthUser[]>>('/users');
 
     if (!data.success) {
       throw new Error(data.message ?? 'Failed to fetch users');
@@ -83,7 +83,7 @@ export const userService = {
    * Get a single user by ID (admin only)
    */
   async getById(id: string): Promise<User> {
-    const { data } = await apiClient.get<ApiResponse<User>>(`/api/users/${id}`);
+    const { data } = await apiClient.get<ApiResponse<User>>(`/users/${id}`);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to fetch user');
@@ -96,7 +96,7 @@ export const userService = {
    * Create a new user (admin only)
    */
   async create(payload: CreateUserPayload): Promise<User> {
-    const { data } = await apiClient.post<ApiResponse<User>>('/api/users', payload);
+    const { data } = await apiClient.post<ApiResponse<User>>('/users', payload);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to create user');
@@ -111,7 +111,7 @@ export const userService = {
    * Note: Does NOT handle password - use changePassword method
    */
   async update(id: string, payload: UpdateUserPayload): Promise<User> {
-    const { data } = await apiClient.put<ApiResponse<User>>(`/api/users/${id}`, payload);
+    const { data } = await apiClient.put<ApiResponse<User>>(`/users/${id}`, payload);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to update user');
@@ -125,7 +125,7 @@ export const userService = {
    * Prevents the user from logging in
    */
   async deactivate(id: string): Promise<User> {
-    const { data } = await apiClient.patch<ApiResponse<User>>(`/api/users/${id}/deactivate`);
+    const { data } = await apiClient.patch<ApiResponse<User>>(`/users/${id}/deactivate`);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to deactivate user');
@@ -139,7 +139,7 @@ export const userService = {
    * Allows the user to log in again
    */
   async activate(id: string): Promise<User> {
-    const { data } = await apiClient.patch<ApiResponse<User>>(`/api/users/${id}/activate`);
+    const { data } = await apiClient.patch<ApiResponse<User>>(`/users/${id}/activate`);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to activate user');
@@ -154,7 +154,7 @@ export const userService = {
    */
   async changePassword(id: string, payload: ChangePasswordPayload): Promise<{ message: string }> {
     const { data } = await apiClient.patch<ApiResponse<void>>(
-      `/api/users/${id}/password`,
+      `/users/${id}/password`,
       payload
     );
 

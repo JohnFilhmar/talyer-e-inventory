@@ -22,7 +22,7 @@ export const authService = {
    */
   async login(credentials: LoginRequest): Promise<ApiResponse<LoginResponse>> {
     const { data } = await apiClient.post<ApiResponse<LoginResponse>>(
-      '/api/auth/login',
+      '/auth/login',
       credentials
     );
 
@@ -39,7 +39,7 @@ export const authService = {
    */
   async register(userData: RegisterRequest): Promise<ApiResponse<LoginResponse>> {
     const { data } = await apiClient.post<ApiResponse<LoginResponse>>(
-      '/api/auth/register',
+      '/auth/register',
       userData
     );
 
@@ -56,7 +56,7 @@ export const authService = {
    */
   async registerCustomer(userData: CustomerRegisterRequest): Promise<ApiResponse<LoginResponse>> {
     const { data } = await apiClient.post<ApiResponse<LoginResponse>>(
-      '/api/auth/register-customer',
+      '/auth/register-customer',
       userData
     );
 
@@ -74,7 +74,7 @@ export const authService = {
    */
   async logout(): Promise<void> {
     try {
-      await apiClient.post('/api/auth/logout');
+      await apiClient.post('/auth/logout');
     } finally {
       // Always clear tokens even if logout request fails
       clearTokens();
@@ -86,7 +86,7 @@ export const authService = {
    */
   async forgotPassword(data: ForgotPasswordRequest): Promise<ApiResponse> {
     const response = await apiClient.post<ApiResponse>(
-      '/api/auth/forgot-password',
+      '/auth/forgot-password',
       data
     );
     return response.data;
@@ -97,7 +97,7 @@ export const authService = {
    */
   async resetPassword(data: ResetPasswordRequest): Promise<ApiResponse> {
     const response = await apiClient.post<ApiResponse>(
-      '/api/auth/reset-password',
+      '/auth/reset-password',
       data
     );
     return response.data;
@@ -109,7 +109,7 @@ export const authService = {
    */
   async refreshToken(): Promise<ApiResponse<RefreshTokenResponse>> {
     const { data } = await apiClient.post<ApiResponse<RefreshTokenResponse>>(
-      '/api/auth/refresh-token'
+      '/auth/refresh-token'
     );
 
     if (data.success && data.data?.accessToken) {
@@ -123,7 +123,7 @@ export const authService = {
    * Get current user profile
    */
   async getProfile(): Promise<ApiResponse<User>> {
-    const { data } = await apiClient.get<ApiResponse<User>>('/api/auth/me');
+    const { data } = await apiClient.get<ApiResponse<User>>('/auth/me');
     return data;
   },
 
@@ -131,7 +131,7 @@ export const authService = {
    * Change user password
    */
   async changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse> {
-    const { data } = await apiClient.post<ApiResponse>('/api/auth/change-password', {
+    const { data } = await apiClient.post<ApiResponse>('/auth/change-password', {
       currentPassword,
       newPassword,
     });

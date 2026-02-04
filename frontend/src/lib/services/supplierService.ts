@@ -17,7 +17,7 @@ export const supplierService = {
    * @param params - Filter parameters (active, search)
    */
   async getAll(params: SupplierListParams = {}): Promise<PaginatedResponse<Supplier>> {
-    const { data } = await apiClient.get<ApiResponse<Supplier[]>>('/api/suppliers', {
+    const { data } = await apiClient.get<ApiResponse<Supplier[]>>('/suppliers', {
       params,
     });
 
@@ -31,7 +31,7 @@ export const supplierService = {
    * Get active suppliers (for dropdown selection)
    */
   async getActive(): Promise<Supplier[]> {
-    const { data } = await apiClient.get<ApiResponse<Supplier[]>>('/api/suppliers', {
+    const { data } = await apiClient.get<ApiResponse<Supplier[]>>('/suppliers', {
       params: { active: 'true', limit: 100 },
     });
 
@@ -44,7 +44,7 @@ export const supplierService = {
    */
   async getById(id: string): Promise<Supplier> {
     const { data } = await apiClient.get<ApiResponse<Supplier>>(
-      `/api/suppliers/${id}`
+      `/suppliers/${id}`
     );
 
     if (!data.success || !data.data) {
@@ -60,7 +60,7 @@ export const supplierService = {
    */
   async create(payload: CreateSupplierPayload): Promise<Supplier> {
     const { data } = await apiClient.post<ApiResponse<Supplier>>(
-      '/api/suppliers',
+      '/suppliers',
       payload
     );
 
@@ -78,7 +78,7 @@ export const supplierService = {
    */
   async update(id: string, payload: UpdateSupplierPayload): Promise<Supplier> {
     const { data } = await apiClient.put<ApiResponse<Supplier>>(
-      `/api/suppliers/${id}`,
+      `/suppliers/${id}`,
       payload
     );
 
@@ -95,7 +95,7 @@ export const supplierService = {
    */
   async deactivate(id: string): Promise<void> {
     const { data } = await apiClient.delete<ApiResponse<null>>(
-      `/api/suppliers/${id}`
+      `/suppliers/${id}`
     );
 
     if (!data.success) {

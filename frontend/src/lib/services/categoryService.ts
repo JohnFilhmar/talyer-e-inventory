@@ -17,7 +17,7 @@ export const categoryService = {
    * @param params - Filter parameters (parent, active, includeChildren)
    */
   async getAll(params: CategoryListParams = {}): Promise<Category[]> {
-    const { data } = await apiClient.get<ApiResponse<Category[]>>('/api/categories', {
+    const { data } = await apiClient.get<ApiResponse<Category[]>>('/categories', {
       params,
     });
 
@@ -47,7 +47,7 @@ export const categoryService = {
    * @param id - Category ID
    */
   async getById(id: string): Promise<Category> {
-    const { data } = await apiClient.get<ApiResponse<Category>>(`/api/categories/${id}`);
+    const { data } = await apiClient.get<ApiResponse<Category>>(`/categories/${id}`);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to fetch category');
@@ -62,7 +62,7 @@ export const categoryService = {
    */
   async getChildren(id: string): Promise<Category[]> {
     const { data } = await apiClient.get<ApiResponse<Category[]>>(
-      `/api/categories/${id}/children`
+      `/categories/${id}/children`
     );
 
     if (!data.success) {
@@ -77,7 +77,7 @@ export const categoryService = {
    * @param payload - Category data
    */
   async create(payload: CreateCategoryPayload): Promise<Category> {
-    const { data } = await apiClient.post<ApiResponse<Category>>('/api/categories', payload);
+    const { data } = await apiClient.post<ApiResponse<Category>>('/categories', payload);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to create category');
@@ -93,7 +93,7 @@ export const categoryService = {
    */
   async update(id: string, payload: UpdateCategoryPayload): Promise<Category> {
     const { data } = await apiClient.put<ApiResponse<Category>>(
-      `/api/categories/${id}`,
+      `/categories/${id}`,
       payload
     );
 
@@ -110,7 +110,7 @@ export const categoryService = {
    * @param id - Category ID
    */
   async delete(id: string): Promise<void> {
-    const { data } = await apiClient.delete<ApiResponse<null>>(`/api/categories/${id}`);
+    const { data } = await apiClient.delete<ApiResponse<null>>(`/categories/${id}`);
 
     if (!data.success) {
       throw new Error(data.message ?? 'Failed to delete category');

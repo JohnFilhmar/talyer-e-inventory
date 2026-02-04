@@ -19,7 +19,7 @@ export const salesService = {
    * @param params - Filter parameters
    */
   async getAll(params: SalesOrderListParams = {}): Promise<PaginatedResponse<SalesOrder>> {
-    const { data } = await apiClient.get<ApiResponse<SalesOrder[]>>('/api/sales', {
+    const { data } = await apiClient.get<ApiResponse<SalesOrder[]>>('/sales', {
       params,
     });
 
@@ -34,7 +34,7 @@ export const salesService = {
    * @param id - Order ID
    */
   async getById(id: string): Promise<SalesOrder> {
-    const { data } = await apiClient.get<ApiResponse<SalesOrder>>(`/api/sales/${id}`);
+    const { data } = await apiClient.get<ApiResponse<SalesOrder>>(`/sales/${id}`);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to fetch sales order');
@@ -53,7 +53,7 @@ export const salesService = {
     params: Omit<SalesOrderListParams, 'branch'> = {}
   ): Promise<PaginatedResponse<SalesOrder>> {
     const { data } = await apiClient.get<ApiResponse<SalesOrder[]>>(
-      `/api/sales/branch/${branchId}`,
+      `/sales/branch/${branchId}`,
       { params }
     );
 
@@ -68,7 +68,7 @@ export const salesService = {
    * @param params - Optional params like branch filter
    */
   async getStats(params?: { branch?: string }): Promise<SalesStats> {
-    const { data } = await apiClient.get<ApiResponse<SalesStats>>('/api/sales/stats', { params });
+    const { data } = await apiClient.get<ApiResponse<SalesStats>>('/sales/stats', { params });
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to fetch sales stats');
@@ -82,7 +82,7 @@ export const salesService = {
    * @param payload - Order data
    */
   async create(payload: CreateSalesOrderPayload): Promise<SalesOrder> {
-    const { data } = await apiClient.post<ApiResponse<SalesOrder>>('/api/sales', payload);
+    const { data } = await apiClient.post<ApiResponse<SalesOrder>>('/sales', payload);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to create sales order');
@@ -98,7 +98,7 @@ export const salesService = {
    */
   async updateStatus(id: string, payload: UpdateOrderStatusPayload): Promise<SalesOrder> {
     const { data } = await apiClient.put<ApiResponse<SalesOrder>>(
-      `/api/sales/${id}/status`,
+      `/sales/${id}/status`,
       payload
     );
 
@@ -116,7 +116,7 @@ export const salesService = {
    */
   async updatePayment(id: string, payload: UpdatePaymentPayload): Promise<SalesOrder> {
     const { data } = await apiClient.put<ApiResponse<SalesOrder>>(
-      `/api/sales/${id}/payment`,
+      `/sales/${id}/payment`,
       payload
     );
 
@@ -132,7 +132,7 @@ export const salesService = {
    * @param id - Order ID
    */
   async cancel(id: string): Promise<void> {
-    const { data } = await apiClient.delete<ApiResponse<null>>(`/api/sales/${id}`);
+    const { data } = await apiClient.delete<ApiResponse<null>>(`/sales/${id}`);
 
     if (!data.success) {
       throw new Error(data.message ?? 'Failed to cancel order');
@@ -144,7 +144,7 @@ export const salesService = {
    * @param id - Order ID
    */
   async getInvoice(id: string): Promise<SalesOrder> {
-    const { data } = await apiClient.get<ApiResponse<SalesOrder>>(`/api/sales/${id}/invoice`);
+    const { data } = await apiClient.get<ApiResponse<SalesOrder>>(`/sales/${id}/invoice`);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to fetch invoice');

@@ -20,7 +20,7 @@ export const productService = {
    * @param params - Filter and pagination parameters
    */
   async getAll(params: ProductListParams = {}): Promise<PaginatedResponse<Product>> {
-    const { data } = await apiClient.get<ApiResponse<Product[]>>('/api/products', {
+    const { data } = await apiClient.get<ApiResponse<Product[]>>('/products', {
       params,
     });
 
@@ -35,7 +35,7 @@ export const productService = {
    * @param id - Product ID
    */
   async getById(id: string): Promise<Product> {
-    const { data } = await apiClient.get<ApiResponse<Product>>(`/api/products/${id}`);
+    const { data } = await apiClient.get<ApiResponse<Product>>(`/products/${id}`);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to fetch product');
@@ -50,7 +50,7 @@ export const productService = {
    */
   async search(params: ProductSearchParams): Promise<ProductSearchResult[]> {
     const { data } = await apiClient.get<ApiResponse<ProductSearchResult[]>>(
-      '/api/products/search',
+      '/products/search',
       { params }
     );
 
@@ -66,7 +66,7 @@ export const productService = {
    * @param payload - Product data
    */
   async create(payload: CreateProductPayload): Promise<Product> {
-    const { data } = await apiClient.post<ApiResponse<Product>>('/api/products', payload);
+    const { data } = await apiClient.post<ApiResponse<Product>>('/products', payload);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to create product');
@@ -82,7 +82,7 @@ export const productService = {
    */
   async update(id: string, payload: UpdateProductPayload): Promise<Product> {
     const { data } = await apiClient.put<ApiResponse<Product>>(
-      `/api/products/${id}`,
+      `/products/${id}`,
       payload
     );
 
@@ -98,7 +98,7 @@ export const productService = {
    * @param id - Product ID
    */
   async delete(id: string): Promise<void> {
-    const { data } = await apiClient.delete<ApiResponse<null>>(`/api/products/${id}`);
+    const { data } = await apiClient.delete<ApiResponse<null>>(`/products/${id}`);
 
     if (!data.success) {
       throw new Error(data.message ?? 'Failed to delete product');
@@ -122,7 +122,7 @@ export const productService = {
     formData.append('isPrimary', String(isPrimary));
 
     const { data } = await apiClient.post<ApiResponse<ProductImage>>(
-      `/api/products/${productId}/images`,
+      `/products/${productId}/images`,
       formData,
       {
         headers: {
@@ -150,7 +150,7 @@ export const productService = {
     isPrimary = false
   ): Promise<ProductImage> {
     const { data } = await apiClient.post<ApiResponse<ProductImage>>(
-      `/api/products/${productId}/images/url`,
+      `/products/${productId}/images/url`,
       { url, isPrimary }
     );
 
@@ -168,7 +168,7 @@ export const productService = {
    */
   async deleteImage(productId: string, imageId: string): Promise<void> {
     const { data } = await apiClient.delete<ApiResponse<null>>(
-      `/api/products/${productId}/images/${imageId}`
+      `/products/${productId}/images/${imageId}`
     );
 
     if (!data.success) {

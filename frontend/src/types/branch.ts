@@ -83,7 +83,7 @@ export interface Branch {
 }
 
 /**
- * Branch statistics from /api/branches/:id/stats
+ * Branch statistics from /branches/:id/stats
  */
 export interface BranchStats {
   branch: {

@@ -17,7 +17,7 @@ export const branchService = {
    * Get all branches with optional filters
    */
   async getAll(params: BranchListParams = {}): Promise<PaginatedResponse<Branch>> {
-    const { data } = await apiClient.get<ApiResponse<Branch[]>>('/api/branches', {
+    const { data } = await apiClient.get<ApiResponse<Branch[]>>('/branches', {
       params,
     });
 
@@ -31,7 +31,7 @@ export const branchService = {
    * Get a single branch by ID
    */
   async getById(id: string): Promise<Branch> {
-    const { data } = await apiClient.get<ApiResponse<Branch>>(`/api/branches/${id}`);
+    const { data } = await apiClient.get<ApiResponse<Branch>>(`/branches/${id}`);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to fetch branch');
@@ -44,7 +44,7 @@ export const branchService = {
    * Create a new branch (admin only)
    */
   async create(payload: CreateBranchPayload): Promise<Branch> {
-    const { data } = await apiClient.post<ApiResponse<Branch>>('/api/branches', payload);
+    const { data } = await apiClient.post<ApiResponse<Branch>>('/branches', payload);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to create branch');
@@ -57,7 +57,7 @@ export const branchService = {
    * Update an existing branch (admin only)
    */
   async update(id: string, payload: UpdateBranchPayload): Promise<Branch> {
-    const { data } = await apiClient.put<ApiResponse<Branch>>(`/api/branches/${id}`, payload);
+    const { data } = await apiClient.put<ApiResponse<Branch>>(`/branches/${id}`, payload);
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to update branch');
@@ -72,7 +72,7 @@ export const branchService = {
   async deactivate(id: string): Promise<{ id: string; name: string; isActive: boolean }> {
     const { data } = await apiClient.delete<
       ApiResponse<{ id: string; name: string; isActive: boolean }>
-    >(`/api/branches/${id}`);
+    >(`/branches/${id}`);
 
     if (!data.success) {
       throw new Error(data.message ?? 'Failed to deactivate branch');
@@ -86,7 +86,7 @@ export const branchService = {
    */
   async getStats(id: string): Promise<BranchStats> {
     const { data } = await apiClient.get<ApiResponse<BranchStats>>(
-      `/api/branches/${id}/stats`
+      `/branches/${id}/stats`
     );
 
     if (!data.success || !data.data) {
@@ -100,7 +100,7 @@ export const branchService = {
    * Activate a previously deactivated branch (admin only)
    */
   async activate(id: string): Promise<Branch> {
-    const { data } = await apiClient.put<ApiResponse<Branch>>(`/api/branches/${id}`, {
+    const { data } = await apiClient.put<ApiResponse<Branch>>(`/branches/${id}`, {
       isActive: true,
     });
 
