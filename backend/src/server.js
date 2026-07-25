@@ -8,9 +8,17 @@ import { connectRedis } from './config/redis.js';
 import errorHandler from './middleware/errorHandler.js';
 import { authLimiter, apiLimiter } from './middleware/rateLimit.js';
 import { CORS } from './config/constants.js';
+import { resolveTrustProxy } from './utils/trustProxy.js';
 
 // Initialize express app
 const app = express();
+
+// express-rate-limit keys clients by req.ip. Behind a reverse proxy that is the
+// proxy's address unless Express is told how many hops to trust, which would
+// collapse every client into one rate-limit bucket. Left at 0, X-Forwarded-For
+// is ignored — correct when this app is exposed directly, and it stops a client
+// from spoofing the header to get a fresh bucket.
+app.set('trust proxy', resolveTrustProxy(process.env.TRUST_PROXY));
 
 // Security headers. crossOriginResourcePolicy is relaxed so the frontend on a
 // different origin can still load images served from /uploads.
