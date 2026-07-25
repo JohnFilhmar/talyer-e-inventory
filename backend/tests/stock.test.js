@@ -967,4 +967,44 @@ describe('Stock API Tests', () => {
       expect(res.status).toBe(403);
     });
   });
+
+  describe('numeric coercion', () => {
+    it('treats a string quantity as a number on restock', async () => {
+      const branch = await createTestBranch({ name: 'Coerce', code: 'CO-1' });
+      const category = await createTestCategory({ name: 'Coerce Category', code: 'CO-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      const stock = await Stock.create({
+        product: product._id, branch: branch._id, quantity: 100, costPrice: 1, sellingPrice: 2,
+      });
+
+      const res = await request(app)
+        .put(`/api/stock/${stock._id}/restock`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ quantity: '5' });
+
+      expect(res.status).toBe(200);
+
+      const reread = await Stock.findById(stock._id);
+      expect(reread.quantity).toBe(105);
+    });
+
+    it('rejects a non-numeric quantity with 400 instead of coercing to NaN', async () => {
+      const branch = await createTestBranch({ name: 'CoerceBad', code: 'CO-2' });
+      const category = await createTestCategory({ name: 'Coerce Bad Category', code: 'CO-BAD-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      const stock = await Stock.create({
+        product: product._id, branch: branch._id, quantity: 100, costPrice: 1, sellingPrice: 2,
+      });
+
+      const res = await request(app)
+        .put(`/api/stock/${stock._id}/restock`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ quantity: 'abc' });
+
+      expect(res.status).toBe(400);
+
+      const reread = await Stock.findById(stock._id);
+      expect(reread.quantity).toBe(100);
+    });
+  });
 });

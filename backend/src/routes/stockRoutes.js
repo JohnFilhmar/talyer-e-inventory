@@ -11,11 +11,11 @@ import handleValidationErrors from '../middleware/validationHandler.js';
 const restockValidation = [
   body('product').notEmpty().isMongoId().withMessage('Valid product ID is required'),
   body('branch').notEmpty().isMongoId().withMessage('Valid branch ID is required'),
-  body('quantity').notEmpty().isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
-  body('costPrice').notEmpty().isFloat({ min: 0 }).withMessage('Cost price must be a positive number'),
-  body('sellingPrice').notEmpty().isFloat({ min: 0 }).withMessage('Selling price must be a positive number'),
-  body('reorderPoint').optional().isInt({ min: 0 }).withMessage('Reorder point must be a non-negative integer'),
-  body('reorderQuantity').optional().isInt({ min: 0 }).withMessage('Reorder quantity must be a non-negative integer'),
+  body('quantity').notEmpty().isInt({ min: 1 }).withMessage('Quantity must be at least 1').toInt(),
+  body('costPrice').notEmpty().isFloat({ min: 0 }).withMessage('Cost price must be a positive number').toFloat(),
+  body('sellingPrice').notEmpty().isFloat({ min: 0 }).withMessage('Selling price must be a positive number').toFloat(),
+  body('reorderPoint').optional().isInt({ min: 0 }).withMessage('Reorder point must be a non-negative integer').toInt(),
+  body('reorderQuantity').optional().isInt({ min: 0 }).withMessage('Reorder quantity must be a non-negative integer').toInt(),
   body('supplier').optional().isMongoId().withMessage('Valid supplier ID required if provided'),
   body('location').optional().isString().isLength({ max: 100 }).withMessage('Location cannot exceed 100 characters')
 ];
@@ -23,7 +23,7 @@ const restockValidation = [
 const adjustStockValidation = [
   body('product').notEmpty().isMongoId().withMessage('Valid product ID is required'),
   body('branch').notEmpty().isMongoId().withMessage('Valid branch ID is required'),
-  body('adjustment').notEmpty().isInt().withMessage('Adjustment must be an integer'),
+  body('adjustment').notEmpty().isInt().withMessage('Adjustment must be an integer').toInt(),
   body('reason').notEmpty().isString().isLength({ min: 5, max: 500 })
     .withMessage('Reason is required and must be between 5-500 characters')
 ];
@@ -32,7 +32,7 @@ const createTransferValidation = [
   body('product').notEmpty().isMongoId().withMessage('Valid product ID is required'),
   body('fromBranch').notEmpty().isMongoId().withMessage('Valid source branch ID is required'),
   body('toBranch').notEmpty().isMongoId().withMessage('Valid destination branch ID is required'),
-  body('quantity').notEmpty().isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
+  body('quantity').notEmpty().isInt({ min: 1 }).withMessage('Quantity must be at least 1').toInt(),
   body('notes').optional().isString().isLength({ max: 500 }).withMessage('Notes cannot exceed 500 characters')
 ];
 
@@ -57,7 +57,7 @@ const productIdValidation = [
 // Validation for restocking by stock ID (simpler - just add quantity)
 const restockByIdValidation = [
   param('id').isMongoId().withMessage('Valid stock ID is required'),
-  body('quantity').notEmpty().isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
+  body('quantity').notEmpty().isInt({ min: 1 }).withMessage('Quantity must be at least 1').toInt(),
   body('supplierId').optional().isMongoId().withMessage('Valid supplier ID required if provided'),
   body('notes').optional().isString().isLength({ max: 500 }).withMessage('Notes cannot exceed 500 characters')
 ];
@@ -65,7 +65,7 @@ const restockByIdValidation = [
 // Validation for adjusting stock by ID
 const adjustByIdValidation = [
   param('id').isMongoId().withMessage('Valid stock ID is required'),
-  body('quantity').notEmpty().isInt().withMessage('Adjustment quantity is required'),
+  body('quantity').notEmpty().isInt().withMessage('Adjustment quantity is required').toInt(),
   body('reason').notEmpty().isString().isLength({ min: 5, max: 500 })
     .withMessage('Reason is required and must be between 5-500 characters'),
   body('notes').optional().isString().isLength({ max: 500 }).withMessage('Notes cannot exceed 500 characters')
