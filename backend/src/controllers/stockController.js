@@ -8,6 +8,7 @@ import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
 import { CACHE_TTL, USER_ROLES, PAGINATION } from '../config/constants.js';
+import { resolveBranchScope, canAccessBranch } from '../utils/branchScope.js';
 
 /**
  * @desc    Get all stock records with filters
@@ -25,15 +26,24 @@ export const getAllStock = asyncHandler(async (req, res) => {
   } = req.query;
 
   const query = {};
-  
-  if (branch) {
-    query.branch = branch;
+
+  // Non-admins are silently clamped to their own branch: a foreign branch id
+  // in the query is ignored rather than rejected, since this is a read.
+  const scope = resolveBranchScope(
+    req.user,
+    req.user.role === USER_ROLES.ADMIN ? branch : undefined
+  );
+  if (!scope.ok) {
+    return ApiResponse.error(res, scope.status, scope.message);
   }
-  
+  if (scope.branchId) {
+    query.branch = scope.branchId;
+  }
+
   if (product) {
     query.product = product;
   }
-  
+
   if (lowStock === 'true') {
     query.$expr = { $lte: ['$quantity', '$reorderPoint'] };
   }
@@ -190,9 +200,18 @@ export const getLowStock = asyncHandler(async (req, res) => {
   const query = {
     $expr: { $lte: ['$quantity', '$reorderPoint'] }
   };
-  
-  if (branch) {
-    query.branch = branch;
+
+  // Non-admins are silently clamped to their own branch: a foreign branch id
+  // in the query is ignored rather than rejected, since this is a read.
+  const scope = resolveBranchScope(
+    req.user,
+    req.user.role === USER_ROLES.ADMIN ? branch : undefined
+  );
+  if (!scope.ok) {
+    return ApiResponse.error(res, scope.status, scope.message);
+  }
+  if (scope.branchId) {
+    query.branch = scope.branchId;
   }
 
   const lowStockItems = await Stock.find(query)
@@ -227,22 +246,31 @@ export const restockProduct = asyncHandler(async (req, res) => {
     location
   } = req.body;
 
+  const scope = resolveBranchScope(req.user, branch);
+  if (!scope.ok) {
+    return ApiResponse.error(res, scope.status, scope.message);
+  }
+  const targetBranch = scope.branchId;
+  if (!targetBranch) {
+    return ApiResponse.error(res, 400, 'Branch is required');
+  }
+
   // Validate product and branch exist
   const [productExists, branchExists] = await Promise.all([
     Product.findById(product),
-    Branch.findById(branch)
+    Branch.findById(targetBranch)
   ]);
 
   if (!productExists) {
     return ApiResponse.error(res, 404, 'Product not found');
   }
-  
+
   if (!branchExists) {
     return ApiResponse.error(res, 404, 'Branch not found');
   }
 
   // Find existing stock record or create new one
-  let stock = await Stock.findOne({ product, branch });
+  let stock = await Stock.findOne({ product, branch: targetBranch });
   const isNewStock = !stock;
   const oldQuantity = stock ? stock.quantity : 0;
 
@@ -263,7 +291,7 @@ export const restockProduct = asyncHandler(async (req, res) => {
     // Create new stock record
     stock = await Stock.create({
       product,
-      branch,
+      branch: targetBranch,
       quantity,
       costPrice,
       sellingPrice,
@@ -369,6 +397,10 @@ export const restockById = asyncHandler(async (req, res) => {
 
   if (!stock) {
     return ApiResponse.error(res, 404, 'Stock record not found');
+  }
+
+  if (!canAccessBranch(req.user, stock.branch)) {
+    return ApiResponse.error(res, 403, 'Access denied to this branch');
   }
 
   const oldQuantity = stock.quantity;

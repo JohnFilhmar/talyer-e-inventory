@@ -1,7 +1,7 @@
 import request from 'supertest';
 import express from 'express';
 import * as dbHandler from './setup/dbHandler.js';
-import { createTestUser, createTestAdmin, createTestMechanic } from './setup/testHelpers.js';
+import { createTestUser, createTestAdmin, createTestMechanic, createTestSalesperson } from './setup/testHelpers.js';
 import stockRoutes from '../src/routes/stockRoutes.js';
 import Stock from '../src/models/Stock.js';
 import StockTransfer from '../src/models/StockTransfer.js';
@@ -883,6 +883,88 @@ describe('Stock API Tests', () => {
       await stock.deductStock(20);
       expect(stock.quantity).toBe(80); // 100 - 20
       expect(stock.reservedQuantity).toBe(0); // 20 - 20
+    });
+  });
+
+  describe('stock branch scoping', () => {
+    it('restricts GET /api/stock to the salespersons own branch', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'SC-OWN' });
+      const other = await createTestBranch({ name: 'Other', code: 'SC-OTH' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      await Stock.create({ product: product._id, branch: own._id, quantity: 5, costPrice: 1, sellingPrice: 2 });
+      await Stock.create({ product: product._id, branch: other._id, quantity: 7, costPrice: 1, sellingPrice: 2 });
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get('/api/stock')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].branch._id.toString()).toBe(own._id.toString());
+    });
+
+    it('ignores a branch query that points at another branch', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'SC-OWN2' });
+      const other = await createTestBranch({ name: 'Other', code: 'SC-OTH2' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      await Stock.create({ product: product._id, branch: other._id, quantity: 7, costPrice: 1, sellingPrice: 2 });
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get(`/api/stock?branch=${other._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(0);
+    });
+
+    it('rejects a restock aimed at another branch', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'SC-OWN3' });
+      const other = await createTestBranch({ name: 'Other', code: 'SC-OTH3' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ product: product._id, branch: other._id, quantity: 5, costPrice: 10, sellingPrice: 20 });
+
+      expect(res.status).toBe(403);
+    });
+
+    it('rejects restock-by-id against another branch stock record', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'SC-OWN4' });
+      const other = await createTestBranch({ name: 'Other', code: 'SC-OTH4' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      const foreign = await Stock.create({ product: product._id, branch: other._id, quantity: 1, costPrice: 1, sellingPrice: 2 });
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .put(`/api/stock/${foreign._id}/restock`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ quantity: 9999 });
+
+      expect(res.status).toBe(403);
+
+      const reread = await Stock.findById(foreign._id);
+      expect(reread.quantity).toBe(1);
+    });
+
+    it('denies a customer access to per-branch cost prices', async () => {
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      const { token } = await createTestUser({ email: 'cust@example.com', role: 'customer' });
+
+      const res = await request(app)
+        .get(`/api/stock/product/${product._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
     });
   });
 });

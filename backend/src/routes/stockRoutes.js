@@ -184,6 +184,7 @@ router.get(
 router.get(
   '/product/:productId',
   protect,
+  authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   productIdValidation,
   handleValidationErrors,
   stockController.getProductStock
