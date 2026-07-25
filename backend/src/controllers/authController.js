@@ -204,7 +204,7 @@ const logout = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, 200, 'Logout successful');
 });
 
-// @desc    Get reset password token
+// @desc    Request a password reset token
 // @route   POST /api/auth/forgot-password
 // @access  Public
 const forgotPassword = asyncHandler(async (req, res) => {
@@ -214,21 +214,28 @@ const forgotPassword = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 400, 'Please provide an email');
   }
 
+  // Always answer identically so the endpoint cannot be used to discover
+  // which email addresses have accounts.
+  const genericMessage =
+    'If an account exists for that email, a password reset token has been issued';
+
   const user = await User.findOne({ email });
 
   if (!user) {
-    return ApiResponse.error(res, 404, 'User not found');
+    return ApiResponse.success(res, 200, genericMessage);
   }
 
-  // Generate reset token
   const resetToken = user.getResetPasswordToken();
   await user.save();
 
-  // In production, you would send this token via email
-  // For now, we'll return it in the response (NOT RECOMMENDED FOR PRODUCTION)
-  return ApiResponse.success(res, 200, 'Password reset token generated', {
-    resetToken, // In production, send this via email instead
-  });
+  // There is no mail transport in this project. Outside production the token
+  // is echoed so the flow is usable locally and under test; in production it
+  // is never sent to the caller.
+  if (process.env.NODE_ENV === 'production') {
+    return ApiResponse.success(res, 200, genericMessage);
+  }
+
+  return ApiResponse.success(res, 200, genericMessage, { resetToken });
 });
 
 // @desc    Reset password

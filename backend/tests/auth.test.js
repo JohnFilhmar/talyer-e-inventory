@@ -536,7 +536,9 @@ describe('Auth API - Forgot Password', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.message).toBe('Password reset token generated');
+      expect(res.body.message).toBe(
+        'If an account exists for that email, a password reset token has been issued'
+      );
       expect(res.body.data).toHaveProperty('resetToken');
     });
 
@@ -567,14 +569,44 @@ describe('Auth API - Forgot Password', () => {
       );
     });
 
-    it('should fail with non-existent email', async () => {
+    it('returns 200 with a generic message for an unknown email', async () => {
       const res = await request(app)
         .post('/api/auth/forgot-password')
-        .send({ email: 'nonexistent@example.com' });
+        .send({ email: 'nobody@example.com' });
 
-      expect(res.statusCode).toBe(404);
-      expect(res.body.success).toBe(false);
-      expect(res.body.message).toBe('User not found');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toBeUndefined();
+    });
+
+    it('gives an identical status and message for known and unknown emails', async () => {
+      await createUserDirect({ email: 'known@example.com' });
+
+      const known = await request(app)
+        .post('/api/auth/forgot-password')
+        .send({ email: 'known@example.com' });
+      const unknown = await request(app)
+        .post('/api/auth/forgot-password')
+        .send({ email: 'unknown@example.com' });
+
+      expect(known.status).toBe(unknown.status);
+      expect(known.body.message).toBe(unknown.body.message);
+    });
+
+    it('never returns a reset token when NODE_ENV is production', async () => {
+      await createUserDirect({ email: 'prod@example.com' });
+      const previous = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        const res = await request(app)
+          .post('/api/auth/forgot-password')
+          .send({ email: 'prod@example.com' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data).toBeUndefined();
+      } finally {
+        process.env.NODE_ENV = previous;
+      }
     });
   });
 });
