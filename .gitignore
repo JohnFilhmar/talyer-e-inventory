@@ -72,3 +72,13 @@ pids
 
 # Redis
 **/**.rdb
+
+# Backend runtime artifacts
+backend/uploads/
+backend/dist/
+
+# Redis dumps
+dump.rdb
+
+# Superpowers scratch
+.superpowers/
