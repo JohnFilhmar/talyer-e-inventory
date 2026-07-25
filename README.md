@@ -379,6 +379,14 @@ docker compose up --build
 separate file from the `backend/.env` used for local, non-Docker development. See
 [CLAUDE.md](CLAUDE.md#environment) for what each variable does.
 
+> **Known limitation:** product images do not render in the compose stack. Image URLs are absolute
+> and built from `BACKEND_URL`, so they point at `http://localhost:5000` — which inside the
+> frontend container means the frontend itself, and which Next 16's image optimizer blocks anyway
+> because `images.dangerouslyAllowLocalIP` defaults to `false`. `/_next/image` returns `400`;
+> everything else in the stack works. Put both services behind a reverse proxy and set
+> `BACKEND_URL` to that hostname, or set `images.unoptimized: true` to bypass the optimizer.
+> Details in [CLAUDE.md](CLAUDE.md).
+
 ### Environment Configuration
 
 #### Backend `.env`

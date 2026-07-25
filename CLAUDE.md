@@ -50,6 +50,22 @@ reads `.env` from the same directory as [docker-compose.yml](docker-compose.yml)
 variable there has a default; `JWT_SECRET` and `JWT_REFRESH_SECRET` are the two that abort the
 build (`:?...is required`) if left unset.
 
+**Known limitation — product images in the compose stack.** Next 16 defaults
+`images.dangerouslyAllowLocalIP` to `false`, an SSRF guard on the server-side image optimizer.
+Product image URLs are absolute and built from the backend's `BACKEND_URL`, so in the compose
+stack they point at `http://localhost:5000`. Two things then go wrong at once: `localhost` inside
+the frontend container is the frontend itself, not the backend, and the loopback address is
+blocked by that guard regardless. `/_next/image` answers `400` and product images do not render —
+the rest of the app is unaffected. This was confirmed empirically by toggling the flag against a
+real built container. The optimizer itself is healthy: with the guard relaxed it serves both WebP
+and AVIF correctly on the pinned `sharp` version.
+
+Workarounds, in order of preference: point `BACKEND_URL` at a real hostname the frontend
+container can resolve and the browser can reach (a reverse proxy in front of both services is the
+production-shaped answer); or set `images.unoptimized: true` to bypass the optimizer entirely.
+Do not enable `dangerouslyAllowLocalIP` to work around this in a deployment reachable from
+untrusted networks — the flag exists because it turns the optimizer into an SSRF primitive.
+
 ## Backend architecture
 
 ### Request pipeline
