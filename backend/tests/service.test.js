@@ -873,7 +873,7 @@ describe('Service Order Management', () => {
       const admin = await createTestAdmin();
       const branch = await createTestBranch();
       const mechanic = await createTestMechanic(branch._id);
-      
+
       const order = await createTestServiceOrder(branch, mechanic.user, admin.user, {
         status: 'completed',
         laborCost: 1000,
@@ -888,6 +888,33 @@ describe('Service Order Management', () => {
       expect(res.body.data.jobNumber).toBe(order.jobNumber);
       expect(res.body.data.totalAmount).toBe(1500);
       expect(res.body.data.laborCost).toBe(1000);
+    });
+  });
+
+  describe('GET /api/services/:id/invoice access control', () => {
+    it('lets a salesperson open an invoice for their own branch', async () => {
+      const branch = await createTestBranch();
+      const salesperson = await createTestSalesperson(branch._id);
+      const order = await createTestServiceOrder(branch, null, salesperson.user);
+
+      const res = await request(app)
+        .get(`/api/services/${order._id}/invoice`)
+        .set('Authorization', `Bearer ${salesperson.token}`);
+
+      expect(res.status).toBe(200);
+    });
+
+    it('denies a salesperson an invoice from another branch', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'OWN-2' });
+      const other = await createTestBranch({ name: 'Other', code: 'OTH-2' });
+      const salesperson = await createTestSalesperson(own._id);
+      const order = await createTestServiceOrder(other, null, salesperson.user);
+
+      const res = await request(app)
+        .get(`/api/services/${order._id}/invoice`)
+        .set('Authorization', `Bearer ${salesperson.token}`);
+
+      expect(res.status).toBe(403);
     });
   });
 

@@ -1,7 +1,7 @@
 import request from 'supertest';
 import express from 'express';
 import * as dbHandler from './setup/dbHandler.js';
-import { createTestUser, createTestAdmin } from './setup/testHelpers.js';
+import { createTestUser, createTestAdmin, createTestSalesperson } from './setup/testHelpers.js';
 import branchRoutes from '../src/routes/branchRoutes.js';
 import Branch from '../src/models/Branch.js';
 import User from '../src/models/User.js';
@@ -455,6 +455,42 @@ describe('Branch API - Branch Statistics', () => {
 
       const staffCount = await User.countDocuments({ branch: branch._id });
       expect(staffCount).toBe(0);
+    });
+  });
+
+  describe('GET /api/branches/:id/stats access control', () => {
+    it('allows a salesperson to read the stats of their own branch', async () => {
+      const branch = await createTestBranch();
+      const { token } = await createTestSalesperson(branch._id);
+
+      const res = await request(app)
+        .get(`/api/branches/${branch._id}/stats`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+    });
+
+    it('denies a salesperson the stats of a different branch', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'OWN-1' });
+      const other = await createTestBranch({ name: 'Other', code: 'OTH-1' });
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get(`/api/branches/${other._id}/stats`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('allows an admin the stats of any branch', async () => {
+      const branch = await createTestBranch();
+      const { token } = await createTestAdmin();
+
+      const res = await request(app)
+        .get(`/api/branches/${branch._id}/stats`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
     });
   });
 });
