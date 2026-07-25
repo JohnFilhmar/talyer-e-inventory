@@ -28,12 +28,6 @@ const registerValidation = [
   body('password')
     .notEmpty().withMessage('Password is required')
     .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('role')
-    .optional()
-    .isIn(['admin', 'salesperson', 'mechanic', 'customer']).withMessage('Invalid role'),
-  body('branch')
-    .optional()
-    .isMongoId().withMessage('Invalid branch ID'),
   validate
 ];
 

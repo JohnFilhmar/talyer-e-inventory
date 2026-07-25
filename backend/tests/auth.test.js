@@ -1,9 +1,26 @@
 import request from 'supertest';
 import express from 'express';
+import mongoose from 'mongoose';
 import * as dbHandler from './setup/dbHandler.js';
 import { createTestUser, createTestAdmin } from './setup/testHelpers.js';
 import authRoutes from '../src/routes/authRoutes.js';
 import User from '../src/models/User.js';
+
+/**
+ * Create a user of any role directly through the model.
+ * The public /register endpoint only creates customers, so tests that need a
+ * privileged account must not go through HTTP.
+ */
+const createUserDirect = async (overrides = {}) => {
+  return User.create({
+    name: 'Test User',
+    email: 'test@example.com',
+    password: 'password123',
+    role: 'admin',
+    isActive: true,
+    ...overrides,
+  });
+};
 
 // Create Express app for testing
 const app = express();
@@ -42,7 +59,6 @@ describe('Auth API - Registration', () => {
           name: 'John Doe',
           email: 'john@example.com',
           password: 'password123',
-          role: 'admin', // Use admin to avoid branch requirement in tests
         });
 
       expect(res.statusCode).toBe(201);
@@ -52,26 +68,25 @@ describe('Auth API - Registration', () => {
       expect(res.body.data.user).toHaveProperty('_id');
       expect(res.body.data.user).toHaveProperty('name', 'John Doe');
       expect(res.body.data.user).toHaveProperty('email', 'john@example.com');
-      expect(res.body.data.user).toHaveProperty('role', 'admin');
+      expect(res.body.data.user).toHaveProperty('role', 'customer');
       expect(res.body.data).toHaveProperty('accessToken');
       // refreshToken is now in httpOnly cookie, not in response body
       expect(res.headers['set-cookie']).toBeDefined();
       expect(res.body.meta).toHaveProperty('timestamp');
     });
 
-    it('should register an admin user without branch requirement', async () => {
+    it('should register successfully without a branch requirement', async () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send({
-          name: 'Admin User',
-          email: 'admin@example.com',
+          name: 'Regular User',
+          email: 'regular@example.com',
           password: 'password123',
-          role: 'admin',
         });
 
       expect(res.statusCode).toBe(201);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.user.role).toBe('admin');
+      expect(res.body.data.user.role).toBe('customer');
     });
 
     it('should fail with invalid name (too short)', async () => {
@@ -150,28 +165,6 @@ describe('Auth API - Registration', () => {
       expect(res.body.message).toBe('Validation failed');
     });
 
-    it('should fail with invalid role', async () => {
-      const res = await request(app)
-        .post('/api/auth/register')
-        .send({
-          name: 'Test User',
-          email: 'test@example.com',
-          password: 'password123',
-          role: 'invalid_role',
-        });
-
-      expect(res.statusCode).toBe(400);
-      expect(res.body.success).toBe(false);
-      expect(res.body.errors).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            field: 'role',
-            message: 'Invalid role',
-          }),
-        ])
-      );
-    });
-
     it('should fail when email already exists', async () => {
       // Create a user first
       await createTestUser({
@@ -191,20 +184,42 @@ describe('Auth API - Registration', () => {
       expect(res.body.success).toBe(false);
       expect(res.body.message).toBe('User already exists');
     });
+  });
 
-    it('should accept admin role without branch requirement', async () => {
+  describe('POST /api/auth/register privilege escalation', () => {
+    it('ignores an attacker-supplied admin role and creates a customer', async () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send({
-          name: 'Admin Test User',
-          email: 'admintest@example.com',
+          name: 'Mallory',
+          email: 'mallory@example.com',
           password: 'password123',
           role: 'admin',
         });
 
-      expect(res.statusCode).toBe(201);
-      expect(res.body.success).toBe(true);
-      expect(res.body.data.user.role).toBe('admin');
+      expect(res.status).toBe(201);
+      expect(res.body.data.user.role).toBe('customer');
+
+      const stored = await User.findOne({ email: 'mallory@example.com' });
+      expect(stored.role).toBe('customer');
+    });
+
+    it('ignores an attacker-supplied branch assignment', async () => {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          name: 'Mallory Two',
+          email: 'mallory2@example.com',
+          password: 'password123',
+          role: 'salesperson',
+          branch: new mongoose.Types.ObjectId().toString(),
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.user.role).toBe('customer');
+
+      const stored = await User.findOne({ email: 'mallory2@example.com' });
+      expect(stored.branch).toBeUndefined();
     });
   });
 });
@@ -337,16 +352,12 @@ describe('Auth API - Get Current User', () => {
   describe('GET /api/auth/me', () => {
     it('should return current user with valid token', async () => {
       // Register and get token
-      const registerRes = await request(app)
-        .post('/api/auth/register')
-        .send({
-          name: 'Test User',
-          email: 'test@example.com',
-          password: 'password123',
-          role: 'admin',
-        });
+      await createUserDirect({ name: 'Test User', email: 'test@example.com', password: 'password123' });
+      const loginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'test@example.com', password: 'password123' });
 
-      const token = registerRes.body.data.accessToken;
+      const token = loginRes.body.data.accessToken;
 
       const res = await request(app)
         .get('/api/auth/me')
@@ -389,18 +400,14 @@ describe('Auth API - Get Current User', () => {
 describe('Auth API - Refresh Token', () => {
   describe('POST /api/auth/refresh-token', () => {
     it('should refresh token with valid refresh token', async () => {
-      // Register and get refresh token from cookie
-      const registerRes = await request(app)
-        .post('/api/auth/register')
-        .send({
-          name: 'Test User',
-          email: 'test@example.com',
-          password: 'password123',
-          role: 'admin',
-        });
+      // Create user directly and log in to get refresh token from cookie
+      await createUserDirect({ name: 'Test User', email: 'test@example.com', password: 'password123' });
+      const loginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'test@example.com', password: 'password123' });
 
       // Extract refresh token from set-cookie header
-      const cookies = registerRes.headers['set-cookie'];
+      const cookies = loginRes.headers['set-cookie'];
       const refreshTokenCookie = cookies?.find(c => c.startsWith('refreshToken='));
       const refreshToken = refreshTokenCookie?.split(';')[0].split('=')[1];
 
@@ -435,18 +442,14 @@ describe('Auth API - Refresh Token', () => {
     });
 
     it('should fail with refresh token from different user', async () => {
-      // Create first user and get token from cookie
-      const user1Res = await request(app)
-        .post('/api/auth/register')
-        .send({
-          name: 'User 1',
-          email: 'user1@example.com',
-          password: 'password123',
-          role: 'admin',
-        });
+      // Create first user directly and log in to get token from cookie
+      await createUserDirect({ name: 'User 1', email: 'user1@example.com', password: 'password123' });
+      const user1LoginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'user1@example.com', password: 'password123' });
 
       // Extract refresh token from cookie
-      const cookies = user1Res.headers['set-cookie'];
+      const cookies = user1LoginRes.headers['set-cookie'];
       const refreshTokenCookie = cookies?.find(c => c.startsWith('refreshToken='));
       const user1RefreshToken = refreshTokenCookie?.split(';')[0].split('=')[1];
 
@@ -470,19 +473,15 @@ describe('Auth API - Refresh Token', () => {
 describe('Auth API - Logout', () => {
   describe('POST /api/auth/logout', () => {
     it('should logout successfully with valid token', async () => {
-      // Register and get token
-      const registerRes = await request(app)
-        .post('/api/auth/register')
-        .send({
-          name: 'Test User',
-          email: 'test@example.com',
-          password: 'password123',
-          role: 'admin',
-        });
+      // Create user directly and log in to get token
+      await createUserDirect({ name: 'Test User', email: 'test@example.com', password: 'password123' });
+      const loginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'test@example.com', password: 'password123' });
 
-      const token = registerRes.body.data.accessToken;
+      const token = loginRes.body.data.accessToken;
       // Extract refresh token from cookie
-      const cookies = registerRes.headers['set-cookie'];
+      const cookies = loginRes.headers['set-cookie'];
       const refreshTokenCookie = cookies?.find(c => c.startsWith('refreshToken='));
       const refreshToken = refreshTokenCookie?.split(';')[0].split('=')[1];
 
@@ -742,7 +741,6 @@ describe('Auth API - Response Format Consistency', () => {
         name: 'Test User',
         email: 'test@example.com',
         password: 'password123',
-        role: 'admin',
       });
 
     expect(registerRes.body).toHaveProperty('success', true);

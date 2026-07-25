@@ -2,6 +2,7 @@ import User from '../models/User.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { generateToken, generateRefreshToken } from '../utils/jwt.js';
 import ApiResponse from '../utils/apiResponse.js';
+import { USER_ROLES } from '../config/constants.js';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
@@ -36,7 +37,7 @@ const clearRefreshTokenCookie = (res) => {
 // @route   POST /api/auth/register
 // @access  Public
 const register = asyncHandler(async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password } = req.body;
 
   // Validation
   if (!name || !email || !password) {
@@ -50,12 +51,13 @@ const register = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 400, 'User already exists');
   }
 
-  // Create user
+  // Public registration always creates a customer. Privileged accounts are
+  // created through the admin-only POST /api/users route.
   const user = await User.create({
     name,
     email,
     password,
-    role: role || 'customer',
+    role: USER_ROLES.CUSTOMER,
   });
 
   if (user) {
