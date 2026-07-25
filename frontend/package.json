@@ -13,7 +13,7 @@
     "@tanstack/react-query": "^5.90.20",
     "axios": "^1.13.4",
     "lucide-react": "^0.563.0",
-    "next": "16.1.2",
+    "next": "16.2.11",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.71.1",
@@ -27,8 +27,13 @@
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.1.2",
+    "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "postcss": "^8.5.23",
+    "sharp": "^0.35.3",
+    "minimatch": "^10.2.5"
   }
 }
