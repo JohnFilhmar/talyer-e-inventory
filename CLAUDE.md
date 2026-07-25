@@ -23,7 +23,7 @@ Two independent npm packages, no workspace root. Every command must be run from 
 npm run dev                       # nodemon on src/server.js, port 5000
 npm start                         # node src/server.js
 npm test                          # jest --runInBand (NODE_ENV=test) — currently red, see Testing
-npm test -- --testPathIgnorePatterns "tests/user.test.js"   # the green subset: 10 suites, 330 tests
+npm test -- --testPathIgnorePatterns "tests/user.test.js"   # the green subset: 11 suites, 334 tests
 npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
@@ -105,11 +105,15 @@ same file already use.
 'cross-origin' } })` globally — the relaxed CORP is required so the frontend, on a different
 origin, can still load product images from `/uploads`.
 
-`authLimiter` (10 requests/15 min, mounted on `/api/auth`) and `apiLimiter` (300 requests/15
-min, mounted on every other router) live in
-[middleware/rateLimit.js](backend/src/middleware/rateLimit.js). Both `skip` whenever
-`NODE_ENV === 'test'`, so the Jest suites never see rate limiting. Both key clients by `req.ip`,
-which is why `TRUST_PROXY` (see Environment) matters behind any reverse proxy.
+`authLimiter` (10 requests/15 min) and `apiLimiter` (300 requests/15 min) live in
+[middleware/rateLimit.js](backend/src/middleware/rateLimit.js). `apiLimiter` is mounted on every
+router including `/api/auth`; `authLimiter` is applied per-route in
+[authRoutes.js](backend/src/routes/authRoutes.js) to the five credential endpoints only —
+`/register`, `/register-customer`, `/login`, `/forgot-password`, `/reset-password`. Do not move it
+back onto the whole router: `/me` and `/refresh-token` are called on every protected page mount
+and on every token expiry, so a strict limiter there locks out a whole office sharing one IP.
+Both `skip` whenever `NODE_ENV === 'test'`, so the Jest suites never see rate limiting. Both key
+clients by `req.ip`, which is why `TRUST_PROXY` (see Environment) matters behind any reverse proxy.
 
 [middleware/errorHandler.js](backend/src/middleware/errorHandler.js) collapses every 5xx message
 to `'Server Error'` when `NODE_ENV === 'production'` — internal failures can otherwise leak
