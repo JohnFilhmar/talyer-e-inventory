@@ -12,6 +12,7 @@ import {
 } from '../controllers/authController.js';
 import { protect } from '../middleware/auth.js';
 import validate from '../middleware/validate.js';
+import { authLimiter } from '../middleware/rateLimit.js';
 
 const router = express.Router();
 
@@ -86,12 +87,17 @@ const resetPasswordValidation = [
 ];
 
 // Public routes
-router.post('/register', registerValidation, register);
-router.post('/register-customer', customerRegisterValidation, registerCustomer);
-router.post('/login', loginValidation, login);
+// authLimiter (10 req/15 min) guards only the credential-and-token-issuing
+// endpoints below. /refresh-token, /logout, and /me are deliberately left to
+// the router-level apiLimiter (300 req/15 min) — they are called
+// automatically by the SPA on every protected-page mount / 401, so a strict
+// limiter there locks out normal users, not attackers.
+router.post('/register', authLimiter, registerValidation, register);
+router.post('/register-customer', authLimiter, customerRegisterValidation, registerCustomer);
+router.post('/login', authLimiter, loginValidation, login);
 router.post('/refresh-token', refreshTokenValidation, refreshToken);
-router.post('/forgot-password', forgotPasswordValidation, forgotPassword);
-router.post('/reset-password', resetPasswordValidation, resetPassword);
+router.post('/forgot-password', authLimiter, forgotPasswordValidation, forgotPassword);
+router.post('/reset-password', authLimiter, resetPasswordValidation, resetPassword);
 
 // Protected routes
 router.post('/logout', protect, logout);

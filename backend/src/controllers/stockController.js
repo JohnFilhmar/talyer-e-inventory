@@ -158,6 +158,16 @@ export const getProductStock = asyncHandler(async (req, res) => {
     .populate('branch', 'name code address')
     .sort({ 'branch.name': 1 });
 
+  // Admins see every branch. Everyone else (salespersons, per the route's
+  // authorize() gate) is clamped to their own branch, same as getAllStock and
+  // getLowStock — otherwise a salesperson at branch A could read branch B's
+  // costPrice/sellingPrice and derive its margin. The aggregates below are
+  // recomputed from this filtered set so they cannot be diffed against a
+  // second call to infer the hidden branches' numbers.
+  const visibleRecords = req.user.role === USER_ROLES.ADMIN
+    ? stockRecords
+    : stockRecords.filter(stock => canAccessBranch(req.user, stock.branch?._id));
+
   const summary = {
     product: {
       _id: product._id,
@@ -165,10 +175,10 @@ export const getProductStock = asyncHandler(async (req, res) => {
       name: product.name,
       brand: product.brand
     },
-    totalQuantity: stockRecords.reduce((sum, stock) => sum + stock.quantity, 0),
-    totalReserved: stockRecords.reduce((sum, stock) => sum + stock.reservedQuantity, 0),
-    totalAvailable: stockRecords.reduce((sum, stock) => sum + stock.availableQuantity, 0),
-    branches: stockRecords.map(stock => ({
+    totalQuantity: visibleRecords.reduce((sum, stock) => sum + stock.quantity, 0),
+    totalReserved: visibleRecords.reduce((sum, stock) => sum + stock.reservedQuantity, 0),
+    totalAvailable: visibleRecords.reduce((sum, stock) => sum + stock.availableQuantity, 0),
+    branches: visibleRecords.map(stock => ({
       branch: stock.branch,
       quantity: stock.quantity,
       reservedQuantity: stock.reservedQuantity,

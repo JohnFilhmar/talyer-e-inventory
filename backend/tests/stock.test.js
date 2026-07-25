@@ -966,6 +966,57 @@ describe('Stock API Tests', () => {
 
       expect(res.status).toBe(403);
     });
+
+    it('clamps a salesperson to their own branch on GET /api/stock/product/:productId', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'SC-OWN5' });
+      const other = await createTestBranch({ name: 'Other', code: 'SC-OTH5' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      await Stock.create({
+        product: product._id, branch: own._id,
+        quantity: 10, reservedQuantity: 2, costPrice: 100, sellingPrice: 150
+      });
+      await Stock.create({
+        product: product._id, branch: other._id,
+        quantity: 40, reservedQuantity: 5, costPrice: 300, sellingPrice: 500
+      });
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get(`/api/stock/product/${product._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      // Only the caller's own branch is visible - branch B's cost/selling
+      // price and quantity (and therefore its margin) must not leak.
+      expect(res.body.data.branches).toHaveLength(1);
+      expect(res.body.data.branches[0].branch._id).toBe(own._id.toString());
+      expect(res.body.data.branches[0].costPrice).toBe(100);
+      expect(res.body.data.branches[0].sellingPrice).toBe(150);
+
+      // Totals must be recomputed from the filtered set, not the full one,
+      // so they can't be diffed against a second call to infer branch B.
+      expect(res.body.data.totalQuantity).toBe(10);
+      expect(res.body.data.totalReserved).toBe(2);
+      expect(res.body.data.totalAvailable).toBe(8);
+    });
+
+    it('still shows every branch to an admin on GET /api/stock/product/:productId', async () => {
+      const branchA2 = await createTestBranch({ name: 'AdminView A', code: 'SC-ADM-A' });
+      const branchB2 = await createTestBranch({ name: 'AdminView B', code: 'SC-ADM-B' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      await Stock.create({ product: product._id, branch: branchA2._id, quantity: 10, costPrice: 100, sellingPrice: 150 });
+      await Stock.create({ product: product._id, branch: branchB2._id, quantity: 40, costPrice: 300, sellingPrice: 500 });
+
+      const res = await request(app)
+        .get(`/api/stock/product/${product._id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.branches).toHaveLength(2);
+      expect(res.body.data.totalQuantity).toBe(50);
+    });
   });
 
   describe('numeric coercion', () => {

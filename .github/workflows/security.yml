@@ -71,23 +71,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: backend
-            context: ./backend
-          - name: frontend
-            context: ./frontend
+        package: [backend, frontend]
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build ${{ matrix.name }} image
+      - name: Build ${{ matrix.package }} image
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
+          context: ./${{ matrix.package }}
           push: false
           load: true
-          tags: talyer-${{ matrix.name }}:scan
+          tags: talyer-${{ matrix.package }}:scan
           build-args: |
             NEXT_PUBLIC_API_URL=http://localhost:5000/api
           cache-from: type=gha
@@ -96,14 +92,14 @@ jobs:
       - name: Trivy scan
         uses: aquasecurity/trivy-action@v0.28.0
         with:
-          image-ref: talyer-${{ matrix.name }}:scan
+          image-ref: talyer-${{ matrix.package }}:scan
           format: sarif
-          output: trivy-${{ matrix.name }}.sarif
+          output: trivy-${{ matrix.package }}.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
 
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: trivy-${{ matrix.name }}.sarif
-          category: trivy-${{ matrix.name }}
+          sarif_file: trivy-${{ matrix.package }}.sarif
+          category: trivy-${{ matrix.package }}

@@ -27,7 +27,7 @@ npm test -- --testPathIgnorePatterns "tests/user.test.js"   # the green subset: 
 npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
-node src/utils/seedBranches.js    # seeds 3 Philippine branches into MONGODB_URI
+node src/utils/seedBranches.js    # DESTRUCTIVE: deletes ALL existing branches, then seeds 3 Philippine branches into MONGODB_URI
 
 # Frontend (cd frontend)
 npm run dev                       # next dev, port 3000
@@ -333,6 +333,12 @@ must be added there or cookie-based refresh breaks.
 Both `package.json` files carry npm `overrides` (`backend/package.json`: `test-exclude`,
 `glob`→`minimatch`; `frontend/package.json`: `postcss`, `sharp`, `minimatch`) to force patched
 transitive versions — don't strip those without re-running `npm audit` first.
+
+`image-scan` is reporting-only: its Trivy step has no `exit-code`, so it uploads CRITICAL/HIGH
+findings to GitHub code scanning (SARIF) but never fails the job regardless of what it finds.
+That's deliberate — base-image CVEs are frequently unfixable upstream, and failing the build on
+them would block every merge. The checks that actually fail on a real problem are `backend-test`,
+`frontend-build`, `docker-build`, `dependency-audit`, and `secret-scan`.
 
 These checks are only advisory until branch protection requires them. Enable it once with:
 

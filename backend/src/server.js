@@ -6,7 +6,7 @@ import path from 'path';
 import connectDB from './config/database.js';
 import { connectRedis } from './config/redis.js';
 import errorHandler from './middleware/errorHandler.js';
-import { authLimiter, apiLimiter } from './middleware/rateLimit.js';
+import { apiLimiter } from './middleware/rateLimit.js';
 import { CORS } from './config/constants.js';
 import { resolveTrustProxy } from './utils/trustProxy.js';
 
@@ -90,7 +90,7 @@ import salesRoutes from './routes/salesRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
 
 // Mount routes
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', apiLimiter, authRoutes);
 app.use('/api/users', apiLimiter, userRoutes);
 app.use('/api/branches', apiLimiter, branchRoutes);
 app.use('/api/categories', apiLimiter, categoryRoutes);
