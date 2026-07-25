@@ -1,18 +1,32 @@
 import 'dotenv/config';
 import express from 'express';
+import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import connectDB from './config/database.js';
 import { connectRedis } from './config/redis.js';
 import errorHandler from './middleware/errorHandler.js';
+import { apiLimiter } from './middleware/rateLimit.js';
 import { CORS } from './config/constants.js';
+import { resolveTrustProxy } from './utils/trustProxy.js';
 
 // Initialize express app
 const app = express();
 
+// express-rate-limit keys clients by req.ip. Behind a reverse proxy that is the
+// proxy's address unless Express is told how many hops to trust, which would
+// collapse every client into one rate-limit bucket. Left at 0, X-Forwarded-For
+// is ignored — correct when this app is exposed directly, and it stops a client
+// from spoofing the header to get a fresh bucket.
+app.set('trust proxy', resolveTrustProxy(process.env.TRUST_PROXY));
+
+// Security headers. crossOriginResourcePolicy is relaxed so the frontend on a
+// different origin can still load images served from /uploads.
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+
 // Body parser middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Cookie parser middleware (for httpOnly refresh token)
 app.use(cookieParser());
@@ -76,15 +90,15 @@ import salesRoutes from './routes/salesRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
 
 // Mount routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/branches', branchRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/stock', stockRoutes);
-app.use('/api/suppliers', supplierRoutes);
-app.use('/api/sales', salesRoutes);
-app.use('/api/services', serviceRoutes);
+app.use('/api/auth', apiLimiter, authRoutes);
+app.use('/api/users', apiLimiter, userRoutes);
+app.use('/api/branches', apiLimiter, branchRoutes);
+app.use('/api/categories', apiLimiter, categoryRoutes);
+app.use('/api/products', apiLimiter, productRoutes);
+app.use('/api/stock', apiLimiter, stockRoutes);
+app.use('/api/suppliers', apiLimiter, supplierRoutes);
+app.use('/api/sales', apiLimiter, salesRoutes);
+app.use('/api/services', apiLimiter, serviceRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

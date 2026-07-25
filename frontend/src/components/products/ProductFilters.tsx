@@ -51,8 +51,20 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
   
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Sync local filters when external filters change (e.g., reset)
-  useEffect(() => {
+  // Sync local filters when external filters change (e.g., reset).
+  // This is deliberate prop-to-state derivation, done during render rather
+  // than in a useEffect: adjusting state in response to a prop change inside
+  // an effect causes an extra render pass (React first renders with stale
+  // local state, then re-renders after the effect fires). Doing it during
+  // render instead — guarded by a reference comparison against the previous
+  // `filters` value — lets React apply the state update before painting,
+  // avoiding that extra render. See https://react.dev/learn/you-might-not-need-an-effect
+  // ("Adjusting some state when a prop changes"). The `prevFilters !== filters`
+  // check mirrors the effect's old `[filters]` dependency: it only re-syncs
+  // when the prop is a new reference, not on every render.
+  const [prevFilters, setPrevFilters] = useState(filters);
+  if (filters !== prevFilters) {
+    setPrevFilters(filters);
     setLocalFilters({
       search: filters.search ?? '',
       category: filters.category ?? '',
@@ -63,7 +75,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
       sortBy: filters.sortBy ?? 'createdAt',
       sortOrder: filters.sortOrder ?? 'desc',
     });
-  }, [filters]);
+  }
 
   // Apply filters to parent (called after debounce)
   const applyFilters = useCallback((newLocalFilters: LocalFilters) => {

@@ -1,7 +1,7 @@
 import request from 'supertest';
 import express from 'express';
 import * as dbHandler from './setup/dbHandler.js';
-import { createTestUser, createTestAdmin, createTestMechanic } from './setup/testHelpers.js';
+import { createTestUser, createTestAdmin, createTestMechanic, createTestSalesperson } from './setup/testHelpers.js';
 import stockRoutes from '../src/routes/stockRoutes.js';
 import Stock from '../src/models/Stock.js';
 import StockTransfer from '../src/models/StockTransfer.js';
@@ -883,6 +883,179 @@ describe('Stock API Tests', () => {
       await stock.deductStock(20);
       expect(stock.quantity).toBe(80); // 100 - 20
       expect(stock.reservedQuantity).toBe(0); // 20 - 20
+    });
+  });
+
+  describe('stock branch scoping', () => {
+    it('restricts GET /api/stock to the salespersons own branch', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'SC-OWN' });
+      const other = await createTestBranch({ name: 'Other', code: 'SC-OTH' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      await Stock.create({ product: product._id, branch: own._id, quantity: 5, costPrice: 1, sellingPrice: 2 });
+      await Stock.create({ product: product._id, branch: other._id, quantity: 7, costPrice: 1, sellingPrice: 2 });
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get('/api/stock')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].branch._id.toString()).toBe(own._id.toString());
+    });
+
+    it('ignores a branch query that points at another branch', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'SC-OWN2' });
+      const other = await createTestBranch({ name: 'Other', code: 'SC-OTH2' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      await Stock.create({ product: product._id, branch: other._id, quantity: 7, costPrice: 1, sellingPrice: 2 });
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get(`/api/stock?branch=${other._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(0);
+    });
+
+    it('rejects a restock aimed at another branch', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'SC-OWN3' });
+      const other = await createTestBranch({ name: 'Other', code: 'SC-OTH3' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ product: product._id, branch: other._id, quantity: 5, costPrice: 10, sellingPrice: 20 });
+
+      expect(res.status).toBe(403);
+    });
+
+    it('rejects restock-by-id against another branch stock record', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'SC-OWN4' });
+      const other = await createTestBranch({ name: 'Other', code: 'SC-OTH4' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      const foreign = await Stock.create({ product: product._id, branch: other._id, quantity: 1, costPrice: 1, sellingPrice: 2 });
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .put(`/api/stock/${foreign._id}/restock`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ quantity: 9999 });
+
+      expect(res.status).toBe(403);
+
+      const reread = await Stock.findById(foreign._id);
+      expect(reread.quantity).toBe(1);
+    });
+
+    it('denies a customer access to per-branch cost prices', async () => {
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      const { token } = await createTestUser({ email: 'cust@example.com', role: 'customer' });
+
+      const res = await request(app)
+        .get(`/api/stock/product/${product._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('clamps a salesperson to their own branch on GET /api/stock/product/:productId', async () => {
+      const own = await createTestBranch({ name: 'Own', code: 'SC-OWN5' });
+      const other = await createTestBranch({ name: 'Other', code: 'SC-OTH5' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      await Stock.create({
+        product: product._id, branch: own._id,
+        quantity: 10, reservedQuantity: 2, costPrice: 100, sellingPrice: 150
+      });
+      await Stock.create({
+        product: product._id, branch: other._id,
+        quantity: 40, reservedQuantity: 5, costPrice: 300, sellingPrice: 500
+      });
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get(`/api/stock/product/${product._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      // Only the caller's own branch is visible - branch B's cost/selling
+      // price and quantity (and therefore its margin) must not leak.
+      expect(res.body.data.branches).toHaveLength(1);
+      expect(res.body.data.branches[0].branch._id).toBe(own._id.toString());
+      expect(res.body.data.branches[0].costPrice).toBe(100);
+      expect(res.body.data.branches[0].sellingPrice).toBe(150);
+
+      // Totals must be recomputed from the filtered set, not the full one,
+      // so they can't be diffed against a second call to infer branch B.
+      expect(res.body.data.totalQuantity).toBe(10);
+      expect(res.body.data.totalReserved).toBe(2);
+      expect(res.body.data.totalAvailable).toBe(8);
+    });
+
+    it('still shows every branch to an admin on GET /api/stock/product/:productId', async () => {
+      const branchA2 = await createTestBranch({ name: 'AdminView A', code: 'SC-ADM-A' });
+      const branchB2 = await createTestBranch({ name: 'AdminView B', code: 'SC-ADM-B' });
+      const category = await createTestCategory({ name: 'Scope Category', code: 'SC-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      await Stock.create({ product: product._id, branch: branchA2._id, quantity: 10, costPrice: 100, sellingPrice: 150 });
+      await Stock.create({ product: product._id, branch: branchB2._id, quantity: 40, costPrice: 300, sellingPrice: 500 });
+
+      const res = await request(app)
+        .get(`/api/stock/product/${product._id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.branches).toHaveLength(2);
+      expect(res.body.data.totalQuantity).toBe(50);
+    });
+  });
+
+  describe('numeric coercion', () => {
+    it('treats a string quantity as a number on restock', async () => {
+      const branch = await createTestBranch({ name: 'Coerce', code: 'CO-1' });
+      const category = await createTestCategory({ name: 'Coerce Category', code: 'CO-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      const stock = await Stock.create({
+        product: product._id, branch: branch._id, quantity: 100, costPrice: 1, sellingPrice: 2,
+      });
+
+      const res = await request(app)
+        .put(`/api/stock/${stock._id}/restock`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ quantity: '5' });
+
+      expect(res.status).toBe(200);
+
+      const reread = await Stock.findById(stock._id);
+      expect(reread.quantity).toBe(105);
+    });
+
+    it('rejects a non-numeric quantity with 400 instead of coercing to NaN', async () => {
+      const branch = await createTestBranch({ name: 'CoerceBad', code: 'CO-2' });
+      const category = await createTestCategory({ name: 'Coerce Bad Category', code: 'CO-BAD-CAT' });
+      const product = await createTestProduct({ category: category._id });
+      const stock = await Stock.create({
+        product: product._id, branch: branch._id, quantity: 100, costPrice: 1, sellingPrice: 2,
+      });
+
+      const res = await request(app)
+        .put(`/api/stock/${stock._id}/restock`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ quantity: 'abc' });
+
+      expect(res.status).toBe(400);
+
+      const reread = await Stock.findById(stock._id);
+      expect(reread.quantity).toBe(100);
     });
   });
 });

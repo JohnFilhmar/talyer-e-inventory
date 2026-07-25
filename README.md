@@ -360,6 +360,33 @@ npm install
 # Create .env.local file
 ```
 
+### Run with Docker
+
+Skip the manual Node/MongoDB/Redis setup above and run the full stack in containers instead:
+
+```bash
+git clone <repository-url>
+cd talyer-e-inventory
+cp .env.example .env                # then fill in JWT_SECRET and JWT_REFRESH_SECRET
+docker compose up --build
+```
+
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:5000`
+- `docker compose down -v` stops the stack and removes the Mongo/Redis/uploads volumes.
+
+`.env.example` lives at the repo root and is read automatically by `docker compose` — it is a
+separate file from the `backend/.env` used for local, non-Docker development. See
+[CLAUDE.md](CLAUDE.md#environment) for what each variable does.
+
+> **Known limitation:** product images do not render in the compose stack. Image URLs are absolute
+> and built from `BACKEND_URL`, so they point at `http://localhost:5000` — which inside the
+> frontend container means the frontend itself, and which Next 16's image optimizer blocks anyway
+> because `images.dangerouslyAllowLocalIP` defaults to `false`. `/_next/image` returns `400`;
+> everything else in the stack works. Put both services behind a reverse proxy and set
+> `BACKEND_URL` to that hostname, or set `images.unoptimized: true` to bypass the optimizer.
+> Details in [CLAUDE.md](CLAUDE.md).
+
 ### Environment Configuration
 
 #### Backend `.env`
@@ -378,27 +405,31 @@ JWT_EXPIRE=7d
 JWT_REFRESH_SECRET=your-super-secret-refresh-key-change-this-in-production
 JWT_REFRESH_EXPIRE=30d
 
-# Cookie Configuration (for refresh token)
-COOKIE_SECURE=false  # Set to true in production
-COOKIE_DOMAIN=localhost  # Set to your domain in production
-
-# Redis Configuration (optional)
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=
-
 # Frontend URL (for CORS)
 CLIENT_URL=http://localhost:3000
 
-# Password Reset Token Expiry (in minutes)
-RESET_PASSWORD_EXPIRE=10
+# Reverse-proxy hop count for req.ip / X-Forwarded-For (used by the rate limiters).
+# 0 = trust nothing, correct when the app is exposed directly. Raise to the real
+# hop count when deployed behind a reverse proxy or load balancer, or rate
+# limiting collapses every client into a single shared bucket.
+TRUST_PROXY=0
 ```
+
+> `COOKIE_SECURE`, `COOKIE_DOMAIN`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, and
+> `RESET_PASSWORD_EXPIRE` are not listed above because no code reads them — see
+> [CLAUDE.md](CLAUDE.md#environment) for the verified list of variables the backend actually
+> uses and the actual (hardcoded) source of cookie security and reset-token expiry.
 
 #### Frontend `.env.local`
 
 ```env
-# API Configuration
-NEXT_PUBLIC_API_URL=http://localhost:5000
+# API Configuration — the backend mounts every route under /api, so the prefix
+# must be included here or every request 404s.
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+
+# Origin serving /uploads product images (usually the same host as the API,
+# without the /api suffix). Required for next/image to load remote images.
+NEXT_PUBLIC_IMAGE_HOST=http://localhost:5000
 ```
 
 ### Running the Application
@@ -998,9 +1029,9 @@ redis-server --port 6379
 
 **Token refresh not working:**
 ```
-# Check cookie settings in backend .env
-# COOKIE_SECURE should be false in development
-# COOKIE_DOMAIN should match your domain
+# The refresh cookie's secure/sameSite flags are derived from NODE_ENV in
+# authController.js, not from a dedicated env var — confirm NODE_ENV in backend .env
+# Confirm CORS_ALLOWED_ORIGINS (or CLIENT_URL) includes the frontend's exact origin
 ```
 
 **Tests failing:**

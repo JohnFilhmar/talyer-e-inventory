@@ -6,7 +6,7 @@ import User from '../models/User.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
-import { PAGINATION } from '../config/constants.js';
+import { PAGINATION, USER_ROLES } from '../config/constants.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
 
 /**
@@ -629,12 +629,18 @@ export const getServiceInvoice = asyncHandler(async (req, res) => {
   }
 
   // Check access
-  if (req.user.role === 'mechanic' && order.assignedTo?._id.toString() !== req.user._id.toString()) {
+  if (
+    req.user.role === USER_ROLES.MECHANIC &&
+    order.assignedTo?._id.toString() !== req.user._id.toString()
+  ) {
     return ApiResponse.error(res, 403, 'Access denied to this service order');
   }
-  
-  if (req.user.role !== 'admin' && order.branch.toString() !== req.user.branch.toString()) {
-    return ApiResponse.error(res, 403, 'Access denied to this branch');
+
+  if (req.user.role !== USER_ROLES.ADMIN) {
+    const orderBranchId = order.branch?._id ? order.branch._id.toString() : order.branch?.toString();
+    if (!req.user.branch || orderBranchId !== req.user.branch.toString()) {
+      return ApiResponse.error(res, 403, 'Access denied to this branch');
+    }
   }
 
   const invoice = {
