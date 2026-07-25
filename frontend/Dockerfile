@@ -29,7 +29,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN apk add --no-cache tini
 
-COPY --from=builder /app/public ./public
+COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 

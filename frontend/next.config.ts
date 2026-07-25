@@ -16,13 +16,19 @@ const remotePatterns: NonNullable<NonNullable<NextConfig['images']>['remotePatte
 ];
 
 if (imageHost) {
-  const parsed = new URL(imageHost);
-  remotePatterns.push({
-    protocol: parsed.protocol.replace(':', '') as 'http' | 'https',
-    hostname: parsed.hostname,
-    ...(parsed.port ? { port: parsed.port } : {}),
-    pathname: '/uploads/**',
-  });
+  try {
+    const parsed = new URL(imageHost);
+    remotePatterns.push({
+      protocol: parsed.protocol.replace(':', '') as 'http' | 'https',
+      hostname: parsed.hostname,
+      ...(parsed.port ? { port: parsed.port } : {}),
+      pathname: '/uploads/**',
+    });
+  } catch {
+    console.warn(
+      `NEXT_PUBLIC_IMAGE_HOST is set to an invalid URL (${imageHost}); ignoring it and falling back to the built-in local/backend image patterns.`
+    );
+  }
 }
 
 const nextConfig: NextConfig = {
