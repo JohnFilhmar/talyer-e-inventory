@@ -22,8 +22,7 @@ Two independent npm packages, no workspace root. Every command must be run from 
 # Backend (cd backend)
 npm run dev                       # nodemon on src/server.js, port 5000
 npm start                         # node src/server.js
-npm test                          # jest --runInBand (NODE_ENV=test) — currently red, see Testing
-npm test -- --testPathIgnorePatterns "tests/user.test.js"   # the green subset: 11 suites, 334 tests
+npm test                          # jest --runInBand (NODE_ENV=test) — green: 12 suites, 391 tests
 npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
@@ -261,24 +260,18 @@ app.use(express.json());
 app.use('/api/stock', stockRoutes);
 ```
 
-**`npm test` is currently red, and the cause is one suite.**
-[tests/user.test.js](backend/tests/user.test.js) is the lone file that ignores this pattern: it
-imports `../src/server.js`, and never touches `dbHandler`. Importing the server executes
-`startServer()`, which calls `connectDB()` against the real `MONGODB_URI`. With no local mongod
-running, `connectDB` reaches `process.exit(1)`, every `beforeAll` in the suite then times out at
-10 s, and the run aborts before the remaining suites report anything.
-
-Everything else is green — verified 10 suites / 330 tests passing:
+`npm test` is green — verified 12 suites / 391 tests passing:
 
 ```bash
-npm test -- --testPathIgnorePatterns "tests/user.test.js"
+npm test
 ```
 
-Fixing `user.test.js` means porting it to the mount-the-router + `dbHandler` pattern above; until
-then, use that ignore flag to get a meaningful signal, and don't read a red `npm test` as a
-regression in the code you just touched. CI runs this exact command — see the `backend-test` job
-in [ci.yml](.github/workflows/ci.yml) — so a plain `npm test` failing locally is not, by itself,
-a CI regression either.
+[tests/user.test.js](backend/tests/user.test.js) used to be the one file that broke this: it
+imported `../src/server.js`, which executes `startServer()` and calls `connectDB()` against the
+real `MONGODB_URI`, reaching `process.exit(1)` with no local mongod running. It has since been
+ported to the mount-the-router + `dbHandler` pattern above, minting tokens directly via
+`testHelpers` instead of logging in over HTTP, so it needs no carve-out and CI runs a plain
+`npm test` — see the `backend-test` job in [ci.yml](.github/workflows/ci.yml).
 
 `tests/setup/dbHandler.js` runs `mongodb-memory-server` (`connect` in `beforeAll`,
 `clearDatabase` in `afterEach`, `closeDatabase` in `afterAll`).
