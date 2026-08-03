@@ -866,6 +866,27 @@ describe('Service Order Management', () => {
 
       expect(res.status).toBe(404);
     });
+
+    it('should return 403, not 500, when a salesperson has no branch assigned', async () => {
+      const admin = await createTestAdmin();
+      const branch = await createTestBranch();
+      const mechanic = await createTestMechanic(branch._id);
+      const order = await createTestServiceOrder(branch, mechanic.user, admin.user);
+
+      const salesperson = await createTestSalesperson(branch._id);
+      // Simulate a persisted user whose branch assignment was later removed
+      // through an update path that bypasses schema validation (e.g. a raw
+      // $unset), which is how req.user.branch ends up undefined in practice.
+      await User.updateOne({ _id: salesperson.user._id }, { $unset: { branch: 1 } });
+
+      const res = await request(app)
+        .get(`/api/services/${order._id}`)
+        .set('Authorization', `Bearer ${salesperson.token}`);
+
+      expect(res.status).toBe(403);
+      expect(res.status).not.toBe(500);
+      expect(res.body.success).toBe(false);
+    });
   });
 
   describe('GET /api/services/:id/invoice - Get Invoice', () => {
