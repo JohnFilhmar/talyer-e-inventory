@@ -145,12 +145,28 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
-    // Connect to MongoDB
+    // Connect to MongoDB — required, so a failure here aborts startup.
     await connectDB();
-    
-    // Connect to Redis (optional)
-    await connectRedis();
-    
+
+    // Connect to Redis (optional). This is intentionally NOT awaited:
+    // node-redis's default retry/backoff behavior on an absent or
+    // unreachable Redis can take far longer than any reasonable startup
+    // window, and CacheUtil already treats a falsy client as "no cache" on
+    // every code path. Kicking this off in the background guarantees a
+    // slow or missing Redis can never delay app.listen().
+    connectRedis()
+      .then((client) => {
+        if (!client) {
+          console.log('Starting without Redis cache (cache disabled).');
+        }
+      })
+      .catch((error) => {
+        // connectRedis() already catches its own connection errors and
+        // resolves to null, so this only guards against a truly unexpected
+        // failure (e.g. a bug in connectRedis itself).
+        console.error('Unexpected error initializing Redis:', error);
+      });
+
     // Start server
     app.listen(PORT, () => {
       console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
