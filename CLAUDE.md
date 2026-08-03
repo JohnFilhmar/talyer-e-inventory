@@ -342,5 +342,31 @@ These checks are only advisory until branch protection requires them. Enable it 
     gh api -X PUT repos/:owner/:repo/branches/master/protection \
       --input .github/branch-protection.json
 
+## Dependabot
+
+[.github/dependabot.yml](.github/dependabot.yml) groups updates per ecosystem. Minor/patch and
+major are separate groups on purpose: the minor/patch PR is meant to be reviewed and merged
+quickly, while the major PR collects breaking changes that can wait. Docker `node` majors are
+ignored — Dependabot offers whatever tag is newest, including odd-numbered non-LTS releases, and
+both images are pinned to `node:22-alpine` deliberately.
+
+[.github/workflows/dependabot-auto-merge.yml](.github/workflows/dependabot-auto-merge.yml) squash-
+merges the non-breaking groups once CI has actually passed. Two design points that are easy to get
+wrong if you edit it:
+
+- It triggers on `workflow_run` after CI completes, **not** on the pull request. A workflow
+  triggered by the PR appears as a check on that PR, so waiting there for the PR's checks means
+  waiting for itself — a deadlock until the job times out.
+- It calls `gh pr merge --squash`, not `--auto`. `--auto` only defers a merge until *required*
+  status checks pass, and required checks exist only under branch protection. With none configured,
+  `--auto` merges immediately and the "wait for CI" intent silently disappears.
+
+Eligibility is matched on the group name embedded in Dependabot's branch
+(`dependabot/<ecosystem>/<dir>/<group>-<hash>`), allow-listing `backend-minor-patch`,
+`frontend-minor-patch`, `backend-docker`, `frontend-docker`, and `github-actions`. Everything else
+— both `*-major` groups and every ungrouped single-package update — is left for a human. A green
+CI run is not sufficient evidence for a major bump: the suite never connects to a real Redis or a
+real browser, so it passed cleanly while node-redis 6 went entirely unexercised.
+
 The check names in that file must match the workflow job names (including matrix suffixes)
 exactly, or the required check never reports and every PR blocks permanently.
