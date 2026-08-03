@@ -712,16 +712,33 @@ export const getStockTransfers = asyncHandler(async (req, res) => {
   const { branch, status, page = 1, limit = 20 } = req.query;
 
   const query = {};
-  
+  // A transfer has two sides, so any branch predicate (the requested
+  // ?branch= filter, or the non-admin's own-branch scope below) is an
+  // "either side" match, not a single-field match. Multiple predicates are
+  // combined with $and so they don't clobber each other.
+  const andClauses = [];
+
   if (branch) {
-    query.$or = [
-      { fromBranch: branch },
-      { toBranch: branch }
-    ];
+    andClauses.push({ $or: [{ fromBranch: branch }, { toBranch: branch }] });
   }
-  
+
   if (status) {
     query.status = status;
+  }
+
+  if (req.user.role !== USER_ROLES.ADMIN) {
+    if (!req.user.branch) {
+      return ApiResponse.error(res, 403, 'User not assigned to any branch');
+    }
+    andClauses.push({
+      $or: [{ fromBranch: req.user.branch }, { toBranch: req.user.branch }]
+    });
+  }
+
+  if (andClauses.length === 1) {
+    Object.assign(query, andClauses[0]);
+  } else if (andClauses.length > 1) {
+    query.$and = andClauses;
   }
 
   // Pagination
@@ -769,6 +786,21 @@ export const getStockTransfer = asyncHandler(async (req, res) => {
 
   if (!transfer) {
     return ApiResponse.error(res, 404, 'Stock transfer not found');
+  }
+
+  if (req.user.role !== USER_ROLES.ADMIN) {
+    // fromBranch/toBranch are populated documents here, not raw ObjectIds -
+    // same handling as getServiceInvoice in serviceController.js.
+    const fromBranchId = transfer.fromBranch?._id
+      ? transfer.fromBranch._id.toString()
+      : transfer.fromBranch?.toString();
+    const toBranchId = transfer.toBranch?._id
+      ? transfer.toBranch._id.toString()
+      : transfer.toBranch?.toString();
+
+    if (!canAccessBranch(req.user, fromBranchId) && !canAccessBranch(req.user, toBranchId)) {
+      return ApiResponse.error(res, 403, 'Access denied to this transfer');
+    }
   }
 
   return ApiResponse.success(
@@ -863,6 +895,10 @@ export const getMovementsByStock = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 404, 'Stock record not found');
   }
 
+  if (!canAccessBranch(req.user, stock.branch)) {
+    return ApiResponse.error(res, 403, 'Access denied to this branch');
+  }
+
   // Pagination
   const pageNum = parseInt(page);
   const limitNum = Math.min(parseInt(limit), PAGINATION.MAX_LIMIT);
@@ -910,8 +946,20 @@ export const getMovementsByProduct = asyncHandler(async (req, res) => {
   }
 
   const query = { product: productId };
-  if (branch) {
-    query.branch = branch;
+
+  // A product spans branches, so a non-admin is clamped to their own branch
+  // (the requested ?branch= filter is ignored for them, same as the
+  // silent-clamp pattern in getAllStock/getLowStock) rather than rejected
+  // outright. Admins keep the full cross-branch view.
+  if (req.user.role === USER_ROLES.ADMIN) {
+    if (branch) {
+      query.branch = branch;
+    }
+  } else {
+    if (!req.user.branch) {
+      return ApiResponse.error(res, 403, 'User not assigned to any branch');
+    }
+    query.branch = req.user.branch;
   }
 
   // Pagination

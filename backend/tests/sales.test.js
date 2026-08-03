@@ -1,7 +1,7 @@
 import request from 'supertest';
 import express from 'express';
 import * as dbHandler from './setup/dbHandler.js';
-import { createTestAdmin, createTestSalesperson, createTestMechanic } from './setup/testHelpers.js';
+import { createTestUser, createTestAdmin, createTestSalesperson, createTestMechanic } from './setup/testHelpers.js';
 import salesRoutes from '../src/routes/salesRoutes.js';
 import SalesOrder from '../src/models/SalesOrder.js';
 import Transaction from '../src/models/Transaction.js';
@@ -748,6 +748,49 @@ describe('Sales Order Management', () => {
       expect(res.body.success).toBe(false);
     });
 
+    it('should allow salesperson to view a sales order at their own branch', async () => {
+      const category = await createTestCategory();
+      const branch = await createTestBranch();
+      const salesperson = await createTestSalesperson(branch._id);
+
+      const admin = await createTestAdmin();
+      const product = await createTestProduct(category);
+      await createTestStock(product, branch);
+
+      const order = await createTestSalesOrder(branch, product, admin.user);
+
+      const res = await request(app)
+        .get(`/api/sales/${order._id}`)
+        .set('Authorization', `Bearer ${salesperson.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data._id).toBe(order._id.toString());
+    });
+
+    it('should return 403, not 500, for a customer with no branch assigned', async () => {
+      const category = await createTestCategory();
+      const branch = await createTestBranch();
+      const admin = await createTestAdmin();
+      const product = await createTestProduct(category);
+      await createTestStock(product, branch);
+
+      const order = await createTestSalesOrder(branch, product, admin.user);
+      const customer = await createTestUser({
+        name: 'Test Customer',
+        email: 'customer-no-branch@example.com',
+        role: 'customer'
+      });
+
+      const res = await request(app)
+        .get(`/api/sales/${order._id}`)
+        .set('Authorization', `Bearer ${customer.token}`);
+
+      expect(res.status).toBe(403);
+      expect(res.status).not.toBe(500);
+      expect(res.body.success).toBe(false);
+    });
+
     it('should return 404 for non-existent order', async () => {
       const admin = await createTestAdmin();
       const fakeId = '507f1f77bcf86cd799439011';
@@ -783,6 +826,29 @@ describe('Sales Order Management', () => {
       expect(res.body.data).toHaveProperty('total');
       expect(res.body.data.branch).toHaveProperty('address');
       expect(res.body.data.branch).toHaveProperty('contact');
+    });
+
+    it('should return 403, not 500, for a customer with no branch assigned', async () => {
+      const category = await createTestCategory();
+      const branch = await createTestBranch();
+      const admin = await createTestAdmin();
+      const product = await createTestProduct(category);
+      await createTestStock(product, branch);
+
+      const order = await createTestSalesOrder(branch, product, admin.user);
+      const customer = await createTestUser({
+        name: 'Test Customer',
+        email: 'customer-no-branch-invoice@example.com',
+        role: 'customer'
+      });
+
+      const res = await request(app)
+        .get(`/api/sales/${order._id}/invoice`)
+        .set('Authorization', `Bearer ${customer.token}`);
+
+      expect(res.status).toBe(403);
+      expect(res.status).not.toBe(500);
+      expect(res.body.success).toBe(false);
     });
   });
 

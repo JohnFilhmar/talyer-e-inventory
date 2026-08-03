@@ -99,6 +99,7 @@ router.get(
 router.get(
   '/:id',
   protect,
+  authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   mongoIdValidation,
   getSalesOrder
 );
@@ -107,6 +108,7 @@ router.get(
 router.get(
   '/:id/invoice',
   protect,
+  authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   mongoIdValidation,
   getSalesOrderInvoice
 );

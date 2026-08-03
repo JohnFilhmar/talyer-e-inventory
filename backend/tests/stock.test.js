@@ -5,6 +5,7 @@ import { createTestUser, createTestAdmin, createTestMechanic, createTestSalesper
 import stockRoutes from '../src/routes/stockRoutes.js';
 import Stock from '../src/models/Stock.js';
 import StockTransfer from '../src/models/StockTransfer.js';
+import StockMovement from '../src/models/StockMovement.js';
 import Product from '../src/models/Product.js';
 import Category from '../src/models/Category.js';
 import Branch from '../src/models/Branch.js';
@@ -1056,6 +1057,190 @@ describe('Stock API Tests', () => {
 
       const reread = await Stock.findById(stock._id);
       expect(reread.quantity).toBe(100);
+    });
+  });
+
+  // ===================
+  // TRANSFER HISTORY AUTHORIZATION (Hole 1)
+  // ===================
+  describe('transfer history authorization', () => {
+    it('rejects a customer from GET /api/stock/transfers', async () => {
+      const { token } = await createTestUser({ email: 'cust-transfers@example.com', role: 'customer' });
+
+      const res = await request(app)
+        .get('/api/stock/transfers')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('rejects a customer from GET /api/stock/transfers/:id', async () => {
+      const { token } = await createTestUser({ email: 'cust-transfer-detail@example.com', role: 'customer' });
+      const transfer = await StockTransfer.create({
+        product: product._id,
+        fromBranch: branchA._id,
+        toBranch: branchB._id,
+        quantity: 10,
+        initiatedBy: adminUser._id
+      });
+
+      const res = await request(app)
+        .get(`/api/stock/transfers/${transfer._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('scopes the transfer list to the salesperson own branch on either side', async () => {
+      const own = await createTestBranch({ name: 'Trans Own', code: 'TR-OWN' });
+      const otherX = await createTestBranch({ name: 'Trans Other X', code: 'TR-OTH-X' });
+      const otherY = await createTestBranch({ name: 'Trans Other Y', code: 'TR-OTH-Y' });
+
+      const ownTransfer = await StockTransfer.create({
+        product: product._id,
+        fromBranch: otherX._id,
+        toBranch: own._id,
+        quantity: 5,
+        initiatedBy: adminUser._id
+      });
+
+      const otherTransfer = await StockTransfer.create({
+        product: product._id,
+        fromBranch: otherX._id,
+        toBranch: otherY._id,
+        quantity: 5,
+        initiatedBy: adminUser._id
+      });
+
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get('/api/stock/transfers')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      const ids = res.body.data.map((t) => t._id);
+      expect(ids).toContain(ownTransfer._id.toString());
+      expect(ids).not.toContain(otherTransfer._id.toString());
+    });
+
+    it('rejects a salesperson reading a transfer between two other branches', async () => {
+      const own = await createTestBranch({ name: 'Detail Own', code: 'DT-OWN' });
+      const otherX = await createTestBranch({ name: 'Detail Other X', code: 'DT-OTH-X' });
+      const otherY = await createTestBranch({ name: 'Detail Other Y', code: 'DT-OTH-Y' });
+
+      const transfer = await StockTransfer.create({
+        product: product._id,
+        fromBranch: otherX._id,
+        toBranch: otherY._id,
+        quantity: 5,
+        initiatedBy: adminUser._id
+      });
+
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get(`/api/stock/transfers/${transfer._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('allows a salesperson to read a transfer where their branch is the destination', async () => {
+      const own = await createTestBranch({ name: 'Detail Own2', code: 'DT-OWN2' });
+      const otherX = await createTestBranch({ name: 'Detail Other X2', code: 'DT-OTH-X2' });
+
+      const transfer = await StockTransfer.create({
+        product: product._id,
+        fromBranch: otherX._id,
+        toBranch: own._id,
+        quantity: 5,
+        initiatedBy: adminUser._id
+      });
+
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get(`/api/stock/transfers/${transfer._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data._id).toBe(transfer._id.toString());
+    });
+  });
+
+  // ===================
+  // MOVEMENT LEDGER AUTHORIZATION (Hole 2)
+  // ===================
+  describe('movement ledger authorization', () => {
+    it('rejects a salesperson reading movements for another branch stock record', async () => {
+      const own = await createTestBranch({ name: 'Mv Own', code: 'MV-OWN' });
+      const other = await createTestBranch({ name: 'Mv Other', code: 'MV-OTH' });
+
+      const foreignStock = await createTestStock({ product: product._id, branch: other._id });
+
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get(`/api/stock/movements/stock/${foreignStock._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('scopes product movements to the salesperson own branch', async () => {
+      const own = await createTestBranch({ name: 'Mv Prod Own', code: 'MV-PR-OWN' });
+      const other = await createTestBranch({ name: 'Mv Prod Other', code: 'MV-PR-OTH' });
+
+      const ownStock = await createTestStock({ product: product._id, branch: own._id });
+      const otherStock = await createTestStock({ product: product._id, branch: other._id });
+
+      await StockMovement.create({
+        stock: ownStock._id,
+        product: product._id,
+        branch: own._id,
+        type: 'initial',
+        quantity: 100,
+        quantityBefore: 0,
+        quantityAfter: 100,
+        performedBy: adminUser._id
+      });
+
+      await StockMovement.create({
+        stock: otherStock._id,
+        product: product._id,
+        branch: other._id,
+        type: 'initial',
+        quantity: 100,
+        quantityBefore: 0,
+        quantityAfter: 100,
+        performedBy: adminUser._id
+      });
+
+      const { token } = await createTestSalesperson(own._id);
+
+      const res = await request(app)
+        .get(`/api/stock/movements/product/${product._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.length).toBe(1);
+      expect(res.body.data[0].branch._id).toBe(own._id.toString());
+    });
+  });
+
+  // ===================
+  // BRANCH STOCK ROLE RESTRICTION (Hole 3)
+  // ===================
+  describe('branch stock role restriction', () => {
+    it('rejects a mechanic from GET /api/stock/branch/:branchId for their own branch', async () => {
+      // regularUser/userToken (from the top-level beforeEach) is a mechanic
+      // assigned to branchA - checkBranchAccess alone would allow this.
+      const res = await request(app)
+        .get(`/api/stock/branch/${branchA._id}`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(res.status).toBe(403);
     });
   });
 });

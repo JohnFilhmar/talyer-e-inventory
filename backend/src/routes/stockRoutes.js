@@ -138,6 +138,7 @@ router.get(
 router.get(
   '/transfers',
   protect,
+  authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   stockController.getStockTransfers
 );
 
@@ -145,6 +146,7 @@ router.get(
 router.get(
   '/transfers/:id',
   protect,
+  authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   mongoIdValidation,
   handleValidationErrors,
   stockController.getStockTransfer
@@ -174,6 +176,7 @@ router.put(
 router.get(
   '/branch/:branchId',
   protect,
+  authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   checkBranchAccess,
   branchIdValidation,
   handleValidationErrors,

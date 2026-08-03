@@ -32,11 +32,7 @@ jobs:
 
       - name: Test
         working-directory: backend
-        # tests/user.test.js imports src/server.js, which calls process.exit(1)
-        # when it cannot reach a real MongoDB. It is excluded here and tracked
-        # in docs/gap-audit.md; remove this flag once it is ported to the
-        # mount-the-router pattern the other suites use.
-        run: npm test -- --testPathIgnorePatterns "tests/user.test.js"
+        run: npm test
 
   frontend-build:
     name: frontend-build

@@ -1,8 +1,37 @@
 import request from 'supertest';
+import express from 'express';
 import mongoose from 'mongoose';
-import app from '../src/server.js';
+import * as dbHandler from './setup/dbHandler.js';
+import { createTestUser } from './setup/testHelpers.js';
+import userRoutes from '../src/routes/userRoutes.js';
 import User from '../src/models/User.js';
 import Branch from '../src/models/Branch.js';
+
+// Create Express app for testing
+const app = express();
+app.use(express.json());
+app.use('/api/users', userRoutes);
+
+/**
+ * Connect to a new in-memory database before running any tests
+ */
+beforeAll(async () => {
+  await dbHandler.connect();
+});
+
+/**
+ * Clear all test data after every test
+ */
+afterEach(async () => {
+  await dbHandler.clearDatabase();
+});
+
+/**
+ * Remove and close the db and server
+ */
+afterAll(async () => {
+  await dbHandler.closeDatabase();
+});
 
 describe('User Management API', () => {
   let adminToken;
@@ -11,7 +40,7 @@ describe('User Management API', () => {
   let salespersonToken;
   let salespersonUser;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     // Create test branch with all required fields
     testBranch = await Branch.create({
       name: 'Test Branch',
@@ -29,17 +58,20 @@ describe('User Management API', () => {
       isActive: true,
     });
 
-    // Create admin user
-    adminUser = await User.create({
+    // Create admin user and mint its token directly (no HTTP login — the
+    // auth router is not mounted in this suite)
+    const admin = await createTestUser({
       name: 'Admin User',
       email: 'admin@test.com',
       password: 'admin123',
       role: 'admin',
       isActive: true,
     });
+    adminUser = admin.user;
+    adminToken = admin.token;
 
-    // Create salesperson user
-    salespersonUser = await User.create({
+    // Create salesperson user and mint its token directly
+    const sales = await createTestUser({
       name: 'Sales Person',
       email: 'sales@test.com',
       password: 'sales123',
@@ -47,40 +79,8 @@ describe('User Management API', () => {
       branch: testBranch._id,
       isActive: true,
     });
-
-    // Get admin token
-    const adminLogin = await request(app)
-      .post('/api/auth/login')
-      .send({ email: 'admin@test.com', password: 'admin123' });
-    adminToken = adminLogin.body.data.accessToken;
-
-    // Get salesperson token
-    const salesLogin = await request(app)
-      .post('/api/auth/login')
-      .send({ email: 'sales@test.com', password: 'sales123' });
-    salespersonToken = salesLogin.body.data.accessToken;
-  });
-
-  afterAll(async () => {
-    // Cleanup test data
-    await User.deleteMany({
-      email: {
-        $in: [
-          'admin@test.com',
-          'sales@test.com',
-          'newuser@test.com',
-          'mechanic@test.com',
-          'updatetest@test.com',
-          'toggletest@test.com',
-          'passwordtest@test.com',
-          'deactivated@test.com',
-          'newadmin@test.com',
-          'nobranch@test.com',
-        ],
-      },
-    });
-    await Branch.findByIdAndDelete(testBranch._id);
-    await mongoose.connection.close();
+    salespersonUser = sales.user;
+    salespersonToken = sales.token;
   });
 
   // ==========================================
@@ -340,9 +340,6 @@ describe('User Management API', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.data.role).toBe('admin');
-
-      // Cleanup
-      await User.findByIdAndDelete(res.body.data._id);
     });
 
     it('should reject invalid branch ID', async () => {
@@ -411,7 +408,7 @@ describe('User Management API', () => {
   describe('PUT /api/users/:id', () => {
     let updateTestUser;
 
-    beforeAll(async () => {
+    beforeEach(async () => {
       updateTestUser = await User.create({
         name: 'Update Test',
         email: 'updatetest@test.com',
@@ -420,10 +417,6 @@ describe('User Management API', () => {
         branch: testBranch._id,
         isActive: true,
       });
-    });
-
-    afterAll(async () => {
-      await User.findByIdAndDelete(updateTestUser._id);
     });
 
     it('should update user name', async () => {
@@ -444,9 +437,6 @@ describe('User Management API', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.email).toBe('updated@test.com');
-
-      // Restore original email
-      await User.findByIdAndUpdate(updateTestUser._id, { email: 'updatetest@test.com' });
     });
 
     it('should update user role with branch', async () => {
@@ -457,9 +447,6 @@ describe('User Management API', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.role).toBe('mechanic');
-
-      // Restore original role
-      await User.findByIdAndUpdate(updateTestUser._id, { role: 'salesperson' });
     });
 
     it('should prevent admin from changing own role', async () => {
@@ -484,9 +471,9 @@ describe('User Management API', () => {
 
     it('should require branch when changing to salesperson role', async () => {
       // First change to admin (no branch needed) - use $unset to properly remove branch
-      await User.findByIdAndUpdate(updateTestUser._id, { 
-        role: 'admin', 
-        $unset: { branch: 1 } 
+      await User.findByIdAndUpdate(updateTestUser._id, {
+        role: 'admin',
+        $unset: { branch: 1 },
       });
 
       const res = await request(app)
@@ -496,9 +483,6 @@ describe('User Management API', () => {
 
       expect(res.status).toBe(400);
       expect(res.body.message).toContain('Branch is required');
-
-      // Restore
-      await User.findByIdAndUpdate(updateTestUser._id, { role: 'salesperson', branch: testBranch._id });
     });
 
     it('should return 404 for non-existent user', async () => {
@@ -518,7 +502,7 @@ describe('User Management API', () => {
   describe('PATCH /api/users/:id/deactivate', () => {
     let deactivateTestUser;
 
-    beforeAll(async () => {
+    beforeEach(async () => {
       deactivateTestUser = await User.create({
         name: 'Deactivate Test',
         email: 'toggletest@test.com',
@@ -527,10 +511,6 @@ describe('User Management API', () => {
         branch: testBranch._id,
         isActive: true,
       });
-    });
-
-    afterAll(async () => {
-      await User.findByIdAndDelete(deactivateTestUser._id);
     });
 
     it('should deactivate an active user', async () => {
@@ -548,6 +528,10 @@ describe('User Management API', () => {
     });
 
     it('should reject deactivating already deactivated user', async () => {
+      await request(app)
+        .patch(`/api/users/${deactivateTestUser._id}/deactivate`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
       const res = await request(app)
         .patch(`/api/users/${deactivateTestUser._id}/deactivate`)
         .set('Authorization', `Bearer ${adminToken}`);
@@ -581,7 +565,7 @@ describe('User Management API', () => {
   describe('PATCH /api/users/:id/activate', () => {
     let activateTestUser;
 
-    beforeAll(async () => {
+    beforeEach(async () => {
       activateTestUser = await User.create({
         name: 'Activate Test',
         email: 'activatetest@test.com',
@@ -590,10 +574,6 @@ describe('User Management API', () => {
         branch: testBranch._id,
         isActive: false, // Start deactivated
       });
-    });
-
-    afterAll(async () => {
-      await User.findByIdAndDelete(activateTestUser._id);
     });
 
     it('should activate an inactive user', async () => {
@@ -607,6 +587,10 @@ describe('User Management API', () => {
     });
 
     it('should reject activating already active user', async () => {
+      await request(app)
+        .patch(`/api/users/${activateTestUser._id}/activate`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
       const res = await request(app)
         .patch(`/api/users/${activateTestUser._id}/activate`)
         .set('Authorization', `Bearer ${adminToken}`);
@@ -631,7 +615,7 @@ describe('User Management API', () => {
   describe('PATCH /api/users/:id/password', () => {
     let passwordTestUser;
 
-    beforeAll(async () => {
+    beforeEach(async () => {
       passwordTestUser = await User.create({
         name: 'Password Test',
         email: 'passwordtest@test.com',
@@ -641,10 +625,6 @@ describe('User Management API', () => {
         isActive: true,
         refreshToken: 'some-refresh-token',
       });
-    });
-
-    afterAll(async () => {
-      await User.findByIdAndDelete(passwordTestUser._id);
     });
 
     it('should change user password', async () => {
@@ -661,16 +641,25 @@ describe('User Management API', () => {
       expect(updatedUser.refreshToken).toBeUndefined();
     });
 
-    it('should allow login with new password', async () => {
+    // NOTE: the original assertion here made an HTTP request to
+    // POST /api/auth/login to prove the new password works. That route
+    // lives on authRoutes, which this suite does not mount (only
+    // userRoutes is mounted, per the project's per-router test pattern).
+    // Rather than drop the coverage, this test verifies the same fact —
+    // that the stored password hash was actually updated to the new
+    // value and no longer matches the old one — directly against the
+    // model, using the same bcrypt comparison the real login path uses.
+    it('should store a password hash that authenticates with the new password only', async () => {
       const res = await request(app)
-        .post('/api/auth/login')
-        .send({
-          email: 'passwordtest@test.com',
-          password: 'newpassword123',
-        });
+        .patch(`/api/users/${passwordTestUser._id}/password`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ newPassword: 'newpassword123' });
 
       expect(res.status).toBe(200);
-      expect(res.body.data.accessToken).toBeDefined();
+
+      const updatedUser = await User.findById(passwordTestUser._id).select('+password');
+      await expect(updatedUser.comparePassword('newpassword123')).resolves.toBe(true);
+      await expect(updatedUser.comparePassword('oldpassword123')).resolves.toBe(false);
     });
 
     it('should reject short password', async () => {
@@ -709,8 +698,10 @@ describe('User Management API', () => {
     let deactivatedUser;
     let deactivatedToken;
 
-    beforeAll(async () => {
-      deactivatedUser = await User.create({
+    beforeEach(async () => {
+      // Mint the token while the account is still active, mirroring a
+      // session that was valid at login time.
+      const created = await createTestUser({
         name: 'Deactivated User',
         email: 'deactivated@test.com',
         password: 'password123',
@@ -718,22 +709,14 @@ describe('User Management API', () => {
         branch: testBranch._id,
         isActive: true,
       });
-
-      // Get token while active
-      const loginRes = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'deactivated@test.com', password: 'password123' });
-      deactivatedToken = loginRes.body.data.accessToken;
+      deactivatedUser = created.user;
+      deactivatedToken = created.token;
 
       // Deactivate the user
       await User.findByIdAndUpdate(deactivatedUser._id, {
         isActive: false,
         refreshToken: undefined,
       });
-    });
-
-    afterAll(async () => {
-      await User.findByIdAndDelete(deactivatedUser._id);
     });
 
     it('should deny access with token after deactivation', async () => {
@@ -745,13 +728,12 @@ describe('User Management API', () => {
       expect(res.body.message).toContain('deactivated');
     });
 
-    it('should deny login for deactivated user', async () => {
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'deactivated@test.com', password: 'password123' });
-
-      expect(res.status).toBe(401);
-      expect(res.body.message).toContain('deactivated');
-    });
+    // NOTE: the original suite also had "should deny login for deactivated
+    // user", which posted to POST /api/auth/login. That route lives on
+    // authRoutes, which this suite does not mount. It is not ported here
+    // because the exact same behavior — login rejected with "Account is
+    // deactivated" for an isActive:false user — is already covered by
+    // backend/tests/auth.test.js ("should fail when account is
+    // deactivated"), so no coverage is lost by leaving it out of this file.
   });
 });

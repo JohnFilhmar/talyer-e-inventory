@@ -25,11 +25,13 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # Local env files
+# Ignore every .env variant, then re-admit the committed templates.
+# The previous list only covered `.env` and `*.local`, so a real
+# `.env.production` or `.env.staging` was committable.
 .env
-.env*.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+!.env.*.example
 
 # Vercel
 .vercel

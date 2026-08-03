@@ -8,6 +8,14 @@ import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { PAGINATION, USER_ROLES } from '../config/constants.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
+import { canAccessBranch } from '../utils/branchScope.js';
+
+/**
+ * Normalize a branch reference that may be a populated Branch document or a
+ * raw ObjectId into a plain string id.
+ */
+const resolveBranchId = (branchRef) =>
+  branchRef?._id ? branchRef._id.toString() : branchRef?.toString();
 
 /**
  * @desc    Get all service orders with filters
@@ -30,14 +38,14 @@ export const getServiceOrders = asyncHandler(async (req, res) => {
   const query = {};
   
   // Branch filter (non-admins can only see their branch)
-  if (req.user.role !== 'admin') {
+  if (req.user.role !== USER_ROLES.ADMIN) {
     query.branch = req.user.branch;
   } else if (branch) {
     query.branch = branch;
   }
-  
+
   // Mechanics can only see their assigned jobs (unless viewing all)
-  if (req.user.role === 'mechanic' && !assignedTo) {
+  if (req.user.role === USER_ROLES.MECHANIC && !assignedTo) {
     query.assignedTo = req.user._id;
   } else if (assignedTo) {
     query.assignedTo = assignedTo;
@@ -148,11 +156,11 @@ export const getServiceOrder = asyncHandler(async (req, res) => {
   }
 
   // Check access
-  if (req.user.role === 'mechanic' && order.assignedTo?._id.toString() !== req.user._id.toString()) {
+  if (req.user.role === USER_ROLES.MECHANIC && order.assignedTo?._id.toString() !== req.user._id.toString()) {
     return ApiResponse.error(res, 403, 'Access denied to this service order');
   }
-  
-  if (req.user.role !== 'admin' && order.branch._id.toString() !== req.user.branch.toString()) {
+
+  if (!canAccessBranch(req.user, resolveBranchId(order.branch))) {
     return ApiResponse.error(res, 403, 'Access denied to this branch');
   }
 
@@ -191,7 +199,7 @@ export const createServiceOrder = asyncHandler(async (req, res) => {
   }
 
   // Validate branch access
-  if (req.user.role !== 'admin' && req.user.branch.toString() !== branch) {
+  if (!canAccessBranch(req.user, branch)) {
     return ApiResponse.error(res, 403, 'Cannot create service order for different branch');
   }
 
@@ -201,10 +209,10 @@ export const createServiceOrder = asyncHandler(async (req, res) => {
     if (!mechanic) {
       return ApiResponse.error(res, 404, 'Assigned mechanic not found');
     }
-    if (mechanic.role !== 'mechanic') {
+    if (mechanic.role !== USER_ROLES.MECHANIC) {
       return ApiResponse.error(res, 400, 'Assigned user must be a mechanic');
     }
-    if (req.user.role !== 'admin' && mechanic.branch.toString() !== branch) {
+    if (req.user.role !== USER_ROLES.ADMIN && mechanic.branch.toString() !== branch) {
       return ApiResponse.error(res, 400, 'Cannot assign mechanic from different branch');
     }
   }
@@ -262,7 +270,7 @@ export const assignMechanic = asyncHandler(async (req, res) => {
   }
 
   // Check access
-  if (req.user.role !== 'admin' && order.branch.toString() !== req.user.branch.toString()) {
+  if (!canAccessBranch(req.user, resolveBranchId(order.branch))) {
     return ApiResponse.error(res, 403, 'Access denied to this order');
   }
 
@@ -271,10 +279,10 @@ export const assignMechanic = asyncHandler(async (req, res) => {
   if (!mechanic) {
     return ApiResponse.error(res, 404, 'Mechanic not found');
   }
-  if (mechanic.role !== 'mechanic') {
+  if (mechanic.role !== USER_ROLES.MECHANIC) {
     return ApiResponse.error(res, 400, 'Assigned user must be a mechanic');
   }
-  if (req.user.role !== 'admin' && mechanic.branch.toString() !== order.branch.toString()) {
+  if (req.user.role !== USER_ROLES.ADMIN && mechanic.branch.toString() !== order.branch.toString()) {
     return ApiResponse.error(res, 400, 'Cannot assign mechanic from different branch');
   }
 
@@ -322,11 +330,11 @@ export const updateServiceOrderStatus = asyncHandler(async (req, res) => {
     : order.assignedTo
       ? order.assignedTo.toString()
       : null;
-  if (req.user.role === 'mechanic' && assignedId !== req.user._id.toString()) {
+  if (req.user.role === USER_ROLES.MECHANIC && assignedId !== req.user._id.toString()) {
     return ApiResponse.error(res, 403, 'Access denied to this order');
   }
-  
-  if (req.user.role !== 'admin' && order.branch.toString() !== req.user.branch.toString()) {
+
+  if (!canAccessBranch(req.user, resolveBranchId(order.branch))) {
     return ApiResponse.error(res, 403, 'Access denied to this branch');
   }
 
@@ -442,11 +450,11 @@ export const updatePartsUsed = asyncHandler(async (req, res) => {
     : order.assignedTo
       ? order.assignedTo.toString()
       : null;
-  if (req.user.role === 'mechanic' && assignedId !== req.user._id.toString()) {
+  if (req.user.role === USER_ROLES.MECHANIC && assignedId !== req.user._id.toString()) {
     return ApiResponse.error(res, 403, 'Access denied to this order');
   }
-  
-  if (req.user.role !== 'admin' && order.branch.toString() !== req.user.branch.toString()) {
+
+  if (!canAccessBranch(req.user, resolveBranchId(order.branch))) {
     return ApiResponse.error(res, 403, 'Access denied to this branch');
   }
 
@@ -522,7 +530,7 @@ export const updatePayment = asyncHandler(async (req, res) => {
   }
 
   // Check access
-  if (req.user.role !== 'admin' && order.branch.toString() !== req.user.branch.toString()) {
+  if (!canAccessBranch(req.user, resolveBranchId(order.branch))) {
     return ApiResponse.error(res, 403, 'Access denied to this order');
   }
 

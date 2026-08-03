@@ -1,4 +1,17 @@
 version: 2
+
+# Grouping policy
+#
+# The first version of this file grouped only minor and patch updates, which
+# left every major bump to open its own pull request. The initial scan produced
+# 16 PRs — 2 grouped and 14 individual majors. Grouping majors as well keeps the
+# weekly volume to roughly one PR per ecosystem.
+#
+# Minor/patch and major are deliberately kept in separate groups: the
+# minor/patch PR is meant to be reviewed quickly and merged, while the major PR
+# collects breaking changes that need real work and can sit until someone has
+# time for them. Mixing the two would hold the safe updates hostage to the risky
+# ones.
 updates:
   - package-ecosystem: npm
     directory: /backend
@@ -8,6 +21,8 @@ updates:
     groups:
       backend-minor-patch:
         update-types: [minor, patch]
+      backend-major:
+        update-types: [major]
 
   - package-ecosystem: npm
     directory: /frontend
@@ -17,18 +32,43 @@ updates:
     groups:
       frontend-minor-patch:
         update-types: [minor, patch]
+      frontend-major:
+        update-types: [major]
 
+  # Docker base images.
+  #
+  # Node major bumps are ignored on purpose. Dependabot offers whatever tag is
+  # newest, which includes odd-numbered releases (25, 27, ...) that are "current"
+  # rather than LTS and stop receiving fixes within months. Both Dockerfiles are
+  # pinned to node:22-alpine ("Jod", LTS). Moving to another LTS line — 24
+  # ("Krypton") is the active one — should be a deliberate change that re-runs
+  # the suite and rebuilds both images, not an automatic PR.
   - package-ecosystem: docker
     directory: /backend
     schedule:
       interval: weekly
+    groups:
+      backend-docker:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: docker
     directory: /frontend
     schedule:
       interval: weekly
+    groups:
+      frontend-docker:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]

@@ -5,8 +5,16 @@ import Transaction from '../models/Transaction.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
-import { PAGINATION } from '../config/constants.js';
+import { PAGINATION, USER_ROLES } from '../config/constants.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
+import { canAccessBranch } from '../utils/branchScope.js';
+
+/**
+ * Normalize a branch reference that may be a populated Branch document or a
+ * raw ObjectId into a plain string id.
+ */
+const resolveBranchId = (branchRef) =>
+  branchRef?._id ? branchRef._id.toString() : branchRef?.toString();
 
 /**
  * @desc    Get all sales orders with filters
@@ -27,20 +35,20 @@ export const getSalesOrders = asyncHandler(async (req, res) => {
   const query = {};
   
   // Branch filter (non-admins can only see their branch)
-  if (req.user.role !== 'admin') {
+  if (req.user.role !== USER_ROLES.ADMIN) {
     query.branch = req.user.branch;
   } else if (branch) {
     query.branch = branch;
   }
-  
+
   if (status) {
     query.status = status;
   }
-  
+
   if (paymentStatus) {
     query['payment.status'] = paymentStatus;
   }
-  
+
   if (startDate || endDate) {
     query.createdAt = {};
     if (startDate) query.createdAt.$gte = new Date(startDate);
@@ -91,7 +99,7 @@ export const getSalesOrder = asyncHandler(async (req, res) => {
   }
 
   // Check access (non-admins can only view their branch orders)
-  if (req.user.role !== 'admin' && order.branch._id.toString() !== req.user.branch.toString()) {
+  if (!canAccessBranch(req.user, resolveBranchId(order.branch))) {
     return ApiResponse.error(res, 403, 'Access denied to this order');
   }
 
@@ -108,7 +116,7 @@ export const getSalesOrdersByBranch = asyncHandler(async (req, res) => {
   const { status, startDate, endDate, page = 1, limit = 20 } = req.query;
 
   // Check access
-  if (req.user.role !== 'admin' && req.user.branch.toString() !== branchId) {
+  if (!canAccessBranch(req.user, branchId)) {
     return ApiResponse.error(res, 403, 'Access denied to this branch');
   }
 
@@ -167,7 +175,7 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
   } = req.body;
 
   // Validate branch access
-  if (req.user.role !== 'admin' && req.user.branch.toString() !== branch) {
+  if (!canAccessBranch(req.user, branch)) {
     return ApiResponse.error(res, 403, 'Cannot create order for different branch');
   }
 
@@ -279,7 +287,7 @@ export const updateSalesOrderStatus = asyncHandler(async (req, res) => {
   }
 
   // Check access
-  if (req.user.role !== 'admin' && order.branch.toString() !== req.user.branch.toString()) {
+  if (!canAccessBranch(req.user, resolveBranchId(order.branch))) {
     return ApiResponse.error(res, 403, 'Access denied to this order');
   }
 
@@ -413,7 +421,7 @@ export const updateSalesOrderPayment = asyncHandler(async (req, res) => {
   }
 
   // Check access
-  if (req.user.role !== 'admin' && order.branch.toString() !== req.user.branch.toString()) {
+  if (!canAccessBranch(req.user, resolveBranchId(order.branch))) {
     return ApiResponse.error(res, 403, 'Access denied to this order');
   }
 
@@ -506,7 +514,7 @@ export const getSalesOrderInvoice = asyncHandler(async (req, res) => {
   }
 
   // Check access
-  if (req.user.role !== 'admin' && order.branch._id.toString() !== req.user.branch.toString()) {
+  if (!canAccessBranch(req.user, resolveBranchId(order.branch))) {
     return ApiResponse.error(res, 403, 'Access denied to this order');
   }
 
@@ -551,7 +559,7 @@ export const getSalesStatistics = asyncHandler(async (req, res) => {
   const query = {};
 
   // Branch filter
-  if (req.user.role !== 'admin') {
+  if (req.user.role !== USER_ROLES.ADMIN) {
     query.branch = req.user.branch;
   } else if (branch) {
     query.branch = branch;
