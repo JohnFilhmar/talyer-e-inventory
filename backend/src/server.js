@@ -9,6 +9,7 @@ import errorHandler from './middleware/errorHandler.js';
 import { apiLimiter } from './middleware/rateLimit.js';
 import { CORS } from './config/constants.js';
 import { resolveTrustProxy } from './utils/trustProxy.js';
+import { seedAdminUser } from './utils/seedAdmin.js';
 
 // Initialize express app
 const app = express();
@@ -147,6 +148,19 @@ const startServer = async () => {
   try {
     // Connect to MongoDB — required, so a failure here aborts startup.
     await connectDB();
+
+    // Bootstrap the first admin from SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD, if
+    // configured. Safe to call on every boot of every replica: it no-ops
+    // when the variables are absent, when an admin already exists, and when
+    // a concurrent replica wins the create race. Must run after connectDB()
+    // (needs the database) and before app.listen() so the outcome is in the
+    // logs before traffic can arrive.
+    const seedResult = await seedAdminUser();
+    if (seedResult.status === 'created') {
+      console.log('Seeded initial admin user from SEED_ADMIN_EMAIL.');
+    } else {
+      console.log(`Skipped admin seeding (reason: ${seedResult.reason}).`);
+    }
 
     // Connect to Redis (optional). This is intentionally NOT awaited:
     // node-redis's default retry/backoff behavior on an absent or
