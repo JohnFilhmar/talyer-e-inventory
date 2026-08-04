@@ -284,6 +284,64 @@ post-deploy step doing this today. Add one — either a periodic `docker image p
 step in the `deploy` job that runs it after a successful health check — before disk pressure
 becomes an outage.
 
+## Putting it behind nginx
+
+The production overlay binds both ports to `127.0.0.1`, so the stack is reachable only through a
+reverse proxy on the same host. **Deploy that overlay only once nginx is actually proxying** — do it
+earlier and the app looks down.
+
+Use **one domain**, path-routed, rather than `app.` + `api.` subdomains. The refresh cookie is
+`SameSite=Strict` in production, and a single origin makes it unambiguously first-party; it also
+means the browser never makes a cross-origin request, so the CORS allowlist stops being something
+that can break login.
+
+A ready-to-edit site file is at [docs/nginx/talyer-production.conf](nginx/talyer-production.conf).
+Three things in it are load-bearing:
+
+- **`/uploads/` must be proxied to the backend.** `server.js` mounts `express.static` at `/uploads`,
+  outside the `/api` prefix. Route only `/api` and every product image 404s.
+- **`client_max_body_size 10m`.** multer accepts 5 MB images; nginx defaults to 1 MB and would
+  reject them with a 413 before the app ever sees the request.
+- **`X-Forwarded-For` and `X-Forwarded-Proto`.** With `TRUST_PROXY=1`, Express derives `req.ip` from
+  the former, which is what `express-rate-limit` keys on. Omit it and every client shares one
+  bucket.
+
+```bash
+sudo apt install -y nginx
+sudo cp docs/nginx/talyer-production.conf /etc/nginx/sites-available/talyer
+sudo sed -i 's/REPLACE_ME.example.com/your.domain/' /etc/nginx/sites-available/talyer
+sudo ln -sf /etc/nginx/sites-available/talyer /etc/nginx/sites-enabled/talyer
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d your.domain
+```
+
+certbot rewrites the port-80 block and fills in the certificate paths. Renewal is installed as a
+timer; check it with `systemctl list-timers | grep certbot`.
+
+### Update the environment after the domain is live
+
+In the `production` GitHub Environment:
+
+| Variable | Value |
+|---|---|
+| `CLIENT_URL` | `https://your.domain` |
+| `CORS_ALLOWED_ORIGINS` | `https://your.domain` |
+| `BACKEND_URL` | `https://your.domain` |
+| `NEXT_PUBLIC_API_URL` | `https://your.domain/api` |
+| `NEXT_PUBLIC_BACKEND_URL` | `https://your.domain` |
+| `NEXT_PUBLIC_IMAGE_HOST` | `https://your.domain` |
+| `TRUST_PROXY` | `1` |
+
+The three `NEXT_PUBLIC_*` values are **inlined at build time**, so changing them has no effect until
+you re-run the Deploy workflow. A deploy that predates the change will keep calling `localhost`.
+
+Note this also resolves the product-image limitation below: once `BACKEND_URL` is a real HTTPS
+hostname the browser and the frontend container can both reach, the Next.js optimizer stops
+rejecting it.
+
 ## Known limitation: product images
 
 Product image URLs are absolute and built from `BACKEND_URL`. If that points at `localhost`, the

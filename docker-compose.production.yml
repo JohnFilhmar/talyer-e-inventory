@@ -1,12 +1,22 @@
-# Production overlay. Host ports match today's behavior (frontend 3000,
-# backend 5000). Container/volume isolation from staging comes from the
-# Compose project name (-p), supplied by the deploy workflow -- not from
-# anything in this file.
+# Production overlay.
+#
+# Ports bind to 127.0.0.1 only, so nothing reaches the app except through the
+# reverse proxy on the same host. Published as "3000:3000" they would listen on
+# 0.0.0.0 and be reachable directly at http://<server-ip>:3000, bypassing nginx
+# — which means no TLS, no rate limiting done at the edge, and a second origin
+# that CORS_ALLOWED_ORIGINS does not cover.
+#
+# Consequence: with this in effect the stack is ONLY reachable through the
+# proxy. Do not deploy this before nginx is actually proxying, or the app will
+# appear to be down.
+#
+# Container/volume isolation from staging comes from the Compose project name
+# (-p), supplied by the deploy workflow — not from anything in this file.
 services:
   backend:
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
 
   frontend:
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
