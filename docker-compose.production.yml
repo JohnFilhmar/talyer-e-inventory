@@ -1,0 +1,12 @@
+# Production overlay. Host ports match today's behavior (frontend 3000,
+# backend 5000). Container/volume isolation from staging comes from the
+# Compose project name (-p), supplied by the deploy workflow -- not from
+# anything in this file.
+services:
+  backend:
+    ports:
+      - "5000:5000"
+
+  frontend:
+    ports:
+      - "3000:3000"

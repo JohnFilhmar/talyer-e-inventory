@@ -1,0 +1,13 @@
+# Staging overlay. Host ports are offset by one (frontend 3001, backend 5001)
+# so the staging stack can run alongside production on the same VPS.
+# Container/volume isolation from production comes from the Compose project
+# name (-p), supplied by the deploy workflow -- not from anything in this
+# file.
+services:
+  backend:
+    ports:
+      - "5001:5000"
+
+  frontend:
+    ports:
+      - "3001:3000"

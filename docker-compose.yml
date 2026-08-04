@@ -1,5 +1,3 @@
-name: talyer-e-inventory
-
 services:
   mongo:
     image: mongo:7
@@ -49,8 +47,8 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
       BACKEND_URL: ${BACKEND_URL:-http://localhost:5000}
       TRUST_PROXY: ${TRUST_PROXY:-0}
-    ports:
-      - "5000:5000"
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
     volumes:
       - backend-uploads:/app/uploads
 
@@ -64,8 +62,6 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    ports:
-      - "3000:3000"
 
 volumes:
   mongo-data:
