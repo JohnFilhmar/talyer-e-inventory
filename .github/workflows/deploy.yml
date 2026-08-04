@@ -135,7 +135,12 @@ jobs:
     # but unlike `always()`, it still lets a cancelled workflow run stop a
     # deploy that is queued behind the single self-hosted runner.
     if: ${{ !cancelled() && (needs.security.result == 'success' || needs.security.result == 'skipped') }}
-    runs-on: [self-hosted, linux]
+    # The environment name doubles as the runner label, so each environment
+    # lands on its own box: register the production VPS's runner with the
+    # label `production` and the staging VPS's with `staging`. If both
+    # environments ever share one box, give that single runner both labels —
+    # no workflow change needed either way.
+    runs-on: [self-hosted, linux, "${{ inputs.environment }}"]
     environment: ${{ inputs.environment }}
     permissions:
       contents: read

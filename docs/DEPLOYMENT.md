@@ -17,33 +17,112 @@ seconds rather than shipping the wrong code.
 CI (`ci.yml`) and the security gates (`security.yml`) run on push and pull request for **both**
 branches.
 
-## One VPS, two stacks
+## How an environment reaches its box
 
-Staging and production run side by side on the same host. They are kept apart by two things:
+The deploy job targets `runs-on: [self-hosted, linux, "${{ inputs.environment }}"]` — **the
+environment name is the runner label**. Register the production VPS's runner with the label
+`production` and the staging VPS's with `staging`, and each deploy lands on the right machine with
+no workflow change. If you ever want both environments on a single box instead, give that one
+runner *both* labels; the same workflow handles it.
+
+Two further layers keep the stacks apart, which matter on a shared box and are harmless on
+dedicated ones:
 
 - **Compose project name** — the workflow passes `-p talyer-staging` or `-p talyer-production`,
   which namespaces containers, networks, and the `mongo-data` / `redis-data` / `backend-uploads`
   volumes. The two environments never share a database.
 - **Published host ports** — supplied by `docker-compose.staging.yml` (frontend 3001, backend 5001)
   and `docker-compose.production.yml` (frontend 3000, backend 5000). The base `docker-compose.yml`
-  publishes nothing on its own.
+  publishes nothing on its own; `docker-compose.override.yml` restores 3000/5000 for plain local
+  `docker compose up`, and the deploy workflow's explicit `-f` list excludes it.
 
-To split the environments onto separate VPSes later, register a second runner with a distinguishing
-label and change `runs-on` in the deploy job. Nothing else in the pipeline assumes co-location.
+On a dedicated staging box nothing else is competing for 3000/5000, so you may edit
+`docker-compose.staging.yml` to use them if you prefer the two environments to look identical. The
+deploy job reads the published port back from Compose rather than assuming one, so the health check
+follows whatever you choose.
 
-## Setting up the runner
+## Self-hosted runners on a public repository
 
-On the VPS, as a non-root user that is a member of the `docker` group:
+This repository is **public**, and GitHub's own guidance is to avoid self-hosted runners on public
+repos: a fork can open a pull request whose workflow executes on your machine.
+
+What keeps this setup safe is that `deploy.yml` is `workflow_dispatch` only — it cannot be
+triggered by a pull request, from a fork or otherwise. Every workflow that *does* respond to
+`pull_request` (`ci.yml`, `security.yml`, `dependabot-auto-merge.yml`) runs on GitHub-hosted
+`ubuntu-latest`.
+
+**Never add `self-hosted` to a workflow on this repo that triggers on `pull_request` or
+`pull_request_target`.** That single change would let anyone on the internet run code on your
+production server. If that is ever needed, make the repository private first.
+
+Two hardening steps worth taking on the box itself: run the runner as a dedicated unprivileged user
+that owns nothing but its own work directory, and remember that membership in the `docker` group is
+equivalent to root on that host — so treat the runner user as a privileged account and do not reuse
+it for anything else.
+
+## Setting up a runner
+
+Do this once per box. The only difference between the production and staging boxes is the label.
+
+**1. Docker, as root.** The runner needs Docker with the Compose v2 plugin and `curl`. It does
+**not** need Node.js — the deploy job only shells out to `docker compose`.
 
 ```bash
-# GitHub → repo → Settings → Actions → Runners → New self-hosted runner
-# Follow the generated commands, then install it as a service so it survives reboots:
-sudo ./svc.sh install
-sudo ./svc.sh start
+curl -fsSL https://get.docker.com | sh
+systemctl enable --now docker
+docker compose version          # must print v2.x
 ```
 
-The runner needs Docker with the Compose v2 plugin, and `curl`. It does **not** need Node.js — the
-deploy job only shells out to `docker compose`.
+**2. A dedicated runner user, as root.** Do not run the runner as root, and do not reuse an
+existing application user. Note that `docker` group membership is effectively root on this host.
+
+```bash
+adduser --system --group --shell /bin/bash --home /opt/actions-runner runner
+usermod -aG docker runner
+```
+
+**3. Register the runner**, as that user. Get the download URL and token from
+GitHub → repo → Settings → Actions → Runners → **New self-hosted runner** (Linux x64) — the token
+is single-use and expires in about an hour.
+
+```bash
+sudo -iu runner
+cd /opt/actions-runner
+curl -o actions-runner.tar.gz -L <URL from the GitHub page>
+tar xzf actions-runner.tar.gz
+
+./config.sh \
+  --url https://github.com/JohnFilhmar/talyer-e-inventory \
+  --token <TOKEN from the GitHub page> \
+  --name prod-runner \
+  --labels self-hosted,linux,production \
+  --work /opt/actions-runner/_work \
+  --unattended --replace
+```
+
+The `--labels` value is what routes deploys to this box. Use `production` on the production VPS and
+`staging` on the staging one — `self-hosted` and `linux` are added automatically, but listing them
+is harmless and makes the intent obvious.
+
+**4. Install it as a service** so it survives reboots. Back as root, from the same directory:
+
+```bash
+cd /opt/actions-runner
+./svc.sh install runner
+./svc.sh start
+./svc.sh status
+```
+
+**5. Confirm** it shows as *Idle* under Settings → Actions → Runners with the expected label.
+
+### Where the code and data actually live
+
+`actions/checkout` clones into the runner's work directory (`/opt/actions-runner/_work/...`), and
+that is where `docker compose` runs from. Application state does **not** live there — it is in the
+Docker named volumes, which survive redeploys and are unaffected by the workspace being wiped.
+
+So there is no need to place the repository under `/var/www` or anywhere else. If you want the
+checkout in a specific path anyway, pass it to `--work` at registration time.
 
 Only the `deploy` job runs on the self-hosted runner. The `security` job deliberately runs on
 `ubuntu-latest`: it audits dependencies and builds throwaway images to scan, needs nothing from the
