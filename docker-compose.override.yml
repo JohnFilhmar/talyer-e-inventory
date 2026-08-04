@@ -1,0 +1,21 @@
+# Local-development port publishing. Compose loads docker-compose.override.yml
+# automatically for a bare `docker compose up` (no -f flags), which is exactly
+# what README.md and CLAUDE.md document: `docker compose up --build` then
+# `localhost:3000` / `localhost:5000`. The base docker-compose.yml deliberately
+# publishes nothing so the same file can be reused, unmodified, for both the
+# staging and production overlays without a host-port collision between them.
+#
+# The deploy workflow (.github/workflows/deploy.yml) always passes an explicit
+# `-f docker-compose.yml -f docker-compose.<environment>.yml` list, and Compose
+# only auto-loads this override file when no `-f` flags are given at all — so
+# this file never affects the VPS. It exists purely to keep the documented
+# local one-liner working. Do not add anything here that should also apply to
+# staging/production; that belongs in the base file instead.
+services:
+  backend:
+    ports:
+      - "5000:5000"
+
+  frontend:
+    ports:
+      - "3000:3000"

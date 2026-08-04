@@ -1,0 +1,242 @@
+name: Deploy
+
+# Manual-only deploy to the self-hosted VPS. Both staging and production live
+# on the same box; they are kept apart by Compose project name (-p) and by
+# host port (see docker-compose.staging.yml / docker-compose.production.yml).
+# Moving either environment to its own VPS later is meant to be a one-line
+# change to the runs-on label below, not a rewrite of this workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy
+        type: choice
+        options:
+          - staging
+          - production
+        required: true
+      run_security_checks:
+        description: "Run dependency audit and image scan before deploying. Uncheck to skip."
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    name: security
+    if: ${{ inputs.run_security_checks }}
+    # Deliberately NOT the self-hosted runner. This job only audits
+    # dependencies and builds throwaway images to scan; it needs nothing from
+    # the VPS. Running two full image builds on the same box that is serving
+    # production would compete with the live app for CPU and disk at exactly
+    # the moment a deploy is in flight.
+    runs-on: ubuntu-latest
+    # Needed so `vars.NEXT_PUBLIC_*` below reads the per-environment GitHub
+    # Environment variables (as the runbook documents) rather than falling
+    # back to repository-level variables, which are typically unset.
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Backend dependency audit
+        working-directory: backend
+        run: npm audit --audit-level=high
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Frontend dependency audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build backend image for scan
+        uses: docker/build-push-action@v7
+        with:
+          context: ./backend
+          push: false
+          load: true
+          tags: talyer-backend:deploy-scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image for scan
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          push: false
+          load: true
+          tags: talyer-frontend:deploy-scan
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_BACKEND_URL=${{ vars.NEXT_PUBLIC_BACKEND_URL }}
+            NEXT_PUBLIC_IMAGE_HOST=${{ vars.NEXT_PUBLIC_IMAGE_HOST }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Reporting-only, same as security.yml's image-scan job: base-image
+      # CVEs are frequently unfixable upstream, and failing every deploy on
+      # them would block hotfixes. This step has no exit-code, so it never
+      # fails the job by itself -- the job's actual pass/fail signal for
+      # this gate comes from the dependency-audit steps above and from the
+      # image builds succeeding at all.
+      - name: Trivy scan backend image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: talyer-backend:deploy-scan
+          format: sarif
+          output: trivy-backend.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Trivy scan frontend image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: talyer-frontend:deploy-scan
+          format: sarif
+          output: trivy-frontend.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Upload backend Trivy results
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-backend.sarif
+          category: deploy-trivy-backend
+
+      - name: Upload frontend Trivy results
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-frontend.sarif
+          category: deploy-trivy-frontend
+
+  deploy:
+    name: deploy
+    needs: [security]
+    # Runs whether security passed OR was skipped by the checkbox, but not
+    # when security ran and failed. `!cancelled()` is required here because a
+    # skipped dependency would otherwise make GitHub skip this job too --
+    # but unlike `always()`, it still lets a cancelled workflow run stop a
+    # deploy that is queued behind the single self-hosted runner.
+    if: ${{ !cancelled() && (needs.security.result == 'success' || needs.security.result == 'skipped') }}
+    runs-on: [self-hosted, linux]
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    env:
+      MONGO_INITDB_ROOT_USERNAME: ${{ vars.MONGO_INITDB_ROOT_USERNAME }}
+      MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
+      MONGODB_URI: ${{ secrets.MONGODB_URI }}
+      REDIS_URL: ${{ vars.REDIS_URL }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      JWT_EXPIRE: ${{ vars.JWT_EXPIRE }}
+      JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+      JWT_REFRESH_EXPIRE: ${{ vars.JWT_REFRESH_EXPIRE }}
+      CLIENT_URL: ${{ vars.CLIENT_URL }}
+      CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+      BACKEND_URL: ${{ vars.BACKEND_URL }}
+      TRUST_PROXY: ${{ vars.TRUST_PROXY }}
+      SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
+      SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+      SEED_ADMIN_NAME: ${{ vars.SEED_ADMIN_NAME }}
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+      NEXT_PUBLIC_BACKEND_URL: ${{ vars.NEXT_PUBLIC_BACKEND_URL }}
+      NEXT_PUBLIC_IMAGE_HOST: ${{ vars.NEXT_PUBLIC_IMAGE_HOST }}
+    steps:
+      # Fail fast, before checkout or any build work, if the chosen
+      # environment doesn't match the branch this run is on. production
+      # only ever deploys from master; staging only ever deploys from
+      # staging. This is what stops "deploy production" from a feature
+      # branch shipping the wrong code.
+      - name: Guard branch/environment pairing
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [ "$ENVIRONMENT" = "production" ] && [ "$BRANCH" != "master" ]; then
+            echo "::error::production must be deployed from master, not '$BRANCH'."
+            exit 1
+          fi
+
+          if [ "$ENVIRONMENT" = "staging" ] && [ "$BRANCH" != "staging" ]; then
+            echo "::error::staging must be deployed from staging, not '$BRANCH'."
+            exit 1
+          fi
+
+          echo "Deploying '$BRANCH' to '$ENVIRONMENT'. OK."
+
+      - uses: actions/checkout@v7
+
+      - name: Deploy stack
+        run: |
+          set -euo pipefail
+          docker compose \
+            -p "talyer-${{ inputs.environment }}" \
+            -f docker-compose.yml \
+            -f "docker-compose.${{ inputs.environment }}.yml" \
+            up -d --build --remove-orphans
+
+      - name: Wait for backend health check
+        run: |
+          set -euo pipefail
+          # Ask Compose which host port it actually published rather than
+          # hardcoding it here. Duplicating the port would silently break this
+          # check the first time someone edits an overlay file.
+          published=$(docker compose \
+            -p "talyer-${{ inputs.environment }}" \
+            -f docker-compose.yml \
+            -f "docker-compose.${{ inputs.environment }}.yml" \
+            port backend 5000)
+          port="${published##*:}"
+
+          if [ -z "$port" ]; then
+            echo "::error::could not determine the published backend port from Compose."
+            exit 1
+          fi
+
+          url="http://localhost:${port}/health"
+          echo "Polling $url ..."
+
+          for i in $(seq 1 30); do
+            if curl -fs "$url" > /dev/null; then
+              echo "Backend is healthy after ${i} attempt(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "::error::backend did not answer $url within the timeout."
+          exit 1
+
+      - name: Diagnose failure
+        if: failure()
+        run: |
+          docker compose \
+            -p "talyer-${{ inputs.environment }}" \
+            -f docker-compose.yml \
+            -f "docker-compose.${{ inputs.environment }}.yml" \
+            ps
+
+          docker compose \
+            -p "talyer-${{ inputs.environment }}" \
+            -f docker-compose.yml \
+            -f "docker-compose.${{ inputs.environment }}.yml" \
+            logs --tail=200
