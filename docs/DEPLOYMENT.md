@@ -56,6 +56,14 @@ Create two GitHub Environments — `staging` and `production` — under Settings
 deploy job selects one via `environment: ${{ inputs.environment }}`, so each gets its own values.
 Attach a required reviewer to `production` if you want a human approval step before it runs.
 
+**Also set each Environment's "Deployment branches and tags" rule** — `production` → `Selected
+branches and tags` → `master`; `staging` → `Selected branches and tags` → `staging`. This is the
+durable version of the branch/environment pairing check: it is enforced by GitHub server-side
+before the job is even allowed to start, so — unlike the in-job "Guard branch/environment pairing"
+step, which only reads `github.ref_name` into a shell script — it cannot be bypassed by a
+maliciously-crafted branch name. Treat the Environment rule as the real control and the in-job
+guard as defense in depth / a fast, readable failure message.
+
 Secrets are passed to Compose through the job's process environment. **No `.env` file is ever
 written on the runner.**
 
@@ -69,6 +77,16 @@ written on the runner.**
 | `MONGODB_URI` | Full connection string — see the trap below. |
 | `SEED_ADMIN_EMAIL` | Bootstrap admin login. Optional after first boot. |
 | `SEED_ADMIN_PASSWORD` | At least 6 characters. Optional after first boot. |
+
+**`MONGODB_URI` and `MONGO_INITDB_ROOT_PASSWORD` fail open, unlike `JWT_SECRET`.**
+`docker-compose.yml` gives `JWT_SECRET` and `JWT_REFRESH_SECRET` a `:?...is required` default,
+which aborts `up` if either is unset. `MONGODB_URI` and `MONGO_INITDB_ROOT_PASSWORD` instead use
+`:-` defaults (`mongodb://talyer:change-me@mongo:27017/...` and `change-me` respectively) — see
+[docker-compose.yml](../docker-compose.yml). Forgetting to set either of these two secrets in the
+Environment does **not** fail the deploy: Compose silently falls back to the hardcoded default
+credential and the stack comes up looking healthy, on a database anyone who has read this file can
+authenticate to. This is deliberate compose behavior that this branch does not change — always set
+both explicitly per environment before the first real deploy.
 
 ### Variables (same screen → Variables)
 
@@ -154,8 +172,38 @@ overlay, then polls the backend's `/health` until it answers. The port is read b
 rather than hardcoded, so editing an overlay cannot silently break the check. If health never comes
 up, the job fails and prints `docker compose ps` plus the last 200 log lines.
 
-`concurrency` is keyed per environment, so two deploys of the same environment cannot interleave —
-but staging and production can deploy simultaneously.
+`concurrency` is keyed per environment, so two deploys of the same environment cannot interleave.
+Staging and production do **not** actually deploy simultaneously in practice, though: both jobs
+target the same single self-hosted runner (`runs-on: [self-hosted, linux]`), so a staging deploy
+and a production deploy dispatched around the same time serialize on runner availability regardless
+of the per-environment concurrency key. Two dispatches queue one after another rather than running
+in parallel.
+
+## Migrating from an older stack name
+
+If a stack from before this pipeline existed is already running on the VPS under the old
+`talyer-e-inventory` Compose project name (i.e. `docker compose` was run there without `-p`), the
+first `-p talyer-production` deploy does **not** adopt it. Compose project name namespaces
+volumes too, so `-p talyer-production` creates brand-new, empty `mongo-data` / `redis-data` /
+`backend-uploads` volumes rather than reusing the old stack's data — and then fails at `up` with a
+port conflict on 3000/5000, because the old containers are still bound to those host ports.
+
+Before the first deploy under the new pipeline: stop and remove the old stack
+(`docker compose -p talyer-e-inventory down`, **without** `-v` if you need the data), and if that
+old stack holds real data, migrate it into the new project's volumes (e.g. `docker run --rm -v
+talyer-e-inventory_mongo-data:/from -v talyer-production_mongo-data:/to alpine cp -a
+/from/. /to/` for each volume, adjusting names to match `docker volume ls`) before running the new
+volumes for the first time.
+
+## Disk usage: no image pruning
+
+Every deploy runs `docker compose up -d --build`, which rebuilds both images on the VPS from
+scratch each time. Old, now-unreferenced image layers are not cleaned up by anything in this
+pipeline, so disk usage on the runner creeps upward with every deploy. There is no cron or
+post-deploy step doing this today. Add one — either a periodic `docker image prune -f` (or
+`docker system prune -f` if build cache growth is also a problem) on a cron on the VPS, or a final
+step in the `deploy` job that runs it after a successful health check — before disk pressure
+becomes an outage.
 
 ## Known limitation: product images
 

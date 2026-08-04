@@ -35,7 +35,7 @@ const MONGO_DUPLICATE_KEY_ERROR_CODE = 11000;
  * @returns {Promise<{status: 'created' | 'skipped', reason?: string}>}
  *   `reason` is present whenever `status` is `'skipped'`: one of
  *   `'not-configured'`, `'invalid-email'`, `'weak-password'`,
- *   `'admin-exists'`, or `'error'`.
+ *   `'admin-exists'`, `'email-taken'`, or `'error'`.
  */
 const seedAdminUser = async () => {
   const email = process.env.SEED_ADMIN_EMAIL;
@@ -77,8 +77,25 @@ const seedAdminUser = async () => {
     return { status: 'created' };
   } catch (error) {
     if (error && error.code === MONGO_DUPLICATE_KEY_ERROR_CODE) {
-      // Another instance won the create race concurrently.
-      return { status: 'skipped', reason: 'admin-exists' };
+      // `User.email` is unique across every role, not just admins, so a
+      // duplicate-key error here has two possible causes and they must not
+      // be conflated: (1) another replica won this exact race and already
+      // created the admin, or (2) SEED_ADMIN_EMAIL is already held by a
+      // non-admin account (e.g. a customer who registered first), in which
+      // case no admin exists at all and this deployment is unbootstrappable
+      // through that address until it is freed up or a different address is
+      // chosen. Re-query to tell the two apart instead of assuming (1).
+      const raceWinner = await User.findOne({ role: USER_ROLES.ADMIN });
+      if (raceWinner) {
+        return { status: 'skipped', reason: 'admin-exists' };
+      }
+
+      console.error(
+        `seedAdminUser: SEED_ADMIN_EMAIL (${email}) is already registered to a non-admin ` +
+          'account, so no admin was created. Free up that email, or set SEED_ADMIN_EMAIL to a ' +
+          'different address and redeploy.'
+      );
+      return { status: 'skipped', reason: 'email-taken' };
     }
 
     // Log only the message, never the full error object — a Mongoose

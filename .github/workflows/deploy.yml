@@ -38,6 +38,10 @@ jobs:
     # production would compete with the live app for CPU and disk at exactly
     # the moment a deploy is in flight.
     runs-on: ubuntu-latest
+    # Needed so `vars.NEXT_PUBLIC_*` below reads the per-environment GitHub
+    # Environment variables (as the runbook documents) rather than falling
+    # back to repository-level variables, which are typically unset.
+    environment: ${{ inputs.environment }}
     permissions:
       contents: read
       security-events: write
@@ -47,8 +51,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
 
       - name: Backend dependency audit
         working-directory: backend
@@ -57,8 +59,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Frontend dependency audit
         working-directory: frontend
@@ -130,9 +130,11 @@ jobs:
     name: deploy
     needs: [security]
     # Runs whether security passed OR was skipped by the checkbox, but not
-    # when security ran and failed. `always()` is required here because a
-    # skipped dependency would otherwise make GitHub skip this job too.
-    if: ${{ always() && (needs.security.result == 'success' || needs.security.result == 'skipped') }}
+    # when security ran and failed. `!cancelled()` is required here because a
+    # skipped dependency would otherwise make GitHub skip this job too --
+    # but unlike `always()`, it still lets a cancelled workflow run stop a
+    # deploy that is queued behind the single self-hosted runner.
+    if: ${{ !cancelled() && (needs.security.result == 'success' || needs.security.result == 'skipped') }}
     runs-on: [self-hosted, linux]
     environment: ${{ inputs.environment }}
     permissions:
@@ -163,22 +165,23 @@ jobs:
       # staging. This is what stops "deploy production" from a feature
       # branch shipping the wrong code.
       - name: Guard branch/environment pairing
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          environment="${{ inputs.environment }}"
-          branch="${{ github.ref_name }}"
 
-          if [ "$environment" = "production" ] && [ "$branch" != "master" ]; then
-            echo "::error::production must be deployed from master, not '$branch'."
+          if [ "$ENVIRONMENT" = "production" ] && [ "$BRANCH" != "master" ]; then
+            echo "::error::production must be deployed from master, not '$BRANCH'."
             exit 1
           fi
 
-          if [ "$environment" = "staging" ] && [ "$branch" != "staging" ]; then
-            echo "::error::staging must be deployed from staging, not '$branch'."
+          if [ "$ENVIRONMENT" = "staging" ] && [ "$BRANCH" != "staging" ]; then
+            echo "::error::staging must be deployed from staging, not '$BRANCH'."
             exit 1
           fi
 
-          echo "Deploying '$branch' to '$environment'. OK."
+          echo "Deploying '$BRANCH' to '$ENVIRONMENT'. OK."
 
       - uses: actions/checkout@v7
 

@@ -22,7 +22,7 @@ Two independent npm packages, no workspace root. Every command must be run from 
 # Backend (cd backend)
 npm run dev                       # nodemon on src/server.js, port 5000
 npm start                         # node src/server.js
-npm test                          # jest --runInBand (NODE_ENV=test) — green: 12 suites, 391 tests
+npm test                          # jest --runInBand (NODE_ENV=test) — green: 14 suites, 407 tests
 npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
@@ -260,7 +260,7 @@ app.use(express.json());
 app.use('/api/stock', stockRoutes);
 ```
 
-`npm test` is green — verified 12 suites / 391 tests passing:
+`npm test` is green — verified 14 suites / 407 tests passing:
 
 ```bash
 npm test
