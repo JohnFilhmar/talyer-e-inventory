@@ -342,6 +342,26 @@ These checks are only advisory until branch protection requires them. Enable it 
     gh api -X PUT repos/:owner/:repo/branches/master/protection \
       --input .github/branch-protection.json
 
+## Deployment
+
+`master` is production, `staging` is staging; both CI workflows run on both branches. Deploys are
+manual only — Actions → Deploy → *Run workflow*, choosing the environment and whether to run
+security checks first. Both stacks live on one self-hosted VPS runner, isolated by Compose project
+name (`-p talyer-<env>`) and host port (staging 3001/5001, production 3000/5000, from
+[docker-compose.staging.yml](docker-compose.staging.yml) and
+[docker-compose.production.yml](docker-compose.production.yml)). Secrets come from GitHub
+Environments and are passed to Compose as process env — no `.env` is ever written on the runner.
+
+[backend/src/utils/seedAdmin.js](backend/src/utils/seedAdmin.js) bootstraps the first admin from
+`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` on startup, because public registration only ever creates
+a `customer` and creating staff needs an existing admin. It skips entirely if either variable is
+unset, and skips if any admin already exists — so restarts and extra replicas never create a second
+admin or reset a password. Every failure path is non-fatal and the password is never logged.
+
+Full runbook, the per-environment secrets and variables table, and the traps
+(`NEXT_PUBLIC_API_URL` needs `/api`, `NEXT_PUBLIC_BACKEND_URL` must not have it, `MONGODB_URI` is
+not derived from the Mongo password) are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Dependabot
 
 [.github/dependabot.yml](.github/dependabot.yml) groups updates per ecosystem. Minor/patch and

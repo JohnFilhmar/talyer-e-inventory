@@ -32,7 +32,12 @@ jobs:
   security:
     name: security
     if: ${{ inputs.run_security_checks }}
-    runs-on: [self-hosted, linux]
+    # Deliberately NOT the self-hosted runner. This job only audits
+    # dependencies and builds throwaway images to scan; it needs nothing from
+    # the VPS. Running two full image builds on the same box that is serving
+    # production would compete with the live app for CPU and disk at exactly
+    # the moment a deploy is in flight.
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
@@ -147,6 +152,7 @@ jobs:
       TRUST_PROXY: ${{ vars.TRUST_PROXY }}
       SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
       SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+      SEED_ADMIN_NAME: ${{ vars.SEED_ADMIN_NAME }}
       NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
       NEXT_PUBLIC_BACKEND_URL: ${{ vars.NEXT_PUBLIC_BACKEND_URL }}
       NEXT_PUBLIC_IMAGE_HOST: ${{ vars.NEXT_PUBLIC_IMAGE_HOST }}
@@ -188,10 +194,19 @@ jobs:
       - name: Wait for backend health check
         run: |
           set -euo pipefail
-          if [ "${{ inputs.environment }}" = "production" ]; then
-            port=5000
-          else
-            port=5001
+          # Ask Compose which host port it actually published rather than
+          # hardcoding it here. Duplicating the port would silently break this
+          # check the first time someone edits an overlay file.
+          published=$(docker compose \
+            -p "talyer-${{ inputs.environment }}" \
+            -f docker-compose.yml \
+            -f "docker-compose.${{ inputs.environment }}.yml" \
+            port backend 5000)
+          port="${published##*:}"
+
+          if [ -z "$port" ]; then
+            echo "::error::could not determine the published backend port from Compose."
+            exit 1
           fi
 
           url="http://localhost:${port}/health"
