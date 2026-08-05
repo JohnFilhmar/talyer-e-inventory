@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { serviceService, ServiceInvoice } from '@/lib/services/serviceService';
 import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
-import { isOffline, readCachedById } from '@/lib/offline/cache';
+import { isOffline, readCachedById, readCachedList } from '@/lib/offline/cache';
 import { enqueueServiceOrder, listOutbox, type ServiceOutboxEntry } from '@/lib/offline/outbox';
 import { isNetworkError } from '@/lib/apiClient';
 import type {
@@ -13,6 +13,7 @@ import type {
   UpdateServicePaymentPayload,
   ServiceOrderListParams,
   MyJobsParams,
+  ServiceBranch,
 } from '@/types/service';
 import type { User } from '@/types/auth';
 import type { PaginatedResponse } from '@/types/api';
@@ -49,10 +50,12 @@ export function useServiceOrders(params: ServiceOrderListParams = {}) {
         serviceService.getAll(params)
       );
       const queued = await listOutbox();
-      const optimistic = queued
-        .filter((entry): entry is ServiceOutboxEntry => entry.kind === 'service')
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .map(buildOptimisticServiceOrder);
+      const optimistic = await Promise.all(
+        queued
+          .filter((entry): entry is ServiceOutboxEntry => entry.kind === 'service')
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .map(buildOptimisticServiceOrder)
+      );
 
       if (optimistic.length === 0) return response;
 
@@ -152,14 +155,26 @@ export function useMechanics() {
  * rather than a fabricated `JOB-YYYY-NNNNNN`-shaped value, and `status` /
  * the payment `status` are forced to `'pending'`.
  */
-function buildOptimisticServiceOrder(entry: ServiceOutboxEntry): ServiceOrder {
+async function buildOptimisticServiceOrder(entry: ServiceOutboxEntry): Promise<ServiceOrder> {
   const { payload } = entry;
   const createdAt = new Date(entry.createdAt).toISOString();
+
+  // Resolve the branch into the populated shape the UI expects. The payload
+  // carries only an id, but the tables render via
+  // `isPopulatedServiceBranch(...) ? branch.name : '-'`, so a raw id shows as
+  // a dash — indistinguishable from missing data. The branches mirror has it.
+  const branchId =
+    typeof payload.branch === 'string'
+      ? payload.branch
+      : (payload.branch as { _id?: string } | null)?._id;
+  const cachedBranches = await readCachedList<ServiceBranch>('branches');
+  const branch: ServiceBranch | string =
+    cachedBranches.find((candidate) => candidate._id === branchId) ?? payload.branch;
 
   return {
     _id: `outbox-${entry.id}`,
     jobNumber: 'Pending sync',
-    branch: payload.branch,
+    branch,
     customer: payload.customer,
     vehicle: payload.vehicle,
     assignedTo: payload.assignedTo,

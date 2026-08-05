@@ -11,6 +11,7 @@ import type {
   UpdateOrderStatusPayload,
   UpdatePaymentPayload,
   SalesOrderListParams,
+  OrderBranch,
 } from '@/types/sales';
 import type { Stock } from '@/types/stock';
 import type { PaginatedResponse } from '@/types/api';
@@ -185,6 +186,15 @@ async function buildOptimisticSalesOrder(entry: SaleOutboxEntry): Promise<SalesO
       ? payload.branch
       : (payload.branch as { _id?: string } | null)?._id;
 
+  // Resolve the branch into the populated shape the UI expects. The payload
+  // only carries an id, but `SalesOrderTable` renders via
+  // `isPopulatedOrderBranch(...) ? branch.name : '-'` — so a raw id renders as
+  // a dash, which looks like missing data rather than a pending order. The
+  // branches mirror already holds the real record.
+  const cachedBranches = await readCachedList<OrderBranch>('branches');
+  const branch: OrderBranch | string =
+    cachedBranches.find((candidate) => candidate._id === branchId) ?? payload.branch;
+
   const cachedStock = await readCachedList<Stock>('stock');
   const stockFor = (productId: string) =>
     cachedStock.find((row) => {
@@ -226,7 +236,7 @@ async function buildOptimisticSalesOrder(entry: SaleOutboxEntry): Promise<SalesO
   return {
     _id: `outbox-${entry.id}`,
     orderNumber: 'Pending sync',
-    branch: payload.branch,
+    branch,
     customer: payload.customer,
     items,
     subtotal,
