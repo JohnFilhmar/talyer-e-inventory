@@ -87,8 +87,12 @@ const updateUserValidation = [
   body('role')
     .optional()
     .isIn(['admin', 'salesperson', 'mechanic']).withMessage('Invalid role. Must be admin, salesperson, or mechanic'),
+  // `null` is how the frontend explicitly clears a user's branch (e.g. when
+  // editing an admin, which has no branch). express-validator's default
+  // `.optional()` only skips `undefined`, not `null`, so without `values:
+  // 'null'` an explicit null falls through to isMongoId() and is rejected.
   body('branch')
-    .optional()
+    .optional({ values: 'null' })
     .isMongoId().withMessage('Invalid branch ID'),
   validate
 ];
