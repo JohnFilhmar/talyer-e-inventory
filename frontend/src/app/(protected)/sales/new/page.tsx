@@ -26,7 +26,7 @@ import { useCreateSalesOrder } from '@/hooks/useSales';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
-import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
+import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
 import {
   PAYMENT_METHOD_OPTIONS,
   calculateOrderTotals,
@@ -445,7 +445,11 @@ export default function NewSalePage() {
 
               {activeBranchId && scannerOpen && (
                 <div className="mb-4">
-                  <BarcodeScanner onScan={handleScan} onClose={() => setScannerOpen(false)} />
+                  <BarcodeScanner
+                    onScan={handleScan}
+                    onClose={() => setScannerOpen(false)}
+                    hint="Hold a barcode inside the frame. Items are added as they are scanned; scanning the same product again increases its quantity."
+                  />
                   {scanFeedback && (
                     <p className="mt-2 text-sm text-black" role="status" aria-live="polite">
                       {scanFeedback}

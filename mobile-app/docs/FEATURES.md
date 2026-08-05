@@ -112,6 +112,15 @@ GET          /categories/:id/children
 **Products** are catalog records: name, SKU, description, brand, barcode,
 images, specifications. SKUs are auto-generated as `PROD-000001`.
 
+**Barcode is optional but unique.** A barcode identifies one physical product,
+so scanning it has to resolve to exactly one item — a second product claiming a
+barcode already in use is rejected with a message naming the product that holds
+it. Uniqueness is enforced by a partial index (`barcode_unique`) covering only
+documents that actually carry one, so any number of products may have no
+barcode. Blank barcodes are normalised to absent rather than stored as `''`,
+which is what stops two blanks from colliding. Clearing a barcode frees it for
+another product — relevant when a label is moved to a different part.
+
 ```
 GET    /products              paginated, searchable, filterable
 GET    /products/search       full-text across name, SKU, brand, barcode

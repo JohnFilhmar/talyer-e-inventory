@@ -75,9 +75,13 @@ const createProductValidation = [
     .withMessage('Selling price must be a non-negative number'),
   
   body('barcode')
-    .optional()
+    // A cleared barcode arrives as '' from the edit form and means "no barcode".
+    // Plain .optional() only skips undefined, so '' fell through to the length
+    // check and 400'd, making a barcode impossible to remove once set. Blanks are
+    // normalised to absent in the model so they never collide in the unique index.
+    .optional({ values: 'falsy' })
     .trim()
-    .isLength({ min: 8, max: 20 })
+    .custom((value) => value === '' || (value.length >= 8 && value.length <= 20))
     .withMessage('Barcode must be between 8 and 20 characters'),
   
   body('images')
@@ -159,9 +163,13 @@ const updateProductValidation = [
     .withMessage('Selling price must be a non-negative number'),
   
   body('barcode')
-    .optional()
+    // A cleared barcode arrives as '' from the edit form and means "no barcode".
+    // Plain .optional() only skips undefined, so '' fell through to the length
+    // check and 400'd, making a barcode impossible to remove once set. Blanks are
+    // normalised to absent in the model so they never collide in the unique index.
+    .optional({ values: 'falsy' })
     .trim()
-    .isLength({ min: 8, max: 20 })
+    .custom((value) => value === '' || (value.length >= 8 && value.length <= 20))
     .withMessage('Barcode must be between 8 and 20 characters'),
   
   body('images')

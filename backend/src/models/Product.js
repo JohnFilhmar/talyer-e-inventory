@@ -46,8 +46,8 @@ const productSchema = new mongoose.Schema(
     },
     barcode: {
       type: String,
-      trim: true,
-      index: true
+      trim: true
+      // Uniqueness is a partial index, not `unique: true` — see below.
     },
     images: [{
       url: {
@@ -92,7 +92,27 @@ const productSchema = new mongoose.Schema(
 );
 
 // Indexes
-// Note: sku already has unique: true, barcode has index: true - both auto-create indexes
+// Note: sku already has unique: true, which auto-creates its index.
+
+// A barcode identifies one physical product, so it must be unique — scanning it
+// at the counter has to resolve to exactly one item. But barcode is optional,
+// and a plain `unique: true` indexes missing values as null, which would allow
+// only ONE product without a barcode across the whole catalog.
+//
+// A partial index on `$type: 'string'` covers only documents that actually carry
+// a barcode. `sparse` would not be enough on its own: it skips absent fields but
+// still indexes explicit nulls and empty strings, so two blank-barcode products
+// would collide. The normalisation hook below guarantees a blank barcode is
+// stored as absent rather than '' or null, which is what keeps this correct.
+productSchema.index(
+  { barcode: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { barcode: { $type: 'string' } },
+    name: 'barcode_unique'
+  }
+);
+
 productSchema.index({ name: 'text', description: 'text', brand: 'text' }); // Full-text search
 productSchema.index({ category: 1 });
 productSchema.index({ brand: 1 });
@@ -111,8 +131,17 @@ productSchema.virtual('profitMargin').get(function() {
   return parseFloat(((this.sellingPrice - this.costPrice) / this.costPrice * 100).toFixed(2));
 });
 
+// A blank barcode must be stored as absent, never as '' or null, or the partial
+// unique index above would treat every blank-barcode product as a collision.
+const isBlankBarcode = (value) =>
+  value === null || value === undefined || String(value).trim() === '';
+
 // Auto-generate SKU if not provided
 productSchema.pre('save', async function(next) {
+  if (this.isModified('barcode') && isBlankBarcode(this.barcode)) {
+    this.barcode = undefined;
+  }
+
   if (!this.sku) {
     const count = await this.constructor.countDocuments();
     this.sku = `PROD-${String(count + 1).padStart(6, '0')}`;
@@ -137,6 +166,28 @@ productSchema.pre('save', async function(next) {
     }
   }
   
+  next();
+});
+
+// The same normalisation for the update path — `updateProduct` goes through
+// findByIdAndUpdate, which never runs the save hook. Clearing a barcode has to
+// $unset it rather than write an empty string, so the cleared product drops out
+// of the partial index and frees that barcode for another product.
+productSchema.pre(['findOneAndUpdate', 'updateOne', 'updateMany'], function(next) {
+  const update = this.getUpdate();
+  if (!update) return next();
+
+  const target = update.$set && 'barcode' in update.$set ? update.$set : update;
+  if (!('barcode' in target)) return next();
+
+  if (isBlankBarcode(target.barcode)) {
+    delete target.barcode;
+    update.$unset = { ...update.$unset, barcode: '' };
+    this.setUpdate(update);
+  } else {
+    target.barcode = String(target.barcode).trim();
+  }
+
   next();
 });
 

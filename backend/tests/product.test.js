@@ -723,4 +723,119 @@ describe('Product API Tests', () => {
       expect(product.sku).toBe('CUSTOM-ABC-123');
     });
   });
+
+  describe('Barcode uniqueness', () => {
+    // Index builds are async under autoIndex; without this the DB-level
+    // constraint test can run before barcode_unique exists.
+    beforeEach(async () => {
+      await Product.init();
+    });
+
+    const postProduct = (body) =>
+      request(app)
+        .post('/api/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Barcode Product',
+          category: testCategory._id,
+          costPrice: 100,
+          sellingPrice: 150,
+          ...body
+        });
+
+    it('should reject a second product with the same barcode', async () => {
+      const first = await postProduct({ name: 'Original', barcode: '1234567890123' });
+      expect(first.status).toBe(201);
+
+      const second = await postProduct({ name: 'Copycat', barcode: '1234567890123' });
+
+      expect(second.status).toBe(400);
+      expect(second.body.message).toMatch(/barcode already assigned to/i);
+      // The message names the conflicting product so an admin can find it.
+      expect(second.body.message).toContain('Original');
+      expect(await Product.countDocuments({ barcode: '1234567890123' })).toBe(1);
+    });
+
+    it('should allow many products with no barcode at all', async () => {
+      expect((await postProduct({ name: 'No Barcode A' })).status).toBe(201);
+      expect((await postProduct({ name: 'No Barcode B' })).status).toBe(201);
+      expect((await postProduct({ name: 'No Barcode C' })).status).toBe(201);
+    });
+
+    it('should treat a blank barcode as absent rather than a value', async () => {
+      // Two empty strings must not collide with each other in the unique index.
+      expect((await postProduct({ name: 'Blank A', barcode: '' })).status).toBe(201);
+      expect((await postProduct({ name: 'Blank B', barcode: '   ' })).status).toBe(201);
+
+      const stored = await Product.find({ name: /^Blank/ }).lean();
+      stored.forEach((product) => {
+        expect(product.barcode).toBeUndefined();
+      });
+    });
+
+    it('should reject an update that takes another product barcode', async () => {
+      await postProduct({ name: 'Holder', barcode: '9999999999999' });
+      const other = await postProduct({ name: 'Other', barcode: '8888888888888' });
+
+      const res = await request(app)
+        .put(`/api/products/${other.body.data._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ barcode: '9999999999999' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/barcode already assigned to/i);
+
+      const unchanged = await Product.findById(other.body.data._id).lean();
+      expect(unchanged.barcode).toBe('8888888888888');
+    });
+
+    it('should allow a product to keep its own barcode on update', async () => {
+      const created = await postProduct({ name: 'Self', barcode: '7777777777777' });
+
+      const res = await request(app)
+        .put(`/api/products/${created.body.data._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Self Renamed', barcode: '7777777777777' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.name).toBe('Self Renamed');
+      expect(res.body.data.barcode).toBe('7777777777777');
+    });
+
+    it('should free the barcode when it is cleared, so another product can take it', async () => {
+      const holder = await postProduct({ name: 'Holder', barcode: '6666666666666' });
+
+      const cleared = await request(app)
+        .put(`/api/products/${holder.body.data._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ barcode: '' });
+
+      expect(cleared.status).toBe(200);
+      const afterClear = await Product.findById(holder.body.data._id).lean();
+      expect(afterClear.barcode).toBeUndefined();
+
+      // The barcode moved to a physically different product; this must succeed.
+      expect((await postProduct({ name: 'Successor', barcode: '6666666666666' })).status).toBe(201);
+    });
+
+    it('should enforce uniqueness at the database level, not only in the controller', async () => {
+      await Product.create({
+        name: 'Direct A',
+        category: testCategory._id,
+        costPrice: 10,
+        sellingPrice: 20,
+        barcode: '5555555555555'
+      });
+
+      await expect(
+        Product.create({
+          name: 'Direct B',
+          category: testCategory._id,
+          costPrice: 10,
+          sellingPrice: 20,
+          barcode: '5555555555555'
+        })
+      ).rejects.toMatchObject({ code: 11000 });
+    });
+  });
 });

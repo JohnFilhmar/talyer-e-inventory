@@ -40,10 +40,15 @@ interface BarcodeScannerProps {
   onScan: (value: string) => void;
   /** Closes the scanner. */
   onClose: () => void;
+  /**
+   * Footer copy. What a scan *does* differs by caller — at the counter it adds
+   * a line item, on the product form it fills a field — so the caller says so.
+   */
+  hint?: string;
 }
 
 /**
- * Live camera barcode scanner for the sales counter.
+ * Live camera barcode scanner, shared by the sales counter and the product form.
  *
  * Uses the native `BarcodeDetector`, which is available in Chrome and on
  * Android but not in Safari or Firefox. Rather than shipping a ~200KB decoder
@@ -54,7 +59,11 @@ interface BarcodeScannerProps {
  * Everything here is local: decoding happens on-device and the caller resolves
  * the code against the offline mirror, so scanning works with no connection.
  */
-export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
+export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
+  onScan,
+  onClose,
+  hint = 'Hold a barcode inside the frame.',
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<BarcodeDetectorLike | null>(null);
@@ -240,10 +249,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose 
       )}
 
       {!error && (
-        <p className="px-3 py-2 text-xs text-gray-500 border-t border-gray-200">
-          Hold a barcode inside the frame. Items are added as they are scanned; scanning the same
-          product again increases its quantity.
-        </p>
+        <p className="px-3 py-2 text-xs text-gray-500 border-t border-gray-200">{hint}</p>
       )}
     </div>
   );

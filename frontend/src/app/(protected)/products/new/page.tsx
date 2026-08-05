@@ -5,9 +5,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Save, TrendingUp, X, Plus } from 'lucide-react';
+import { ArrowLeft, Save, TrendingUp, X, Plus, ScanLine } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { useProduct, useCreateProduct, useUpdateProduct } from '@/hooks/useProducts';
+import {
+  useProduct,
+  useCreateProduct,
+  useUpdateProduct,
+  useUploadProductImage,
+} from '@/hooks/useProducts';
+import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
+import { ProductImagePicker } from '@/components/products/ProductImagePicker';
 import { useActiveCategories } from '@/hooks/useCategories';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -47,8 +54,17 @@ function ProductForm({ mode, productId }: ProductFormProps) {
   // Mutations
   const createMutation = useCreateProduct();
   const updateMutation = useUpdateProduct();
+  const uploadImageMutation = useUploadProductImage();
 
-  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+  // Scanning fills the barcode field instead of the user reading 13 digits off a
+  // label and typing them. A misread digit here is worse than at the counter:
+  // it is baked into the catalog and every later scan of the real product misses.
+  const [scannerOpen, setScannerOpen] = React.useState(false);
+  const [pendingImages, setPendingImages] = React.useState<File[]>([]);
+  const [imageError, setImageError] = React.useState<string | null>(null);
+
+  const isSubmitting =
+    createMutation.isPending || updateMutation.isPending || uploadImageMutation.isPending;
   const error = createMutation.error || updateMutation.error;
 
   // Form setup
@@ -145,19 +161,63 @@ function ProductForm({ mode, productId }: ProductFormProps) {
         } : undefined,
       };
 
+      let targetId: string;
       if (isEditing && productId) {
         await updateMutation.mutateAsync({
           id: productId,
           payload: cleanData as UpdateProductFormData,
         });
-        router.push(`/products/${productId}`);
+        targetId = productId;
       } else {
         const newProduct = await createMutation.mutateAsync(cleanData as CreateProductFormData);
-        router.push(`/products/${newProduct._id}`);
+        targetId = newProduct._id;
       }
+
+      // Photos can only be uploaded once the product has an id, so this runs
+      // after the save rather than as part of it. A failure leaves a perfectly
+      // good product behind — say so and stay put rather than navigating away
+      // and losing the message.
+      const uploaded = await uploadPendingImages(targetId);
+      if (!uploaded) return;
+
+      router.push(`/products/${targetId}`);
     } catch {
       // Error handled by mutation state
     }
+  };
+
+  /**
+   * Uploads staged photos one at a time. Sequential, not parallel: the server
+   * resizes each image with sharp, and a burst of concurrent uploads from a
+   * phone camera is a memory spike on the box for no gain in wall-clock time.
+   */
+  const uploadPendingImages = async (targetId: string): Promise<boolean> => {
+    if (pendingImages.length === 0) return true;
+
+    setImageError(null);
+    const alreadyHasImages = (product?.images?.length ?? 0) > 0;
+
+    for (const [index, file] of pendingImages.entries()) {
+      try {
+        await uploadImageMutation.mutateAsync({
+          productId: targetId,
+          file,
+          isPrimary: !alreadyHasImages && index === 0,
+        });
+      } catch (cause) {
+        const reason = cause instanceof Error ? cause.message : 'the upload failed';
+        setImageError(
+          `The product was saved, but "${file.name}" could not be uploaded (${reason}). ` +
+            'Remaining photos were not uploaded — retry below, or add them from the product page.'
+        );
+        // Drop the ones that already landed so a retry does not duplicate them.
+        setPendingImages(pendingImages.slice(index));
+        return false;
+      }
+    }
+
+    setPendingImages([]);
+    return true;
   };
 
   // Tag management
@@ -274,6 +334,14 @@ function ProductForm({ mode, productId }: ProductFormProps) {
           </Alert>
         )}
 
+        {/* The product saved but a photo did not — a partial success, not a
+            failure, so it is worded so the user does not re-create the product. */}
+        {imageError && (
+          <Alert variant="warning" title="Product saved, photo upload failed">
+            {imageError}
+          </Alert>
+        )}
+
         {/* Basic Information */}
         <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -338,12 +406,44 @@ function ProductForm({ mode, productId }: ProductFormProps) {
               {...register('model')}
             />
 
-            <Input
-              label="Barcode (Optional)"
-              placeholder="e.g., 123456789012"
-              error={errors.barcode?.message}
-              {...register('barcode')}
-            />
+            <div>
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Input
+                    label="Barcode (Optional)"
+                    placeholder="e.g., 123456789012"
+                    error={errors.barcode?.message}
+                    {...register('barcode')}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScannerOpen((open) => !open)}
+                  disabled={isSubmitting}
+                  className="mb-px inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                  aria-expanded={scannerOpen}
+                >
+                  <ScanLine className="w-4 h-4" />
+                  {scannerOpen ? 'Close' : 'Scan'}
+                </button>
+              </div>
+
+              {scannerOpen && (
+                <div className="mt-3">
+                  <BarcodeScanner
+                    onScan={(value) => {
+                      // One product has one barcode, so a read replaces the
+                      // field and closes the scanner rather than staying open
+                      // and overwriting on the next stray read.
+                      setValue('barcode', value, { shouldValidate: true, shouldDirty: true });
+                      setScannerOpen(false);
+                    }}
+                    onClose={() => setScannerOpen(false)}
+                    hint="Hold the product barcode inside the frame. The code fills the field and the scanner closes."
+                  />
+                </div>
+              )}
+            </div>
 
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -358,6 +458,15 @@ function ProductForm({ mode, productId }: ProductFormProps) {
               {errors.description?.message && (
                 <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
               )}
+            </div>
+
+            <div className="md:col-span-2">
+              <ProductImagePicker
+                files={pendingImages}
+                onChange={setPendingImages}
+                existingCount={product?.images?.length ?? 0}
+                disabled={isSubmitting}
+              />
             </div>
           </div>
         </div>

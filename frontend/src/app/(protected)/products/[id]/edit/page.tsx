@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Save, TrendingUp, X, Plus, ImageIcon } from 'lucide-react';
+import { ArrowLeft, Save, TrendingUp, X, Plus, ImageIcon, ScanLine } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useProduct, useUpdateProduct } from '@/hooks/useProducts';
 import { useActiveCategories } from '@/hooks/useCategories';
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { ProductImageEditor } from '@/components/products';
+import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
 import { updateProductSchema, type UpdateProductFormData } from '@/utils/validators/product';
 import { calculateProfitMargin } from '@/types/product';
 
@@ -36,6 +37,12 @@ export default function EditProductPage() {
 
   // Mutation
   const updateMutation = useUpdateProduct();
+
+  // Scanning fills the barcode field rather than the user reading digits off a
+  // label and typing them. A misread digit here is baked into the catalog, so
+  // every later scan of the real product misses.
+  const [scannerOpen, setScannerOpen] = React.useState(false);
+  const isSubmitting = updateMutation.isPending;
 
   // Form setup
   const {
@@ -123,7 +130,10 @@ export default function EditProductPage() {
         description: data.description || undefined,
         brand: data.brand || undefined,
         model: data.model || undefined,
-        barcode: data.barcode || undefined,
+        // '' rather than undefined: JSON.stringify drops undefined keys, so
+        // `|| undefined` made a cleared barcode unsendable and the old value
+        // survived every save. The model turns '' into an $unset.
+        barcode: data.barcode ?? '',
         tags: data.tags && data.tags.length > 0 ? data.tags : undefined,
         specifications: data.specifications ? {
           ...data.specifications,
@@ -369,12 +379,44 @@ export default function EditProductPage() {
               {...register('model')}
             />
 
-            <Input
-              label="Barcode"
-              placeholder="e.g., 123456789012"
-              error={errors.barcode?.message}
-              {...register('barcode')}
-            />
+            <div>
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Input
+                    label="Barcode"
+                    placeholder="e.g., 123456789012"
+                    error={errors.barcode?.message}
+                    {...register('barcode')}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScannerOpen((open) => !open)}
+                  disabled={isSubmitting}
+                  className="mb-px inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                  aria-expanded={scannerOpen}
+                >
+                  <ScanLine className="w-4 h-4" />
+                  {scannerOpen ? 'Close' : 'Scan'}
+                </button>
+              </div>
+
+              {scannerOpen && (
+                <div className="mt-3">
+                  <BarcodeScanner
+                    onScan={(value) => {
+                      // One product has one barcode, so a read replaces the
+                      // field and closes the scanner rather than staying open
+                      // and overwriting on the next stray read.
+                      setValue('barcode', value, { shouldValidate: true, shouldDirty: true });
+                      setScannerOpen(false);
+                    }}
+                    onClose={() => setScannerOpen(false)}
+                    hint="Hold the product barcode inside the frame. The code fills the field and the scanner closes."
+                  />
+                </div>
+              )}
+            </div>
 
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

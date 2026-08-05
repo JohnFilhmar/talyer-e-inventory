@@ -6,6 +6,35 @@ import CacheUtil from '../utils/cache.js';
 import { CACHE_TTL, PAGINATION } from '../config/constants.js';
 
 /**
+ * Find a product already holding this barcode, if any.
+ *
+ * The unique partial index on Product is what actually guarantees uniqueness;
+ * this lookup exists to name the offending product in the error, because
+ * "Barcode already exists" leaves an admin hunting through the catalog for it.
+ *
+ * A blank barcode is not a conflict — barcode is optional, and blanks are
+ * normalised to absent so they never collide with each other.
+ *
+ * @param {string|null|undefined} barcode
+ * @param {string} [excludeId] Product to ignore, so an edit does not conflict with itself.
+ * @returns {Promise<Object|null>}
+ */
+const findBarcodeConflict = async (barcode, excludeId) => {
+  if (barcode === null || barcode === undefined) return null;
+
+  const trimmed = String(barcode).trim();
+  if (trimmed === '') return null;
+
+  const query = { barcode: trimmed };
+  if (excludeId) query._id = { $ne: excludeId };
+
+  return Product.findOne(query).select('sku name').lean();
+};
+
+const barcodeConflictMessage = (product) =>
+  `Barcode already assigned to ${product.name} (${product.sku})`;
+
+/**
  * @desc    Get all products with filters
  * @route   GET /api/products
  * @access  Private
@@ -177,6 +206,11 @@ export const createProduct = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 404, 'Category not found');
   }
 
+  const barcodeConflict = await findBarcodeConflict(barcode);
+  if (barcodeConflict) {
+    return ApiResponse.error(res, 400, barcodeConflictMessage(barcodeConflict));
+  }
+
   try {
     // Create product
     const product = await Product.create({
@@ -234,12 +268,34 @@ export const updateProduct = asyncHandler(async (req, res) => {
     }
   }
 
-  // Update product
-  product = await Product.findByIdAndUpdate(
-    id,
-    req.body,
-    { new: true, runValidators: true }
-  ).populate('category', 'name code');
+  // Excluding this product is what makes a no-op save work — re-submitting the
+  // edit form without touching the barcode must not conflict with itself.
+  const barcodeConflict = await findBarcodeConflict(req.body.barcode, id);
+  if (barcodeConflict) {
+    return ApiResponse.error(res, 400, barcodeConflictMessage(barcodeConflict));
+  }
+
+  try {
+    // Update product
+    product = await Product.findByIdAndUpdate(
+      id,
+      req.body,
+      { new: true, runValidators: true }
+    ).populate('category', 'name code');
+  } catch (error) {
+    // The check above loses to a concurrent write; the unique index does not.
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || error.keyValue || {})[0] || 'field';
+      return ApiResponse.error(
+        res,
+        400,
+        field === 'barcode'
+          ? 'Another product already uses this barcode'
+          : `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`
+      );
+    }
+    throw error;
+  }
 
   // Invalidate cache
   await CacheUtil.del(CacheUtil.generateKey('product', id));
