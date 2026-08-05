@@ -1,5 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { salesService } from '@/lib/services/salesService';
+import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
+import { isOffline } from '@/lib/offline/cache';
+import { enqueueSalesOrder, type SaleOutboxEntry } from '@/lib/offline/outbox';
+import { isNetworkError } from '@/lib/apiClient';
 import type {
   SalesOrder,
   SalesStats,
@@ -33,7 +37,7 @@ export const salesKeys = {
 export function useSalesOrders(params: SalesOrderListParams = {}) {
   return useQuery<PaginatedResponse<SalesOrder>, Error>({
     queryKey: salesKeys.list(params),
-    queryFn: () => salesService.getAll(params),
+    queryFn: () => withOfflinePaginatedList('salesOrders', () => salesService.getAll(params)),
     staleTime: 30 * 1000, // 30 seconds
   });
 }
@@ -91,13 +95,90 @@ export function useSalesInvoice(id: string | undefined) {
 // ============ Sales Order Mutations ============
 
 /**
+ * Builds a placeholder `SalesOrder` for a create that was queued to the
+ * offline outbox instead of reaching the API. The real `orderNumber` and a
+ * real `_id` are only assigned server-side, at insert — they do not exist
+ * yet, so this must not look like a confirmed order:
+ *  - `_id` is prefixed `outbox-`, which can never collide with (or be
+ *    mistaken for) a real Mongo ObjectId.
+ *  - `orderNumber` is the literal string `'Pending sync'` rather than a
+ *    fabricated `SO-YYYY-NNNNNN`-shaped value — nobody should read a made-up
+ *    order number aloud to a customer.
+ *  - `status` and the payment `status` are forced to `'pending'`.
+ * Line pricing (`unitPrice`, `total`, `subtotal`, tax) is left at 0 because
+ * the outbox only has the branch-agnostic request payload, not the
+ * branch-specific `Stock.sellingPrice` the server prices from — that price
+ * is only known once the order actually reaches the server.
+ */
+function buildOptimisticSalesOrder(entry: SaleOutboxEntry): SalesOrder {
+  const { payload } = entry;
+  const createdAt = new Date(entry.createdAt).toISOString();
+
+  return {
+    _id: `outbox-${entry.id}`,
+    orderNumber: 'Pending sync',
+    branch: payload.branch,
+    customer: payload.customer,
+    items: payload.items.map((item, index) => ({
+      _id: `outbox-item-${index}`,
+      product: item.product,
+      sku: '',
+      name: '',
+      quantity: item.quantity,
+      unitPrice: 0,
+      discount: item.discount ?? 0,
+      total: 0,
+    })),
+    subtotal: 0,
+    tax: { rate: payload.taxRate ?? 0, amount: 0 },
+    discount: payload.discount ?? 0,
+    total: 0,
+    payment: {
+      method: payload.paymentMethod,
+      amountPaid: payload.amountPaid ?? 0,
+      change: 0,
+      status: 'pending',
+    },
+    status: 'pending',
+    processedBy: 'offline',
+    notes: payload.notes,
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
+/**
  * Hook to create a new sales order
+ *
+ * Offline-aware: when the device has no connection, the create is queued to
+ * the outbox (outbox.ts) and this resolves with a local placeholder instead
+ * of calling the API — see `buildOptimisticSalesOrder`. A request that dies
+ * mid-flight (the network drops between the preflight `isOffline()` check
+ * and the request settling) gets the same treatment via the `catch`: only
+ * `isNetworkError` failures are queued, so a real rejection (insufficient
+ * stock, validation, a genuine 5xx) still reaches the caller as a rejected
+ * mutation rather than being silently swallowed into the outbox.
  */
 export function useCreateSalesOrder() {
   const queryClient = useQueryClient();
 
   return useMutation<SalesOrder, Error, CreateSalesOrderPayload>({
-    mutationFn: (payload) => salesService.create(payload),
+    mutationFn: async (payload) => {
+      if (isOffline()) {
+        const entry = await enqueueSalesOrder(payload);
+        return buildOptimisticSalesOrder(entry);
+      }
+
+      try {
+        return await salesService.create(payload);
+      } catch (error) {
+        if (isNetworkError(error)) {
+          const entry = await enqueueSalesOrder(payload);
+          return buildOptimisticSalesOrder(entry);
+        }
+        throw error;
+      }
+    },
     onSuccess: (newOrder) => {
       // Invalidate sales lists
       queryClient.invalidateQueries({ queryKey: salesKeys.lists() });

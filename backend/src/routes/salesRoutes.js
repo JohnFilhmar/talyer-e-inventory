@@ -20,6 +20,10 @@ const router = express.Router();
 
 // Validation rules
 const createOrderValidation = [
+  // Optional idempotency key from an offline device replaying a queued order.
+  // Opaque to the server — it only ever compares it for equality.
+  body('clientRequestId').optional().isString().isLength({ min: 8, max: 100 })
+    .withMessage('clientRequestId must be an opaque string of 8-100 characters'),
   body('branch').notEmpty().isMongoId().withMessage('Valid branch ID is required'),
   body('customer.name').trim().notEmpty().withMessage('Customer name is required')
     .isLength({ max: 100 }).withMessage('Customer name cannot exceed 100 characters'),

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import withSerwistInit from "@serwist/next";
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -40,4 +41,12 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const withSerwist = withSerwistInit({
+  swSrc: 'src/app/sw.ts',
+  swDest: 'public/sw.js',
+  // The service worker aggressively caches; running it in `next dev` makes
+  // every code change look like it did not apply.
+  disable: isDev,
+});
+
+export default withSerwist(nextConfig);

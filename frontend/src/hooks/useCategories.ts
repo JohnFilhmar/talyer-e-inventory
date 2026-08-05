@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { categoryService } from '@/lib/services/categoryService';
+import { withOfflineList } from '@/lib/offline/offlineQuery';
 import type {
   Category,
   CategoryListParams,
@@ -27,7 +28,7 @@ export const categoryKeys = {
 export function useCategories(params: CategoryListParams = {}) {
   return useQuery<Category[], Error>({
     queryKey: categoryKeys.list(params),
-    queryFn: () => categoryService.getAll(params),
+    queryFn: () => withOfflineList('categories', () => categoryService.getAll(params)),
     staleTime: 60 * 1000, // 1 minute
   });
 }

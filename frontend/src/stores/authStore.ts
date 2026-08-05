@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { User } from '@/types/auth';
 import { authService } from '@/lib/services/authService';
 import { clearTokens, hasAccessToken } from '@/lib/tokenStorage';
+import { isNetworkError } from '@/lib/apiClient';
+import { clearOfflineCache } from '@/lib/offline/cache';
 
 /**
  * Auth store state interface
@@ -128,6 +130,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   /**
    * Logout user
+   *
+   * This is a shared-tablet app: the offline IndexedDB mirror (Task 4) must
+   * not survive into the next person's session, or they would see the
+   * previous user's branch data and order history. `clearOfflineCache()`
+   * only touches indexedDB, so it runs in `finally` unconditionally — even
+   * when `authService.logout()` itself rejects because the device is
+   * offline, tokens, in-memory user state, and the local mirror are still
+   * wiped. Only the server-side session/refresh-cookie invalidation is
+   * skipped in that case; it does not block a local, client-only logout.
    */
   logout: async () => {
     const { setUser, setLoading } = get();
@@ -139,6 +150,16 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     } finally {
       clearTokens();
       setUser(null);
+      // Best-effort: an indexedDB failure (quota, private-mode restrictions,
+      // a blocked upgrade) must not stop token/user cleanup from completing
+      // or leave isLoading stuck at true.
+      try {
+        await clearOfflineCache();
+      } catch {
+        // Rare (quota errors, a blocked upgrade, private-mode restrictions
+        // in older browsers) and nothing actionable to do about it here —
+        // let logout finish rather than strand the UI in a loading state.
+      }
       setLoading(false);
     }
   },
@@ -183,10 +204,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         clearTokens();
         setUser(null);
       }
-    } catch {
-      // No valid session, user needs to login
-      clearTokens();
-      setUser(null);
+    } catch (error) {
+      // Offline at startup: keep the stored token and any cached user so the
+      // protected layout does not bounce to /login. Only a real rejection
+      // from the server should end the session.
+      if (!isNetworkError(error)) {
+        clearTokens();
+        setUser(null);
+      }
     } finally {
       setLoading(false);
       set({ isInitialized: true });

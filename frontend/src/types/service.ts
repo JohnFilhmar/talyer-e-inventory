@@ -241,6 +241,12 @@ export interface CreateServiceOrderPayload {
   priority?: ServicePriority;
   scheduledAt?: string;
   notes?: string;
+  /**
+   * Client-generated idempotency key (UUID). Only set when this create is
+   * replayed from the offline outbox — see lib/offline/sync.ts. Letting the
+   * server recognise a retried request is what makes blind replay safe.
+   */
+  clientRequestId?: string;
 }
 
 /**

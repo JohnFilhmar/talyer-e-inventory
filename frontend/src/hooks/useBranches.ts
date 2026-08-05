@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { branchService } from '@/lib/services/branchService';
 import { userService } from '@/lib/services/userService';
+import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
 import type {
   Branch,
   BranchStats,
@@ -37,7 +38,7 @@ export const userKeys = {
 export function useBranches(params: BranchListParams = {}) {
   return useQuery<PaginatedResponse<Branch>, Error>({
     queryKey: branchKeys.list(params),
-    queryFn: () => branchService.getAll(params),
+    queryFn: () => withOfflinePaginatedList('branches', () => branchService.getAll(params)),
     staleTime: 30 * 1000, // 30 seconds
   });
 }

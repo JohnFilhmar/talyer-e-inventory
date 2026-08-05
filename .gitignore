@@ -84,3 +84,5 @@ dump.rdb
 
 # Superpowers scratch
 .superpowers/
+# Agent worktrees (created by tooling, never committed)
+.claude/
