@@ -72,6 +72,39 @@ export async function withOfflineScopedList<T extends OfflineRecord>(
 }
 
 /**
+ * Paginated counterpart of `withOfflineScopedList`, for a read that is a
+ * server-computed *subset* of a store — low stock being the case here, which
+ * the server derives as `quantity <= reorderPoint` over the same stock rows
+ * the mirror already holds.
+ *
+ * The predicate reproduces that derivation client-side on the fallback path
+ * only; the live response is already filtered by the server and is returned
+ * untouched. Keeping the predicate in the caller means the rule lives next to
+ * the hook it belongs to rather than being smuggled into this helper.
+ *
+ * `pagination` is undefined on fallback for the same reason as the unscoped
+ * paginated helper: consumers read it optionally, so an absent block degrades
+ * to "no page controls" rather than throwing.
+ */
+export async function withOfflineScopedPaginatedList<T extends OfflineRecord>(
+  store: OfflineStoreName,
+  queryFn: () => Promise<PaginatedResponse<T>>,
+  matches: (row: T) => boolean
+): Promise<PaginatedResponse<T>> {
+  try {
+    const response = await queryFn();
+    await cacheList(store, response.data ?? []);
+    return response;
+  } catch (error) {
+    if (isNetworkError(error)) {
+      const cached = await readCachedList<T>(store);
+      return { data: cached.filter(matches) } as PaginatedResponse<T>;
+    }
+    throw error;
+  }
+}
+
+/**
  * For hooks whose service method resolves `ApiResponse.paginate`'s
  * `{ data, pagination }` shape. On success, mirrors `data` into `store` and
  * returns the response unchanged (pagination included). On a network error,

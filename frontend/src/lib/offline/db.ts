@@ -32,6 +32,7 @@ export const OFFLINE_STORE_NAMES = [
   'salesOrders',
   'serviceOrders',
   'branches',
+  'stockTransfers',
 ] as const;
 
 export type OfflineStoreName = (typeof OFFLINE_STORE_NAMES)[number];
@@ -52,7 +53,12 @@ interface MetaRecord {
 }
 
 const DB_NAME = 'talyer-offline';
-const DB_VERSION = 2;
+// Bump whenever a store is added. The upgrade handler creates any store
+// missing from OFFLINE_STORE_NAMES, but it only runs when this number rises —
+// leave it and an existing browser keeps its old schema and every read of the
+// new store throws NotFoundError.
+// v2 added the outbox; v3 added stockTransfers.
+const DB_VERSION = 3;
 const META_STORE = 'meta';
 
 /**

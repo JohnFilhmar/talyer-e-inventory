@@ -1,6 +1,10 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { stockService } from '@/lib/services/stockService';
-import { withOfflinePaginatedList, withOfflineScopedList } from '@/lib/offline/offlineQuery';
+import {
+  withOfflinePaginatedList,
+  withOfflineScopedList,
+  withOfflineScopedPaginatedList,
+} from '@/lib/offline/offlineQuery';
 import type {
   Stock,
   StockTransfer,
@@ -110,7 +114,17 @@ export function useStockByProduct(productId: string | undefined) {
 export function useLowStock(params: Pick<StockListParams, 'page' | 'limit'> = {}) {
   return useQuery<PaginatedResponse<Stock>, Error>({
     queryKey: [...stockKeys.lowStock(), params] as const,
-    queryFn: () => stockService.getLowStock(params),
+    // Low stock is not its own dataset — the server derives it from the same
+    // stock rows the mirror already holds, as `quantity <= reorderPoint`. The
+    // fallback reproduces exactly that so an offline device shows the same set
+    // rather than an empty alert, which would read as "nothing is low" and is
+    // the more dangerous failure.
+    queryFn: () =>
+      withOfflineScopedPaginatedList<Stock>(
+        'stock',
+        () => stockService.getLowStock(params),
+        (row) => row.quantity <= row.reorderPoint
+      ),
     staleTime: 60 * 1000, // 1 minute
   });
 }
@@ -191,7 +205,8 @@ export function useAdjustStockById() {
 export function useTransfers(params: TransferListParams = {}) {
   return useQuery<PaginatedResponse<StockTransfer>, Error>({
     queryKey: stockKeys.transferList(params),
-    queryFn: () => stockService.getTransfers(params),
+    queryFn: () =>
+      withOfflinePaginatedList('stockTransfers', () => stockService.getTransfers(params)),
     staleTime: 30 * 1000,
   });
 }
