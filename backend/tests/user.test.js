@@ -494,6 +494,133 @@ describe('User Management API', () => {
 
       expect(res.status).toBe(404);
     });
+
+    // ==========================================
+    // Regression coverage: editing an admin sends
+    // branch: null (see UserFormModal.tsx) to mean "no branch". Before the
+    // fix, express-validator's `.optional()` only skips `undefined`, so an
+    // explicit `null` fell through to `.isMongoId()` and was rejected with
+    // "Invalid branch ID" even though nothing about the branch was invalid.
+    // ==========================================
+    describe('branch: null on update (admin has no branch)', () => {
+      it('should update an admin\'s name and email when branch is sent as null', async () => {
+        const targetAdmin = await User.create({
+          name: 'Target Admin',
+          email: 'targetadmin@test.com',
+          password: 'password123',
+          role: 'admin',
+          isActive: true,
+        });
+
+        const res = await request(app)
+          .put(`/api/users/${targetAdmin._id}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            name: 'Renamed Admin',
+            email: 'renamedadmin@test.com',
+            branch: null,
+          });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.name).toBe('Renamed Admin');
+        expect(res.body.data.email).toBe('renamedadmin@test.com');
+      });
+
+      it('should leave the admin\'s branch unset after the update', async () => {
+        const targetAdmin = await User.create({
+          name: 'Target Admin',
+          email: 'targetadmin2@test.com',
+          password: 'password123',
+          role: 'admin',
+          isActive: true,
+        });
+
+        const res = await request(app)
+          .put(`/api/users/${targetAdmin._id}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            name: 'Renamed Admin 2',
+            branch: null,
+          });
+
+        expect(res.status).toBe(200);
+
+        const persisted = await User.findById(targetAdmin._id);
+        expect(persisted.branch).toBeFalsy();
+      });
+
+      it('should clear a previously-assigned branch when demoting a salesperson to admin with branch: null', async () => {
+        // updateTestUser is a salesperson with testBranch already assigned
+        const res = await request(app)
+          .put(`/api/users/${updateTestUser._id}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            role: 'admin',
+            branch: null,
+          });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.role).toBe('admin');
+
+        const persisted = await User.findById(updateTestUser._id);
+        expect(persisted.branch).toBeFalsy();
+      });
+
+      it('should allow promoting an admin to salesperson with a valid branch id', async () => {
+        const targetAdmin = await User.create({
+          name: 'Target Admin',
+          email: 'targetadmin3@test.com',
+          password: 'password123',
+          role: 'admin',
+          isActive: true,
+        });
+
+        const res = await request(app)
+          .put(`/api/users/${targetAdmin._id}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            role: 'salesperson',
+            branch: testBranch._id,
+          });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.role).toBe('salesperson');
+        expect(res.body.data.branch._id).toBe(testBranch._id.toString());
+      });
+
+      it('should reject changing a salesperson to mechanic with branch: null when they already have a branch', async () => {
+        // updateTestUser is a salesperson with testBranch already assigned.
+        // The controller's existing "branch required for salesperson/mechanic"
+        // guard treats an explicit null the same as "no branch" for the final
+        // role, so this is rejected rather than silently wiping the branch.
+        const res = await request(app)
+          .put(`/api/users/${updateTestUser._id}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            role: 'mechanic',
+            branch: null,
+          });
+
+        expect(res.status).toBe(400);
+        expect(res.body.message).toContain('Branch is required');
+
+        const persisted = await User.findById(updateTestUser._id);
+        expect(persisted.branch.toString()).toBe(testBranch._id.toString());
+      });
+
+      it('should still reject an invalid (non-ObjectId) branch value', async () => {
+        const res = await request(app)
+          .put(`/api/users/${updateTestUser._id}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            branch: 'not-an-id',
+          });
+
+        expect(res.status).toBe(400);
+        expect(res.body.errors).toBeDefined();
+        expect(res.body.errors.some((e) => e.field === 'branch')).toBe(true);
+      });
+    });
   });
 
   // ==========================================
