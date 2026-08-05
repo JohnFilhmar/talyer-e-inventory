@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { User } from '@/types/auth';
 import { authService } from '@/lib/services/authService';
 import { clearTokens, hasAccessToken } from '@/lib/tokenStorage';
+import { isNetworkError } from '@/lib/apiClient';
 
 /**
  * Auth store state interface
@@ -183,10 +184,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         clearTokens();
         setUser(null);
       }
-    } catch {
-      // No valid session, user needs to login
-      clearTokens();
-      setUser(null);
+    } catch (error) {
+      // Offline at startup: keep the stored token and any cached user so the
+      // protected layout does not bounce to /login. Only a real rejection
+      // from the server should end the session.
+      if (!isNetworkError(error)) {
+        clearTokens();
+        setUser(null);
+      }
     } finally {
       setLoading(false);
       set({ isInitialized: true });

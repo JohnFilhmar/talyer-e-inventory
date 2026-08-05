@@ -23,12 +23,19 @@ const apiClient = axios.create({
 // Flag to prevent multiple simultaneous refresh attempts
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];
+let refreshErrorSubscribers: ((error: unknown) => void)[] = [];
 
 /**
- * Subscribe to token refresh completion
+ * Subscribe to token refresh completion. `onError` fires instead of
+ * `onSuccess` if the in-flight refresh fails (network error or a real 401),
+ * so a queued request settles either way instead of hanging forever.
  */
-const subscribeTokenRefresh = (callback: (token: string) => void): void => {
-  refreshSubscribers.push(callback);
+const subscribeTokenRefresh = (
+  onSuccess: (token: string) => void,
+  onError: (error: unknown) => void
+): void => {
+  refreshSubscribers.push(onSuccess);
+  refreshErrorSubscribers.push(onError);
 };
 
 /**
@@ -37,6 +44,17 @@ const subscribeTokenRefresh = (callback: (token: string) => void): void => {
 const onTokenRefreshed = (token: string): void => {
   refreshSubscribers.forEach((callback) => callback(token));
   refreshSubscribers = [];
+  refreshErrorSubscribers = [];
+};
+
+/**
+ * Notify all queued subscribers that the refresh attempt failed, so they
+ * reject instead of waiting on a resolution that will never arrive.
+ */
+const onTokenRefreshFailed = (error: unknown): void => {
+  refreshErrorSubscribers.forEach((callback) => callback(error));
+  refreshSubscribers = [];
+  refreshErrorSubscribers = [];
 };
 
 /**
@@ -72,6 +90,23 @@ const AUTH_ENDPOINTS = [
 const isAuthEndpoint = (url?: string): boolean => {
   if (!url) return false;
   return AUTH_ENDPOINTS.some((endpoint) => url.includes(endpoint));
+};
+
+/**
+ * True when a request failed because the network was unreachable rather than
+ * because the server rejected it. Axios reports these with no `response` and
+ * a code of ERR_NETWORK (or ECONNABORTED on timeout). Treating them as auth
+ * failures is what previously logged users out on a wifi drop.
+ */
+export const isNetworkError = (error: unknown): boolean => {
+  const axiosError = error as AxiosError;
+  if (!axiosError || typeof axiosError !== 'object') return false;
+  if (axiosError.response) return false;
+  return (
+    axiosError.code === 'ERR_NETWORK' ||
+    axiosError.code === 'ECONNABORTED' ||
+    (typeof navigator !== 'undefined' && navigator.onLine === false)
+  );
 };
 
 /**
@@ -111,13 +146,16 @@ apiClient.interceptors.response.use(
 
       // If already refreshing, queue this request
       if (isRefreshing) {
-        return new Promise((resolve) => {
-          subscribeTokenRefresh((token: string) => {
-            if (originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-            }
-            resolve(apiClient(originalRequest));
-          });
+        return new Promise((resolve, reject) => {
+          subscribeTokenRefresh(
+            (token: string) => {
+              if (originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${token}`;
+              }
+              resolve(apiClient(originalRequest));
+            },
+            (err: unknown) => reject(err)
+          );
         });
       }
 
@@ -143,14 +181,18 @@ apiClient.interceptors.response.use(
           return apiClient(originalRequest);
         }
       } catch (refreshError) {
-        // Refresh failed - clear tokens and redirect to login
-        clearTokens();
-        
-        // Only redirect if we're in browser context
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+        // A network failure is not an authentication failure. Keep the tokens
+        // and the session so the app can keep serving cached data offline;
+        // the request itself still rejects and the caller falls back.
+        if (!isNetworkError(refreshError)) {
+          clearTokens();
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
         }
-        
+        // Settle any requests queued behind this refresh attempt - they
+        // would otherwise wait forever on a token that is never coming.
+        onTokenRefreshFailed(refreshError);
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
