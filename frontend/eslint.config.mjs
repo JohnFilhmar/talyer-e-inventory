@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated service worker bundle. It is gitignored, so a `git checkout`
+    // never removes it — build once, switch branches, and lint would otherwise
+    // report ~90 problems in a file nobody wrote.
+    "public/sw.js",
+    "public/sw.js.map",
+    "public/swe-worker-*.js",
   ]),
 ]);
 
