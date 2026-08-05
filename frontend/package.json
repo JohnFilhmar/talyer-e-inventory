@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.5.7",
+    "@serwist/next": "^9.5.12",
     "@tanstack/react-query": "^5.101.4",
     "axios": "^1.19.0",
     "lucide-react": "^0.563.0",
@@ -17,6 +18,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "^7.83.0",
+    "serwist": "^9.5.12",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
