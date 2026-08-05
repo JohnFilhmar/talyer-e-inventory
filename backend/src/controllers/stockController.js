@@ -59,7 +59,7 @@ export const getAllStock = asyncHandler(async (req, res) => {
 
   const [stockRecords, total] = await Promise.all([
     Stock.find(query)
-      .populate('product', 'sku name brand images')
+      .populate('product', 'sku name brand barcode images')
       .populate('branch', 'name code')
       .populate('supplier', 'name code')
       .sort({ 'branch.name': 1, 'product.name': 1 })
@@ -121,7 +121,7 @@ export const getBranchStock = asyncHandler(async (req, res) => {
     Stock.find(query)
       .populate({
         path: 'product',
-        select: 'sku name brand category images',
+        select: 'sku name brand barcode category images',
         populate: { path: 'category', select: 'name code' }
       })
       .populate('supplier', 'name code')

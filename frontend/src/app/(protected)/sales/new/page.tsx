@@ -17,6 +17,7 @@ import {
   Mail,
   MapPin,
   Calculator,
+  Camera,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useBranches } from '@/hooks/useBranches';
@@ -25,6 +26,7 @@ import { useCreateSalesOrder } from '@/hooks/useSales';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
+import { BarcodeScanner } from '@/components/sales/BarcodeScanner';
 import {
   PAYMENT_METHOD_OPTIONS,
   calculateOrderTotals,
@@ -90,6 +92,10 @@ export default function NewSalePage() {
   
   // State for product search
   const [productSearch, setProductSearch] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
+  // Last scan outcome, shown under the scanner. Without it a scan that matches
+  // nothing is completely silent and reads as the camera being broken.
+  const [scanFeedback, setScanFeedback] = useState<string | null>(null);
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   
   // Local state for order items (with display info)
@@ -192,7 +198,8 @@ export default function NewSalePage() {
 
       return (
         product.name.toLowerCase().includes(searchLower) ||
-        product.sku.toLowerCase().includes(searchLower)
+        product.sku.toLowerCase().includes(searchLower) ||
+        (product.barcode?.toLowerCase().includes(searchLower) ?? false)
       );
     }).slice(0, 10); // Limit to 10 results
   }, [branchStock, productSearch]);
@@ -234,6 +241,31 @@ export default function NewSalePage() {
     setProductSearch('');
     setShowProductDropdown(false);
   }, [orderItems]);
+
+  // Resolve a scanned barcode against the branch stock already loaded for the
+  // picker. That list comes from the offline mirror when there is no
+  // connection, so scanning keeps working offline — which is the point.
+  const handleScan = useCallback((code: string) => {
+    const match = branchStock?.find(
+      (stock) =>
+        isStockProductPopulated(stock.product) &&
+        stock.product.barcode &&
+        stock.product.barcode.trim() === code
+    );
+
+    if (!match || !isStockProductPopulated(match.product)) {
+      setScanFeedback(`No product at this branch has barcode ${code}.`);
+      return;
+    }
+
+    if (match.available <= 0) {
+      setScanFeedback(`${match.product.name} is out of stock at this branch.`);
+      return;
+    }
+
+    handleAddProduct(match);
+    setScanFeedback(`Added ${match.product.name}.`);
+  }, [branchStock, handleAddProduct]);
 
   // Handle quantity change
   const handleQuantityChange = useCallback((index: number, delta: number) => {
@@ -391,13 +423,44 @@ export default function NewSalePage() {
                 Order Items
               </h3>
 
+              {/* Scan / search toggle. Scanning resolves against the same
+                  branch stock the picker already holds, so it works offline. */}
+              {activeBranchId && (
+                <div className="mb-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setScannerOpen((open) => !open);
+                      setScanFeedback(null);
+                    }}
+                    disabled={stockLoading}
+                  >
+                    <Camera className="w-4 h-4 mr-1" />
+                    {scannerOpen ? 'Close scanner' : 'Scan barcode'}
+                  </Button>
+                </div>
+              )}
+
+              {activeBranchId && scannerOpen && (
+                <div className="mb-4">
+                  <BarcodeScanner onScan={handleScan} onClose={() => setScannerOpen(false)} />
+                  {scanFeedback && (
+                    <p className="mt-2 text-sm text-black" role="status" aria-live="polite">
+                      {scanFeedback}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Product Search */}
               {activeBranchId ? (
                 <div className="relative mb-4">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Search products by name or SKU..."
+                    placeholder="Search products by name, SKU or barcode..."
                     value={productSearch}
                     onChange={(e) => {
                       setProductSearch(e.target.value);

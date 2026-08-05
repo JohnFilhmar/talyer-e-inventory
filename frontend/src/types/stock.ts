@@ -38,6 +38,12 @@ export interface StockProduct {
   _id: string;
   name: string;
   sku: string;
+  /**
+   * Optional — not every product is barcoded. Carried on stock reads so the
+   * scanner can resolve a scan against the offline mirror without a round
+   * trip, which is what lets scanning work with no connection.
+   */
+  barcode?: string;
   category?: ProductCategory;
   images?: Array<{ url: string; isPrimary: boolean }>;
   primaryImage?: string;
