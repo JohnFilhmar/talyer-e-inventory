@@ -180,6 +180,15 @@ apiClient.interceptors.response.use(
           }
           return apiClient(originalRequest);
         }
+
+        // A 2xx whose body carries no token still means no token. Without this
+        // throw, execution falls out of the try with nothing returned and
+        // nothing thrown: the catch never runs, onTokenRefreshFailed is never
+        // called, and every request queued behind this refresh waits forever.
+        // Reachable through anything that answers 200 with a body we did not
+        // send — a captive portal or an intercepting proxy being the realistic
+        // case, which is exactly the "network drop" this code exists to handle.
+        throw new Error('Refresh response did not contain an access token');
       } catch (refreshError) {
         // A network failure is not an authentication failure. Keep the tokens
         // and the session so the app can keep serving cached data offline;
