@@ -4,6 +4,8 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useOutboxQueue } from '@/hooks/useOutboxQueue';
+import { PendingBadge } from '@/components/offline/PendingBadge';
 import type { UserRole } from '@/types/auth';
 
 /**
@@ -150,6 +152,12 @@ export const Navbar: React.FC = () => {
   const { user, logout, hasRole } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  // Single poll for the whole navbar — feeds both the desktop icon-only
+  // badge and the mobile panel row below, rather than each mounting its own
+  // interval. See useOutboxQueue.ts for why this polls at all instead of
+  // subscribing to something (the outbox has no such hook to subscribe to).
+  const { entries: outboxEntries } = useOutboxQueue();
+  const pendingOutboxCount = outboxEntries?.length ?? null;
 
   // Filter nav items based on user role
   const accessibleNavItems = navItems.filter((item) => {
@@ -164,6 +172,8 @@ export const Navbar: React.FC = () => {
     }
     return pathname.startsWith(href);
   };
+
+  const isSyncActive = pathname.startsWith('/sync');
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -222,6 +232,11 @@ export const Navbar: React.FC = () => {
                   </Link>
                 );
               })}
+              {/* Offline sync queue — renders nothing when empty. See
+                  PendingBadge.tsx: the count badge is absolutely positioned
+                  on the icon's corner, not laid out inline, so an entry
+                  appearing/disappearing never changes this row's width. */}
+              <PendingBadge count={pendingOutboxCount} variant="icon" active={isSyncActive} />
             </div>
           </div>
 
@@ -335,8 +350,17 @@ export const Navbar: React.FC = () => {
                 {item.label}
               </Link>
             ))}
+            {/* Offline sync queue — same data as the desktop badge above,
+                reachable here too since the inline nav (and its badge) is
+                hidden below lg. Renders nothing when the queue is empty. */}
+            <PendingBadge
+              count={pendingOutboxCount}
+              variant="row"
+              active={isSyncActive}
+              onNavigate={() => setMobileMenuOpen(false)}
+            />
           </div>
-          
+
           {/* Mobile User Info */}
           <div className="px-4 py-3 border-t border-gray-200">
             <div className="flex items-center mb-3">
