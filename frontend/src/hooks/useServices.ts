@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { serviceService, ServiceInvoice } from '@/lib/services/serviceService';
 import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
+import { isOffline } from '@/lib/offline/cache';
+import { enqueueServiceOrder, type ServiceOutboxEntry } from '@/lib/offline/outbox';
+import { isNetworkError } from '@/lib/apiClient';
 import type {
   ServiceOrder,
   CreateServiceOrderPayload,
@@ -91,13 +94,76 @@ export function useMechanics() {
 // ============ Service Order Mutations ============
 
 /**
+ * Builds a placeholder `ServiceOrder` for a create that was queued to the
+ * offline outbox instead of reaching the API. Mirrors
+ * `buildOptimisticSalesOrder` in useSales.ts: the real `jobNumber` and a
+ * real `_id` are only assigned server-side, at insert, so this must not
+ * look like a confirmed job. `_id` is prefixed `outbox-` (can never collide
+ * with a real Mongo ObjectId), `jobNumber` is the literal `'Pending sync'`
+ * rather than a fabricated `JOB-YYYY-NNNNNN`-shaped value, and `status` /
+ * the payment `status` are forced to `'pending'`.
+ */
+function buildOptimisticServiceOrder(entry: ServiceOutboxEntry): ServiceOrder {
+  const { payload } = entry;
+  const createdAt = new Date(entry.createdAt).toISOString();
+
+  return {
+    _id: `outbox-${entry.id}`,
+    jobNumber: 'Pending sync',
+    branch: payload.branch,
+    customer: payload.customer,
+    vehicle: payload.vehicle,
+    assignedTo: payload.assignedTo,
+    description: payload.description,
+    diagnosis: payload.diagnosis,
+    partsUsed: [],
+    laborCost: payload.laborCost ?? 0,
+    otherCharges: payload.otherCharges ?? 0,
+    totalParts: 0,
+    totalAmount: 0,
+    priority: payload.priority ?? 'normal',
+    status: 'pending',
+    payment: {
+      amountPaid: 0,
+      status: 'pending',
+    },
+    scheduledAt: payload.scheduledAt,
+    createdBy: 'offline',
+    notes: payload.notes,
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
+/**
  * Hook to create a new service order
+ *
+ * Offline-aware in the same way as `useCreateSalesOrder`: a preemptive
+ * `isOffline()` check queues the create to the outbox and resolves with a
+ * local placeholder, and a request that dies mid-flight gets the same
+ * treatment via `isNetworkError` in the `catch` — any other failure still
+ * reaches the caller as a rejected mutation.
  */
 export function useCreateServiceOrder() {
   const queryClient = useQueryClient();
 
   return useMutation<ServiceOrder, Error, CreateServiceOrderPayload>({
-    mutationFn: (payload) => serviceService.create(payload),
+    mutationFn: async (payload) => {
+      if (isOffline()) {
+        const entry = await enqueueServiceOrder(payload);
+        return buildOptimisticServiceOrder(entry);
+      }
+
+      try {
+        return await serviceService.create(payload);
+      } catch (error) {
+        if (isNetworkError(error)) {
+          const entry = await enqueueServiceOrder(payload);
+          return buildOptimisticServiceOrder(entry);
+        }
+        throw error;
+      }
+    },
     onSuccess: () => {
       // Invalidate service lists
       queryClient.invalidateQueries({ queryKey: serviceKeys.lists() });

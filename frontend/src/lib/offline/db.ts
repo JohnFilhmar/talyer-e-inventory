@@ -52,8 +52,17 @@ interface MetaRecord {
 }
 
 const DB_NAME = 'talyer-offline';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const META_STORE = 'meta';
+
+/**
+ * The offline outbox (Task 6): queued sales/service order creations waiting
+ * to be replayed. Deliberately not part of `OFFLINE_STORE_NAMES` — those
+ * stores mirror server records keyed on `_id`, while an outbox entry has no
+ * server id yet (that's the point) and is keyed on its own generated `id`
+ * instead. Exported so outbox.ts doesn't hardcode the string a second time.
+ */
+export const OUTBOX_STORE = 'outbox';
 
 /**
  * Memoised handle to the open database. `null` means "indexedDB is not
@@ -87,6 +96,12 @@ export function openOfflineDb(): Promise<IDBPDatabase | null> {
         }
         if (!db.objectStoreNames.contains(META_STORE)) {
           db.createObjectStore(META_STORE, { keyPath: 'store' });
+        }
+        // Version 2. Guarded the same way as the version-1 stores above, so
+        // a browser that already has the version-1 database upgrades in
+        // place instead of losing its mirrored data.
+        if (!db.objectStoreNames.contains(OUTBOX_STORE)) {
+          db.createObjectStore(OUTBOX_STORE, { keyPath: 'id' });
         }
       },
     });
