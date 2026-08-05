@@ -178,18 +178,18 @@ export const SupplierList: React.FC<SupplierListProps> = ({
             )}
             
             {supplier.contact?.email && (
-              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                <Mail className="w-4 h-4" />
-                <a href={`mailto:${supplier.contact.email}`} className="hover:underline">
+              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 min-w-0">
+                <Mail className="w-4 h-4 shrink-0" />
+                <a href={`mailto:${supplier.contact.email}`} className="hover:underline truncate">
                   {supplier.contact.email}
                 </a>
               </div>
             )}
-            
+
             {supplier.contact?.phone && (
-              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                <Phone className="w-4 h-4" />
-                <a href={`tel:${supplier.contact.phone}`} className="hover:underline">
+              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 min-w-0">
+                <Phone className="w-4 h-4 shrink-0" />
+                <a href={`tel:${supplier.contact.phone}`} className="hover:underline truncate">
                   {supplier.contact.phone}
                 </a>
               </div>

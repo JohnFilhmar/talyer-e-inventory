@@ -16,11 +16,11 @@ interface ModalProps {
 }
 
 const sizeClasses = {
-  sm: 'max-w-sm',
-  md: 'max-w-md',
-  lg: 'max-w-lg',
-  xl: 'max-w-xl',
-  full: 'max-w-4xl',
+  sm: 'sm:max-w-sm',
+  md: 'sm:max-w-md',
+  lg: 'sm:max-w-lg',
+  xl: 'sm:max-w-xl',
+  full: 'sm:max-w-4xl',
 };
 
 /**
@@ -75,14 +75,14 @@ export const Modal: React.FC<ModalProps> = ({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm"
       onClick={handleOverlayClick}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? 'modal-title' : undefined}
     >
       <div
-        className={`relative w-full ${sizeClasses[size]} bg-white dark:bg-gray-900 rounded-xl shadow-xl transform transition-all max-h-[90vh] overflow-auto`}
+        className={`relative w-full h-full sm:h-auto ${sizeClasses[size]} bg-white dark:bg-gray-900 sm:rounded-xl shadow-xl transform transition-all max-h-full sm:max-h-[90vh] overflow-auto`}
       >
         {/* Optional title bar */}
         {(title || showCloseButton) && (

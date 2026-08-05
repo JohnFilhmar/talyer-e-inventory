@@ -167,8 +167,13 @@ export const Navbar: React.FC = () => {
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      {/* min-w-0 lets the flex children shrink instead of forcing the bar —
+          and therefore the whole document — wider than the viewport. Without
+          it, an overflowing nav pushes the page sideways and every centred
+          `max-w-7xl` container below centres against the document width rather
+          than the screen, which reads as content stranded in a narrow column. */}
       <div className="px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
+        <div className="flex justify-between items-center h-16 min-w-0">
           {/* Logo and Desktop Nav */}
           <div className="flex">
             {/* Logo */}
@@ -181,8 +186,13 @@ export const Navbar: React.FC = () => {
               </span>
             </Link>
 
-            {/* Desktop Navigation */}
-            <div className="hidden md:ml-8 md:flex md:space-x-4">
+            {/* Desktop Navigation.
+                Gated at xl, not md. An admin sees nine links here; at md
+                (768px) they need roughly 1160px and overflow the bar, taking
+                the page's horizontal scroll with them. Tablets get the
+                hamburger instead, which is also what the design guidelines
+                ask for. */}
+            <div className="hidden xl:ml-8 xl:flex xl:space-x-4">
               {accessibleNavItems.map((item) => (
                 <Link
                   key={item.href}
@@ -203,7 +213,7 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Desktop User Menu */}
-          <div className="hidden md:flex md:items-center">
+          <div className="hidden xl:flex xl:items-center shrink-0">
             <div className="relative">
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -214,7 +224,7 @@ export const Navbar: React.FC = () => {
                     {user?.name?.charAt(0).toUpperCase() || 'U'}
                   </span>
                 </div>
-                <div className="text-left hidden lg:block">
+                <div className="text-left">
                   <p className="text-sm font-medium text-black truncate max-w-30">
                     {user?.name}
                   </p>
@@ -270,7 +280,7 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Mobile menu button */}
-          <div className="flex items-center md:hidden">
+          <div className="flex items-center xl:hidden shrink-0">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 rounded-md text-gray-600 hover:text-black hover:bg-gray-100"
@@ -290,9 +300,9 @@ export const Navbar: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile Menu — shown wherever the inline nav is hidden, i.e. below xl. */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-gray-200">
+        <div className="xl:hidden border-t border-gray-200">
           <div className="px-4 py-3 space-y-1">
             {accessibleNavItems.map((item) => (
               <Link

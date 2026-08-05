@@ -174,11 +174,11 @@ export const AssignMechanicModal: React.FC<AssignMechanicModalProps> = ({
                               : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
                           }`}
                         >
-                          <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                          <div className="w-8 h-8 shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
                             <UserIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                           </div>
-                          <div>
-                            <p className={`text-sm font-medium ${
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-sm font-medium truncate ${
                               selectedMechanicId === mechanic._id
                                 ? 'text-blue-700 dark:text-blue-400'
                                 : 'text-gray-900 dark:text-gray-100'
@@ -186,13 +186,13 @@ export const AssignMechanicModal: React.FC<AssignMechanicModalProps> = ({
                               {mechanic.name}
                             </p>
                             {mechanic.email && (
-                              <p className="text-xs text-gray-500">
+                              <p className="text-xs text-gray-500 truncate">
                                 {mechanic.email}
                               </p>
                             )}
                           </div>
                           {currentMechanic && currentMechanic._id === mechanic._id && (
-                            <span className="ml-auto text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                            <span className="ml-auto shrink-0 text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
                               Current
                             </span>
                           )}

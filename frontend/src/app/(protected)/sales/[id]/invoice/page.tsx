@@ -168,10 +168,10 @@ export default function InvoicePage() {
 
       {/* Invoice Content */}
       <div className="print-area bg-white min-h-screen">
-        <div ref={printRef} className="max-w-4xl mx-auto p-8">
+        <div ref={printRef} className="max-w-4xl mx-auto p-4 sm:p-8">
           {/* Header */}
           <div className="border-b-2 border-gray-900 pb-6 mb-6">
-            <div className="flex items-start justify-between">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">INVOICE</h1>
                 <p className="text-sm text-gray-600 mt-1">
@@ -179,7 +179,7 @@ export default function InvoicePage() {
                 </p>
               </div>
               <div className="text-right">
-                <p className="font-mono text-xl font-bold text-gray-900">
+                <p className="font-mono text-xl font-bold text-gray-900 wrap-break-word">
                   {order.orderNumber}
                 </p>
                 <p className="text-sm text-gray-600">
@@ -190,7 +190,7 @@ export default function InvoicePage() {
           </div>
 
           {/* Branch & Customer Info */}
-          <div className="grid grid-cols-2 gap-8 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-8">
             {/* From (Branch) */}
             <div>
               <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2">From</h3>
@@ -210,7 +210,7 @@ export default function InvoicePage() {
                 </p>
               )}
               {order.customer.email && (
-                <p className="text-sm text-gray-600">Email: {order.customer.email}</p>
+                <p className="text-sm text-gray-600 wrap-break-word">Email: {order.customer.email}</p>
               )}
               {order.customer.address && (
                 <p className="text-sm text-gray-600">{order.customer.address}</p>
@@ -219,7 +219,7 @@ export default function InvoicePage() {
           </div>
 
           {/* Items Table */}
-          <div className="mb-8">
+          <div className="mb-8 overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b-2 border-gray-300">
@@ -261,7 +261,7 @@ export default function InvoicePage() {
 
           {/* Summary */}
           <div className="flex justify-end mb-8">
-            <div className="w-80">
+            <div className="w-full sm:w-80">
               <div className="flex items-center justify-between py-2 text-sm">
                 <span className="text-gray-600">Subtotal</span>
                 <span className="text-gray-900">{formatCurrency(order.subtotal)}</span>
