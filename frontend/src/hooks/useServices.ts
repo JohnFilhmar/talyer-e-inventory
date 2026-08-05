@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { serviceService, ServiceInvoice } from '@/lib/services/serviceService';
 import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
 import { isOffline } from '@/lib/offline/cache';
-import { enqueueServiceOrder, type ServiceOutboxEntry } from '@/lib/offline/outbox';
+import { enqueueServiceOrder, listOutbox, type ServiceOutboxEntry } from '@/lib/offline/outbox';
 import { isNetworkError } from '@/lib/apiClient';
 import type {
   ServiceOrder,
@@ -40,7 +40,23 @@ export const serviceKeys = {
 export function useServiceOrders(params: ServiceOrderListParams = {}) {
   return useQuery<PaginatedResponse<ServiceOrder>, Error>({
     queryKey: serviceKeys.list(params),
-    queryFn: () => withOfflinePaginatedList('serviceOrders', () => serviceService.getAll(params)),
+    // Queued jobs are merged in on top of the server (or mirrored) rows. See
+    // the matching comment in useSales.ts: without this, a job created offline
+    // is visible once on the New Service screen and then disappears from the
+    // list, which reads as data loss even though it is safely queued.
+    queryFn: async () => {
+      const response = await withOfflinePaginatedList('serviceOrders', () =>
+        serviceService.getAll(params)
+      );
+      const queued = await listOutbox();
+      const optimistic = queued
+        .filter((entry): entry is ServiceOutboxEntry => entry.kind === 'service')
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map(buildOptimisticServiceOrder);
+
+      if (optimistic.length === 0) return response;
+      return { ...response, data: [...optimistic, ...(response.data ?? [])] };
+    },
     staleTime: 30 * 1000, // 30 seconds
   });
 }

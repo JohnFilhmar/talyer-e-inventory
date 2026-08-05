@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { salesService } from '@/lib/services/salesService';
 import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
 import { isOffline } from '@/lib/offline/cache';
-import { enqueueSalesOrder, type SaleOutboxEntry } from '@/lib/offline/outbox';
+import { enqueueSalesOrder, listOutbox, type SaleOutboxEntry } from '@/lib/offline/outbox';
 import { isNetworkError } from '@/lib/apiClient';
 import type {
   SalesOrder,
@@ -37,7 +37,27 @@ export const salesKeys = {
 export function useSalesOrders(params: SalesOrderListParams = {}) {
   return useQuery<PaginatedResponse<SalesOrder>, Error>({
     queryKey: salesKeys.list(params),
-    queryFn: () => withOfflinePaginatedList('salesOrders', () => salesService.getAll(params)),
+    // Queued orders are merged in on top of whatever the server (or the
+    // mirror) returned. Without this an order created offline is invisible
+    // here — it exists only as the create mutation's return value, so the
+    // salesperson sees it once on the New Sale screen and then it vanishes,
+    // which reads as "my sale was lost" even though it is safely queued.
+    //
+    // Newest-first, ahead of server rows, because a queued order is by
+    // definition the most recent thing that happened.
+    queryFn: async () => {
+      const response = await withOfflinePaginatedList('salesOrders', () =>
+        salesService.getAll(params)
+      );
+      const queued = await listOutbox();
+      const optimistic = queued
+        .filter((entry): entry is SaleOutboxEntry => entry.kind === 'sale')
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map(buildOptimisticSalesOrder);
+
+      if (optimistic.length === 0) return response;
+      return { ...response, data: [...optimistic, ...(response.data ?? [])] };
+    },
     staleTime: 30 * 1000, // 30 seconds
   });
 }
