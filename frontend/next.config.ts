@@ -32,11 +32,36 @@ if (imageHost) {
   }
 }
 
+/**
+ * True when the configured image host is a loopback address.
+ *
+ * Next's image optimizer refuses to fetch loopback and private addresses —
+ * `images.dangerouslyAllowLocalIP` defaults to `false` — and it does so
+ * *regardless* of whether a `remotePatterns` entry matches. So a local stack
+ * whose uploads live on http://localhost:5000 gets `400 "url" parameter is
+ * not allowed` for every product image, even though the pattern above allows
+ * it. Bypassing the optimizer for those hosts is the right trade: optimization
+ * is worthless against a machine-local backend anyway, and the alternative —
+ * setting dangerouslyAllowLocalIP — would let anyone who can reach the app ask
+ * it to fetch arbitrary internal addresses on their behalf.
+ *
+ * Production, which points at a real hostname, keeps optimization.
+ */
+const isLoopbackImageHost = (() => {
+  if (!imageHost) return false;
+  try {
+    const { hostname } = new URL(imageHost);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  } catch {
+    return false;
+  }
+})();
+
 const nextConfig: NextConfig = {
   output: 'standalone',
   reactCompiler: true,
   images: {
-    unoptimized: isDev,
+    unoptimized: isDev || isLoopbackImageHost,
     remotePatterns,
   },
 };

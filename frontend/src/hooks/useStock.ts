@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { stockService } from '@/lib/services/stockService';
-import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
+import { withOfflinePaginatedList, withOfflineScopedList } from '@/lib/offline/offlineQuery';
 import type {
   Stock,
   StockTransfer,
@@ -65,7 +65,27 @@ export function useStockByBranch(
 ) {
   return useQuery<Stock[], Error>({
     queryKey: stockKeys.byBranch(branchId ?? ''),
-    queryFn: () => stockService.getByBranch(branchId!),
+    // Offline-capable: this read backs the product picker on the New Sale and
+    // New Service screens, so without a cached fallback "create an order
+    // offline" cannot work at all — the picker just reports no products.
+    //
+    // The branch field arrives in two shapes depending on which endpoint last
+    // filled the mirror: GET /stock populates it into an object, while
+    // GET /stock/branch/:id leaves it a raw id. Both end up in the same store,
+    // so the predicate normalises before comparing.
+    queryFn: () =>
+      withOfflineScopedList<Stock>(
+        'stock',
+        () => stockService.getByBranch(branchId!),
+        (row) => {
+          const rowBranch = row.branch as unknown;
+          const rowBranchId =
+            typeof rowBranch === 'string'
+              ? rowBranch
+              : (rowBranch as { _id?: string } | null)?._id;
+          return rowBranchId === branchId;
+        }
+      ),
     enabled: !!branchId,
     staleTime: 30 * 1000,
     ...options,

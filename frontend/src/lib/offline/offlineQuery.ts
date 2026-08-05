@@ -38,6 +38,40 @@ export async function withOfflineList<T extends OfflineRecord>(
 }
 
 /**
+ * For a bare-array read that returns a *subset* of a store — the canonical
+ * case being stock scoped to one branch (`GET /stock/branch/:id`).
+ *
+ * The plain `withOfflineList` cannot serve these: falling back to the whole
+ * store would hand a branch every other branch's stock, and filtering is not
+ * something the generic helper can know how to do. So the caller supplies a
+ * predicate, which is applied only on the fallback path — the live response is
+ * already scoped by the server and is returned untouched.
+ *
+ * Writing through `cacheList` here is deliberate and is what makes offline
+ * sale creation possible at all: the New Sale screen is often the only page a
+ * salesperson opens, so if this read did not populate the mirror, the product
+ * picker would be empty offline even though the data had been fetched moments
+ * earlier.
+ */
+export async function withOfflineScopedList<T extends OfflineRecord>(
+  store: OfflineStoreName,
+  queryFn: () => Promise<T[]>,
+  matches: (row: T) => boolean
+): Promise<T[]> {
+  try {
+    const rows = await queryFn();
+    await cacheList(store, rows);
+    return rows;
+  } catch (error) {
+    if (isNetworkError(error)) {
+      const cached = await readCachedList<T>(store);
+      return cached.filter(matches);
+    }
+    throw error;
+  }
+}
+
+/**
  * For hooks whose service method resolves `ApiResponse.paginate`'s
  * `{ data, pagination }` shape. On success, mirrors `data` into `store` and
  * returns the response unchanged (pagination included). On a network error,
