@@ -123,10 +123,79 @@ export function useServiceOrder(id: string | undefined) {
 /**
  * Hook to fetch invoice data for a service order
  */
+/**
+ * Projects a mirrored `ServiceOrder` into the `ServiceInvoice` shape the
+ * server composes.
+ *
+ * Unlike the sales invoice — where the endpoint returns the order itself and
+ * the mirror can be handed back directly — this endpoint returns a derived
+ * document, so serving it offline means reproducing that projection here. The
+ * fields are a rename and a flattening of data the order already carries;
+ * nothing is invented.
+ */
+function projectServiceInvoice(order: ServiceOrder): ServiceInvoice {
+  const branch = order.branch as ServiceBranch | string;
+  const assigned = order.assignedTo as { _id: string; name: string } | string | undefined;
+
+  return {
+    jobNumber: order.jobNumber,
+    date: order.createdAt,
+    completedDate: order.completedAt,
+    branch:
+      typeof branch === 'string'
+        ? { _id: branch, name: '', code: '' }
+        : { _id: branch._id, name: branch.name, code: branch.code },
+    customer: order.customer,
+    vehicle: order.vehicle ?? {},
+    assignedMechanic:
+      assigned && typeof assigned !== 'string'
+        ? { _id: assigned._id, name: assigned.name }
+        : undefined,
+    description: order.description,
+    diagnosis: order.diagnosis,
+    partsUsed: order.partsUsed ?? [],
+    totalParts: order.totalParts ?? 0,
+    laborCost: order.laborCost ?? 0,
+    otherCharges: order.otherCharges ?? 0,
+    totalAmount: order.totalAmount ?? 0,
+    payment: {
+      method: order.payment?.method,
+      amountPaid: order.payment?.amountPaid ?? 0,
+      status: order.payment?.status ?? 'pending',
+      paidAt: order.payment?.paidAt,
+    },
+    notes: order.notes,
+    status: order.status,
+  } as ServiceInvoice;
+}
+
 export function useServiceInvoice(id: string | undefined) {
   return useQuery<ServiceInvoice, Error>({
     queryKey: serviceKeys.invoice(id ?? ''),
-    queryFn: () => serviceService.getInvoice(id!),
+    // Printing a job sheet should not require a connection for a job already
+    // on the device. Falls back to the mirrored order, projected into the
+    // invoice shape the server would have composed.
+    queryFn: async () => {
+      if (id!.startsWith('outbox-')) {
+        const entryId = id!.slice('outbox-'.length);
+        const entry = (await listOutbox()).find(
+          (candidate): candidate is ServiceOutboxEntry =>
+            candidate.kind === 'service' && candidate.id === entryId
+        );
+        if (!entry) throw new Error('This queued job is no longer in the sync queue.');
+        return projectServiceInvoice(await buildOptimisticServiceOrder(entry));
+      }
+
+      try {
+        return await serviceService.getInvoice(id!);
+      } catch (error) {
+        if (isNetworkError(error)) {
+          const cached = await readCachedById<ServiceOrder>('serviceOrders', id!);
+          if (cached) return projectServiceInvoice(cached);
+        }
+        throw error;
+      }
+    },
     enabled: !!id,
     staleTime: 5 * 60 * 1000, // 5 minutes (invoices rarely change)
   });

@@ -103,12 +103,23 @@ export const UpdateServicePaymentModal: React.FC<UpdateServicePaymentModalProps>
   };
 
   // Quick amount buttons
-  const quickAmounts = [
-    { label: 'Exact', amount: totalDue },
-    { label: '₱100', amount: 100 },
-    { label: '₱500', amount: 500 },
-    { label: '₱1000', amount: 1000 },
+  // Denominations *add* to what has been entered, so tendered cash can be
+  // tallied the way it is handed over — two ₱100 notes is two taps rather than
+  // mental arithmetic. 'Exact' and 'Clear' set an absolute value, since those
+  // are corrections rather than counts.
+  const quickAmounts: Array<{ label: string; amount: number; mode: 'add' | 'set' }> = [
+    { label: 'Exact', amount: totalDue, mode: 'set' },
+    { label: 'Clear', amount: 0, mode: 'set' },
+    { label: '₱100', amount: 100, mode: 'add' },
+    { label: '₱500', amount: 500, mode: 'add' },
+    { label: '₱1000', amount: 1000, mode: 'add' },
   ];
+
+  const applyQuickAmount = (qa: { amount: number; mode: 'add' | 'set' }) => {
+    const current = Number(amountPaid) || 0;
+    const next = qa.mode === 'add' ? current + qa.amount : qa.amount;
+    setAmountPaid(next.toString());
+  };
 
   if (!isOpen) return null;
 
@@ -224,7 +235,7 @@ export const UpdateServicePaymentModal: React.FC<UpdateServicePaymentModalProps>
                       <button
                         key={qa.label}
                         type="button"
-                        onClick={() => setAmountPaid(qa.amount.toString())}
+                        onClick={() => applyQuickAmount(qa)}
                         className="px-2 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
                       >
                         {qa.label}

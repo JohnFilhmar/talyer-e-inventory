@@ -147,7 +147,31 @@ export function useSalesStats(params?: { branch?: string }) {
 export function useSalesInvoice(id: string | undefined) {
   return useQuery<SalesOrder, Error>({
     queryKey: salesKeys.invoice(id ?? ''),
-    queryFn: () => salesService.getInvoice(id!),
+    // The invoice endpoint returns the order itself, so the same mirror that
+    // backs the detail view serves this offline. Printing a receipt for a sale
+    // already on the device should not require a connection — that is the
+    // moment a counter is least able to wait for one.
+    queryFn: async () => {
+      if (id!.startsWith('outbox-')) {
+        const entryId = id!.slice('outbox-'.length);
+        const entry = (await listOutbox()).find(
+          (candidate): candidate is SaleOutboxEntry =>
+            candidate.kind === 'sale' && candidate.id === entryId
+        );
+        if (!entry) throw new Error('This queued order is no longer in the sync queue.');
+        return buildOptimisticSalesOrder(entry);
+      }
+
+      try {
+        return await salesService.getInvoice(id!);
+      } catch (error) {
+        if (isNetworkError(error)) {
+          const cached = await readCachedById<SalesOrder>('salesOrders', id!);
+          if (cached) return cached;
+        }
+        throw error;
+      }
+    },
     enabled: !!id,
     staleTime: 5 * 60 * 1000, // 5 minutes (invoices rarely change)
   });

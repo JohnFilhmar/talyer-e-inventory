@@ -125,6 +125,7 @@ export default function NewSalePage() {
     handleSubmit,
     control,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -292,14 +293,28 @@ export default function NewSalePage() {
     }
   };
 
-  // Quick pay buttons
-  const quickPayAmounts = [
-    { label: 'Exact', amount: orderTotals.total },
-    { label: '₱100', amount: 100 },
-    { label: '₱500', amount: 500 },
-    { label: '₱1000', amount: 1000 },
-    { label: '₱2000', amount: 2000 },
+  // Quick pay buttons.
+  //
+  // Denominations *add* to whatever has been entered so far, so tendered cash
+  // can be tallied the way it is actually handed over — two ₱100 notes is two
+  // taps, not mental arithmetic then a manual edit. 'Exact' and 'Clear' set
+  // an absolute value instead, since those are corrections rather than counts.
+  const quickPayAmounts: Array<{ label: string; amount: number; mode: 'add' | 'set' }> = [
+    { label: 'Exact', amount: orderTotals.total, mode: 'set' },
+    { label: 'Clear', amount: 0, mode: 'set' },
+    { label: '₱100', amount: 100, mode: 'add' },
+    { label: '₱500', amount: 500, mode: 'add' },
+    { label: '₱1000', amount: 1000, mode: 'add' },
+    { label: '₱2000', amount: 2000, mode: 'add' },
   ];
+
+  const applyQuickPay = (qa: { amount: number; mode: 'add' | 'set' }) => {
+    const current = Number(getValues('amountPaid')) || 0;
+    setValue('amountPaid', qa.mode === 'add' ? current + qa.amount : qa.amount, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -726,7 +741,7 @@ export default function NewSalePage() {
                   <button
                     key={qa.label}
                     type="button"
-                    onClick={() => setValue('amountPaid', qa.amount)}
+                    onClick={() => applyQuickPay(qa)}
                     className="px-2 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
                   >
                     {qa.label}
