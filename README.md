@@ -1,11 +1,59 @@
 # Talyer E-Inventory System
 
-> **Version:** 1.0.0 (MVP Complete)  
-> **Status:** ✅ Production Ready  
-> **Last Updated:** February 4, 2026  
-> **Test Coverage:** 272/272 tests passing (100%)
+> **Status:** Deployed — production runs from `master`, staging from `staging`  
+> **Backend tests:** 421 passing across 14 suites  
+> **Clients:** Web (Next.js, offline-capable PWA) · Mobile (Expo, in development)
 
-A comprehensive multi-branch inventory and business management system designed specifically for motorparts and automotive service businesses. This full-stack solution provides real-time inventory tracking, sales management, service order processing, and financial monitoring across multiple branch locations.
+A multi-branch inventory and business management system for motorparts and
+automotive service businesses: per-branch stock tracking, sales orders, service
+jobs, and the stock ledger that ties them together.
+
+## Repository layout
+
+Three independent packages. There is no workspace root — every command runs
+from inside one of them.
+
+| Path | What it is |
+|---|---|
+| [`backend/`](backend/) | Express 5 + Mongoose + Redis REST API (ESM) |
+| [`frontend/`](frontend/) | Next.js 16 web client, installable offline PWA |
+| [`mobile-app/`](mobile-app/) | Expo / React Native client (in development) |
+
+Start here depending on what you need:
+
+- **[`mobile-app/docs/FEATURES.md`](mobile-app/docs/FEATURES.md)** — the
+  authoritative inventory of what the system does: every endpoint, role,
+  workflow, and the behavioural rules that are easy to reimplement wrongly.
+  Written for the mobile build but the best single overview of the product.
+- **[`mobile-app/docs/DESIGN_BRIEF.md`](mobile-app/docs/DESIGN_BRIEF.md)** —
+  design handoff for the mobile client.
+- **[`CLAUDE.md`](CLAUDE.md)** — architecture and the traps worth knowing before
+  changing anything.
+- **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** — runner setup, environments,
+  secrets, and the deploy workflow.
+- **[`docs/gap-audit.md`](docs/gap-audit.md)** — 118 verified findings, each with
+  a concrete failure scenario. Several are still open.
+
+## Recent capabilities
+
+Beyond the MVP feature set documented further down:
+
+- **Offline-capable PWA.** The web client installs, keeps working through a wifi
+  drop, and lets staff create sales and service orders with no connection.
+  Queued orders replay on reconnect, deduplicated server-side by a client
+  idempotency key. Conflicts are server-authoritative: the first replay commits,
+  a later one that no longer fits available stock is rejected with a reason and
+  surfaces at `/sync` for a human. There is no client-side override, by design.
+- **Barcode scanning** on the new-sale screen, using the native
+  `BarcodeDetector`, resolved against the offline mirror so it works
+  disconnected.
+- **Containerised deploys** to a self-hosted VPS behind nginx, triggered
+  manually per environment with an optional security-scan gate.
+- **CI and security scanning** on every push and PR: backend tests, frontend
+  lint and build, Docker image builds, dependency audit, secret scanning,
+  CodeQL, and Trivy.
+- **First-run admin seeding**, because public registration only ever creates a
+  `customer` and creating staff requires an existing admin.
 
 ## 📊 Project Status
 
