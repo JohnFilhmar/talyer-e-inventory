@@ -49,7 +49,7 @@ reads `.env` from the same directory as [docker-compose.yml](docker-compose.yml)
 variable there has a default; `JWT_SECRET` and `JWT_REFRESH_SECRET` are the two that abort the
 build (`:?...is required`) if left unset.
 
-**Known limitation — product images in the compose stack.** Next 16 defaults
+**Product images and the loopback guard.** Next 16 defaults
 `images.dangerouslyAllowLocalIP` to `false`, an SSRF guard on the server-side image optimizer.
 Product image URLs are absolute and built from the backend's `BACKEND_URL`, so in the compose
 stack they point at `http://localhost:5000`. Two things then go wrong at once: `localhost` inside
