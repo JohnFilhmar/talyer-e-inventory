@@ -1,8 +1,31 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useSyncExternalStore } from 'react';
 import { WifiOff } from 'lucide-react';
 import { isOffline } from '@/lib/offline/cache';
+
+/**
+ * Subscribes to the browser's connectivity events.
+ *
+ * `useSyncExternalStore` is the right primitive here rather than
+ * `useState` + `useEffect`: it takes a separate server snapshot, so the
+ * server render and the hydration render agree on "online" while the client
+ * immediately reads the real value afterwards. A lazy `useState` initializer
+ * cannot do this — `'use client'` still means server-*rendered* in the App
+ * Router, so the initializer runs where `navigator` does not exist, and
+ * hydration then reuses that stale `false`. When the browser was already
+ * offline before the page loaded, no `offline` event ever fires to correct
+ * it, and the banner would never appear after a reload — precisely when it
+ * matters most.
+ */
+const subscribeToConnectivity = (onChange: () => void) => {
+  window.addEventListener('online', onChange);
+  window.addEventListener('offline', onChange);
+  return () => {
+    window.removeEventListener('online', onChange);
+    window.removeEventListener('offline', onChange);
+  };
+};
 
 /**
  * Persistent, non-dismissable bar shown for as long as the browser reports
@@ -27,25 +50,13 @@ import { isOffline } from '@/lib/offline/cache';
  * and unmounts with the offline state.
  */
 export const OfflineBanner: React.FC = () => {
-  // Lazy initializer reads the real browser state at mount time (it only
-  // runs once, on the client — 'use client' components re-run it during
-  // hydration rather than reusing whatever a server render produced), so
-  // no separate effect-body setState is needed just to reconcile SSR vs.
-  // client on first paint. The effect below exists purely to subscribe to
-  // subsequent `online`/`offline` events.
-  const [offline, setOffline] = useState(isOffline);
-
-  useEffect(() => {
-    const handleOffline = () => setOffline(true);
-    const handleOnline = () => setOffline(false);
-
-    window.addEventListener('offline', handleOffline);
-    window.addEventListener('online', handleOnline);
-    return () => {
-      window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('online', handleOnline);
-    };
-  }, []);
+  const offline = useSyncExternalStore(
+    subscribeToConnectivity,
+    isOffline,
+    // Server snapshot: assume online. The server cannot know, and rendering
+    // the banner into the initial HTML would flash it for every online user.
+    () => false
+  );
 
   if (!offline) return null;
 

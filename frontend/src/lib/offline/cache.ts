@@ -49,6 +49,23 @@ export async function readCachedList<T extends OfflineRecord>(
 }
 
 /**
+ * Reads one mirrored record by `_id`, or `undefined` if it was never cached.
+ *
+ * Detail pages need this: a list read fills the store, so opening a row the
+ * user has already seen works offline — but only if the detail view is willing
+ * to look here instead of going straight to the network. Without it, tapping
+ * an order offline fails outright even though its data is sitting in the
+ * mirror.
+ */
+export async function readCachedById<T extends OfflineRecord>(
+  store: OfflineStoreName,
+  id: string
+): Promise<T | undefined> {
+  const rows = await getAll<T>(store);
+  return rows.find((row) => row._id === id);
+}
+
+/**
  * Wipes the entire offline mirror. This is a shared-tablet app: if the
  * mirror survived logout, the next person to sign in would see the
  * previous user's branch data and order history until every store happened

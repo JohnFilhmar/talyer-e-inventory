@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { serviceService, ServiceInvoice } from '@/lib/services/serviceService';
 import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
-import { isOffline } from '@/lib/offline/cache';
+import { isOffline, readCachedById } from '@/lib/offline/cache';
 import { enqueueServiceOrder, listOutbox, type ServiceOutboxEntry } from '@/lib/offline/outbox';
 import { isNetworkError } from '@/lib/apiClient';
 import type {
@@ -55,7 +55,17 @@ export function useServiceOrders(params: ServiceOrderListParams = {}) {
         .map(buildOptimisticServiceOrder);
 
       if (optimistic.length === 0) return response;
-      return { ...response, data: [...optimistic, ...(response.data ?? [])] };
+
+      // Keep the pagination total in step with the merged rows, or the footer
+      // reports fewer records than it is showing.
+      const pagination = response.pagination
+        ? {
+            ...response.pagination,
+            total: response.pagination.total + optimistic.length,
+          }
+        : undefined;
+
+      return { ...response, data: [...optimistic, ...(response.data ?? [])], pagination };
     },
     staleTime: 30 * 1000, // 30 seconds
   });
@@ -78,7 +88,30 @@ export function useMyJobs(params: MyJobsParams = {}) {
 export function useServiceOrder(id: string | undefined) {
   return useQuery<ServiceOrder, Error>({
     queryKey: serviceKeys.detail(id ?? ''),
-    queryFn: () => serviceService.getById(id!),
+    queryFn: async () => {
+      // An `outbox-` id belongs to a job that has never reached the server.
+      if (id!.startsWith('outbox-')) {
+        const entryId = id!.slice('outbox-'.length);
+        const entry = (await listOutbox()).find(
+          (candidate): candidate is ServiceOutboxEntry =>
+            candidate.kind === 'service' && candidate.id === entryId
+        );
+        if (!entry) throw new Error('This queued job is no longer in the sync queue.');
+        return buildOptimisticServiceOrder(entry);
+      }
+
+      try {
+        return await serviceService.getById(id!);
+      } catch (error) {
+        // Only a network failure falls back to the mirror; a real 404 or 403
+        // must still surface.
+        if (isNetworkError(error)) {
+          const cached = await readCachedById<ServiceOrder>('serviceOrders', id!);
+          if (cached) return cached;
+        }
+        throw error;
+      }
+    },
     enabled: !!id,
     staleTime: 30 * 1000,
   });

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { salesService } from '@/lib/services/salesService';
 import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
-import { isOffline } from '@/lib/offline/cache';
+import { isOffline, readCachedById, readCachedList } from '@/lib/offline/cache';
 import { enqueueSalesOrder, listOutbox, type SaleOutboxEntry } from '@/lib/offline/outbox';
 import { isNetworkError } from '@/lib/apiClient';
 import type {
@@ -12,6 +12,7 @@ import type {
   UpdatePaymentPayload,
   SalesOrderListParams,
 } from '@/types/sales';
+import type { Stock } from '@/types/stock';
 import type { PaginatedResponse } from '@/types/api';
 
 /**
@@ -50,13 +51,27 @@ export function useSalesOrders(params: SalesOrderListParams = {}) {
         salesService.getAll(params)
       );
       const queued = await listOutbox();
-      const optimistic = queued
-        .filter((entry): entry is SaleOutboxEntry => entry.kind === 'sale')
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .map(buildOptimisticSalesOrder);
+      const optimistic = await Promise.all(
+        queued
+          .filter((entry): entry is SaleOutboxEntry => entry.kind === 'sale')
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .map(buildOptimisticSalesOrder)
+      );
 
       if (optimistic.length === 0) return response;
-      return { ...response, data: [...optimistic, ...(response.data ?? [])] };
+
+      // The pagination block has to grow with the rows, or the footer reads
+      // "Showing 5 of 4 orders" — the server's total does not know about
+      // anything still sitting in the outbox.
+      const serverRows = response.data ?? [];
+      const pagination = response.pagination
+        ? {
+            ...response.pagination,
+            total: response.pagination.total + optimistic.length,
+          }
+        : undefined;
+
+      return { ...response, data: [...optimistic, ...serverRows], pagination };
     },
     staleTime: 30 * 1000, // 30 seconds
   });
@@ -83,7 +98,32 @@ export function useSalesOrdersByBranch(
 export function useSalesOrder(id: string | undefined) {
   return useQuery<SalesOrder, Error>({
     queryKey: salesKeys.detail(id ?? ''),
-    queryFn: () => salesService.getById(id!),
+    queryFn: async () => {
+      // An `outbox-` id belongs to an order that has never reached the server,
+      // so there is nothing to fetch — rebuild it from the queued entry.
+      if (id!.startsWith('outbox-')) {
+        const entryId = id!.slice('outbox-'.length);
+        const entry = (await listOutbox()).find(
+          (candidate): candidate is SaleOutboxEntry =>
+            candidate.kind === 'sale' && candidate.id === entryId
+        );
+        if (!entry) throw new Error('This queued order is no longer in the sync queue.');
+        return buildOptimisticSalesOrder(entry);
+      }
+
+      try {
+        return await salesService.getById(id!);
+      } catch (error) {
+        // Opening an order offline should work for anything the list already
+        // mirrored. Only a network failure falls back — a real 404 or 403
+        // must still surface.
+        if (isNetworkError(error)) {
+          const cached = await readCachedById<SalesOrder>('salesOrders', id!);
+          if (cached) return cached;
+        }
+        throw error;
+      }
+    },
     enabled: !!id,
     staleTime: 30 * 1000,
   });
@@ -125,34 +165,74 @@ export function useSalesInvoice(id: string | undefined) {
  *    fabricated `SO-YYYY-NNNNNN`-shaped value — nobody should read a made-up
  *    order number aloud to a customer.
  *  - `status` and the payment `status` are forced to `'pending'`.
- * Line pricing (`unitPrice`, `total`, `subtotal`, tax) is left at 0 because
- * the outbox only has the branch-agnostic request payload, not the
- * branch-specific `Stock.sellingPrice` the server prices from — that price
- * is only known once the order actually reaches the server.
+ * Line pricing is resolved from the offline stock mirror rather than left at
+ * zero. The outbox only stores the request payload, but the mirror already
+ * holds the branch's `Stock.sellingPrice` and the product's name and SKU —
+ * the same figures the server prices from. Showing ₱0.00 and a blank product
+ * for a real sale reads as corruption, and a salesperson cannot sanity-check
+ * an order they cannot see the value of.
+ *
+ * These remain provisional: the server reprices at insert, so a price change
+ * between queueing and replay is reconciled then. Anything the mirror cannot
+ * resolve falls back to zero rather than guessing.
  */
-function buildOptimisticSalesOrder(entry: SaleOutboxEntry): SalesOrder {
+async function buildOptimisticSalesOrder(entry: SaleOutboxEntry): Promise<SalesOrder> {
   const { payload } = entry;
   const createdAt = new Date(entry.createdAt).toISOString();
+
+  const branchId =
+    typeof payload.branch === 'string'
+      ? payload.branch
+      : (payload.branch as { _id?: string } | null)?._id;
+
+  const cachedStock = await readCachedList<Stock>('stock');
+  const stockFor = (productId: string) =>
+    cachedStock.find((row) => {
+      const rowProduct = row.product as unknown;
+      const rowProductId =
+        typeof rowProduct === 'string' ? rowProduct : (rowProduct as { _id?: string })?._id;
+      if (rowProductId !== productId) return false;
+
+      const rowBranch = row.branch as unknown;
+      const rowBranchId =
+        typeof rowBranch === 'string' ? rowBranch : (rowBranch as { _id?: string })?._id;
+      return rowBranchId === branchId;
+    });
+
+  const items = payload.items.map((item, index) => {
+    const stock = stockFor(item.product);
+    const product = stock?.product as { sku?: string; name?: string } | undefined;
+    const unitPrice = stock?.sellingPrice ?? 0;
+    const discount = item.discount ?? 0;
+
+    return {
+      _id: `outbox-item-${index}`,
+      product: item.product,
+      sku: product?.sku ?? '',
+      name: product?.name ?? '',
+      quantity: item.quantity,
+      unitPrice,
+      discount,
+      total: Math.max(unitPrice * item.quantity - discount, 0),
+    };
+  });
+
+  const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+  const orderDiscount = payload.discount ?? 0;
+  const taxRate = payload.taxRate ?? 0;
+  const taxAmount = ((subtotal - orderDiscount) * taxRate) / 100;
+  const total = Math.max(subtotal - orderDiscount + taxAmount, 0);
 
   return {
     _id: `outbox-${entry.id}`,
     orderNumber: 'Pending sync',
     branch: payload.branch,
     customer: payload.customer,
-    items: payload.items.map((item, index) => ({
-      _id: `outbox-item-${index}`,
-      product: item.product,
-      sku: '',
-      name: '',
-      quantity: item.quantity,
-      unitPrice: 0,
-      discount: item.discount ?? 0,
-      total: 0,
-    })),
-    subtotal: 0,
-    tax: { rate: payload.taxRate ?? 0, amount: 0 },
-    discount: payload.discount ?? 0,
-    total: 0,
+    items,
+    subtotal,
+    tax: { rate: taxRate, amount: taxAmount },
+    discount: orderDiscount,
+    total,
     payment: {
       method: payload.paymentMethod,
       amountPaid: payload.amountPaid ?? 0,
