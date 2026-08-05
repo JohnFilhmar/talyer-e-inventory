@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { salesService } from '@/lib/services/salesService';
+import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
 import type {
   SalesOrder,
   SalesStats,
@@ -33,7 +34,7 @@ export const salesKeys = {
 export function useSalesOrders(params: SalesOrderListParams = {}) {
   return useQuery<PaginatedResponse<SalesOrder>, Error>({
     queryKey: salesKeys.list(params),
-    queryFn: () => salesService.getAll(params),
+    queryFn: () => withOfflinePaginatedList('salesOrders', () => salesService.getAll(params)),
     staleTime: 30 * 1000, // 30 seconds
   });
 }

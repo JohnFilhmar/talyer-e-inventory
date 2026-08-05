@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { serviceService, ServiceInvoice } from '@/lib/services/serviceService';
+import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
 import type {
   ServiceOrder,
   CreateServiceOrderPayload,
@@ -36,7 +37,7 @@ export const serviceKeys = {
 export function useServiceOrders(params: ServiceOrderListParams = {}) {
   return useQuery<PaginatedResponse<ServiceOrder>, Error>({
     queryKey: serviceKeys.list(params),
-    queryFn: () => serviceService.getAll(params),
+    queryFn: () => withOfflinePaginatedList('serviceOrders', () => serviceService.getAll(params)),
     staleTime: 30 * 1000, // 30 seconds
   });
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productService } from '@/lib/services/productService';
+import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
 import type {
   Product,
   ProductImage,
@@ -51,7 +52,7 @@ export function useDebounce<T>(value: T, delay = 600): T {
 export function useProducts(params: ProductListParams = {}) {
   return useQuery<PaginatedResponse<Product>, Error>({
     queryKey: productKeys.list(params),
-    queryFn: () => productService.getAll(params),
+    queryFn: () => withOfflinePaginatedList('products', () => productService.getAll(params)),
     staleTime: 30 * 1000, // 30 seconds
   });
 }

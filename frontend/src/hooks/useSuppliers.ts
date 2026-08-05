@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supplierService } from '@/lib/services/supplierService';
+import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
 import type {
   Supplier,
   CreateSupplierPayload,
@@ -28,7 +29,7 @@ export const supplierKeys = {
 export function useSuppliers(params: SupplierListParams = {}) {
   return useQuery<PaginatedResponse<Supplier>, Error>({
     queryKey: supplierKeys.list(params),
-    queryFn: () => supplierService.getAll(params),
+    queryFn: () => withOfflinePaginatedList('suppliers', () => supplierService.getAll(params)),
     staleTime: 60 * 1000, // 1 minute
   });
 }

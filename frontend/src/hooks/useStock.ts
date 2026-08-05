@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { stockService } from '@/lib/services/stockService';
+import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
 import type {
   Stock,
   StockTransfer,
@@ -49,7 +50,7 @@ export function useStock(
 ) {
   return useQuery<PaginatedResponse<Stock>, Error>({
     queryKey: stockKeys.list(params),
-    queryFn: () => stockService.getAll(params),
+    queryFn: () => withOfflinePaginatedList('stock', () => stockService.getAll(params)),
     staleTime: 30 * 1000, // 30 seconds
     ...options,
   });
