@@ -237,6 +237,65 @@ client-side.
   Input, PhoneInput, Modal, Alert, Badge, Spinner) — extend those rather than adding new base
   components.
 
+## Offline / PWA
+
+The app installs as a PWA and keeps working through a wifi drop. The scope is deliberate and
+narrow — widening it is a design decision, not a small change.
+
+**What works offline:** browsing every cached list, and **creating sales and service orders**.
+Everything else — stock adjustments, transfers, product/category/supplier edits, user admin —
+requires a connection and fails with a message rather than queueing. Those are the operations where
+two devices can diverge in ways no automatic merge can repair.
+
+**Conflict policy is server-authoritative.** The first replay to arrive commits. A later one that
+no longer fits available stock is rejected with a reason and surfaces at
+[/sync](frontend/src/app/(protected)/sync/page.tsx) for a human to void, backorder, or re-price.
+There is no client-side force or override, and adding one would let a user oversell stock.
+
+**The target window is hours** — a shift or a dropped connection, not days.
+
+### The four layers
+
+1. **Service worker** ([app/sw.ts](frontend/src/app/sw.ts), Serwist) precaches the app shell and
+   falls back to `/offline` for uncached navigations. It deliberately does **not** cache API
+   responses: a shared HTTP cache on a shared tablet can serve one user's data to the next.
+2. **IndexedDB mirror** ([lib/offline/db.ts](frontend/src/lib/offline/db.ts)) holds the working
+   set. `authStore.logout()` calls `clearOfflineCache()` in its `finally`, so the mirror never
+   survives into the next person's session — including when the logout request itself fails
+   offline.
+3. **Outbox** ([lib/offline/outbox.ts](frontend/src/lib/offline/outbox.ts),
+   [sync.ts](frontend/src/lib/offline/sync.ts)) queues offline order creation and replays it
+   oldest-first, **sequentially**. Never parallelise that: two orders drawing on the same stock
+   must be adjudicated in a deterministic order.
+4. **Server idempotency.** `POST /api/sales` and `POST /api/services` accept an optional
+   `clientRequestId`; a replay of a key already seen returns **200 with the existing order**
+   instead of 201 and a duplicate. The dedupe check runs *after* the branch-access check but
+   *before* any stock is touched — placed later, a replay would double-deduct while appearing to
+   succeed. The unique index is sparse so the online path, which sends no key, is unaffected.
+
+### Rules that are load-bearing
+
+- **`clientRequestId` is generated once at enqueue and reused on every retry.** Regenerate it and
+  the server sees a brand-new order — the exact duplicate the design exists to prevent.
+- **Failure classification** in `sync.ts`: a network error leaves the entry `pending` and stops the
+  run; a **4xx** marks it `rejected` and continues to the next; a **5xx** leaves it `pending` and
+  stops, counting toward a cap of 5 attempts. Treating a 5xx as permanent would discard real sales
+  during a deploy.
+- **`navigator.onLine` is only trustworthy in the negative.** `true` means an interface is up, not
+  that the server is reachable. `isNetworkError()` in
+  [apiClient.ts](frontend/src/lib/apiClient.ts) leans on the absence of `error.response` first.
+- **A network failure is not an auth failure.** The refresh handler used to clear tokens and
+  redirect on any refresh error, which logged users out on a wifi blip. Do not reintroduce that.
+- An offline order has **no server `_id` and no `SO-YYYY-NNNNNN` number** — those are assigned at
+  insert. The optimistic record shows `Pending sync`, never a fabricated order number.
+
+### Build constraint
+
+`@serwist/next` hooks the **webpack** build and has no Turbopack support, so `frontend`'s `build`
+script is `next build --webpack`. That flows into CI and the Docker image. Removing the flag makes
+the build succeed while silently shipping no service worker. The generated `public/sw.js` is
+gitignored and excluded from eslint — it is a 47 KB artifact that `git checkout` never removes.
+
 ## API base URL: the `/api` prefix trap
 
 The backend mounts every router under `/api/*` ([server.js](backend/src/server.js)), but the
