@@ -997,6 +997,72 @@ describe('Sales Order Management', () => {
       expect(res.body.data.orders.completed).toBe(2);
       expect(res.body.data.orders.pending).toBe(1);
     });
+
+    it('reports today and month revenue from completed orders only', async () => {
+      const admin = await createTestAdmin();
+      const category = await createTestCategory();
+      const branch = await createTestBranch();
+      const product = await createTestProduct(category);
+      await createTestStock(product, branch);
+
+      const completed = await createTestSalesOrder(branch, product, admin.user, {
+        status: 'completed',
+        paymentStatus: 'paid',
+      });
+      // Pending orders are not revenue — they have not been fulfilled.
+      await createTestSalesOrder(branch, product, admin.user, { status: 'pending' });
+
+      // The pre-save hook recomputes `total` from the line items, so read the
+      // persisted figure rather than assuming whatever the factory was passed.
+      const persisted = await SalesOrder.findById(completed._id);
+
+      const res = await request(app)
+        .get('/api/sales/stats')
+        .set('Authorization', `Bearer ${admin.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.revenue).toHaveProperty('today');
+      expect(res.body.data.revenue).toHaveProperty('month');
+      expect(persisted.total).toBeGreaterThan(0);
+      expect(res.body.data.revenue.today).toBe(persisted.total);
+      expect(res.body.data.revenue.month).toBe(persisted.total);
+    });
+
+    it('excludes orders created before today from today revenue', async () => {
+      const admin = await createTestAdmin();
+      const category = await createTestCategory();
+      const branch = await createTestBranch();
+      const product = await createTestProduct(category);
+      await createTestStock(product, branch);
+
+      const old = await createTestSalesOrder(branch, product, admin.user, {
+        status: 'completed',
+        paymentStatus: 'paid',
+      });
+      // Backdate well past any timezone's start-of-day. Only `today` is
+      // asserted: whether five days ago falls inside the current month depends
+      // on the date the suite runs, so `month` would be flaky.
+      // Via the raw driver: Mongoose marks `createdAt` immutable under
+      // `timestamps: true`, so a normal updateOne silently drops the $set and
+      // the order stays dated today — which would make this test pass for the
+      // wrong reason if it were asserting the opposite.
+      await SalesOrder.collection.updateOne(
+        { _id: old._id },
+        { $set: { createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) } }
+      );
+
+      const persisted = await SalesOrder.findById(old._id);
+
+      const res = await request(app)
+        .get('/api/sales/stats')
+        .set('Authorization', `Bearer ${admin.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.revenue.today).toBe(0);
+      // The all-time total still counts it, which is what distinguishes the
+      // new windowed figures from the pre-existing one.
+      expect(res.body.data.revenue.total).toBe(persisted.total);
+    });
   });
 
   describe('DELETE /api/sales/:id - Cancel Order', () => {

@@ -7,6 +7,7 @@ import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { PAGINATION, USER_ROLES } from '../config/constants.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
+import { getReportingPeriodBounds } from '../utils/reportingPeriod.js';
 import { canAccessBranch } from '../utils/branchScope.js';
 
 /**
@@ -592,13 +593,30 @@ export const getSalesStatistics = asyncHandler(async (req, res) => {
     if (endDate) query.createdAt.$lte = new Date(endDate);
   }
 
+  // "Today" and "this month" are wall-clock concepts, so they need a timezone.
+  // The container runs UTC, and Manila is UTC+8 — computing these in UTC would
+  // roll the day over at 08:00 local, so a morning's takings would be reported
+  // against the previous day. REPORT_TIMEZONE defaults to the timezone the
+  // seeded branches use.
+  const { startOfToday, startOfMonth } = getReportingPeriodBounds(
+    process.env.REPORT_TIMEZONE || 'Asia/Manila'
+  );
+
+  const revenueSince = (since) =>
+    SalesOrder.aggregate([
+      { $match: { ...query, status: 'completed', createdAt: { $gte: since } } },
+      { $group: { _id: null, total: { $sum: '$total' } } }
+    ]);
+
   const [
     totalOrders,
     completedOrders,
     cancelledOrders,
     pendingOrders,
     totalRevenue,
-    paidOrders
+    paidOrders,
+    todayRevenue,
+    monthRevenue
   ] = await Promise.all([
     SalesOrder.countDocuments(query),
     SalesOrder.countDocuments({ ...query, status: 'completed' }),
@@ -608,7 +626,9 @@ export const getSalesStatistics = asyncHandler(async (req, res) => {
       { $match: { ...query, status: 'completed' } },
       { $group: { _id: null, total: { $sum: '$total' } } }
     ]),
-    SalesOrder.countDocuments({ ...query, 'payment.status': 'paid' })
+    SalesOrder.countDocuments({ ...query, 'payment.status': 'paid' }),
+    revenueSince(startOfToday),
+    revenueSince(startOfMonth)
   ]);
 
   const statistics = {
@@ -621,8 +641,10 @@ export const getSalesStatistics = asyncHandler(async (req, res) => {
     },
     revenue: {
       total: totalRevenue.length > 0 ? totalRevenue[0].total : 0,
-      averageOrderValue: completedOrders > 0 
-        ? (totalRevenue.length > 0 ? totalRevenue[0].total : 0) / completedOrders 
+      today: todayRevenue.length > 0 ? todayRevenue[0].total : 0,
+      month: monthRevenue.length > 0 ? monthRevenue[0].total : 0,
+      averageOrderValue: completedOrders > 0
+        ? (totalRevenue.length > 0 ? totalRevenue[0].total : 0) / completedOrders
         : 0
     },
     payment: {

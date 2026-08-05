@@ -260,13 +260,32 @@ export type SalesOrderFilters = SalesOrderListParams;
 /**
  * Sales statistics response
  */
+/**
+ * Mirrors what `GET /api/sales/stats` actually returns.
+ *
+ * This previously declared a flat shape (`totalOrders`, `todayRevenue`, ...)
+ * that the endpoint has never sent. Every read missed, every `?? 0` fallback
+ * fired, and all four stat cards showed zero even with real orders in the
+ * database — online as well as offline.
+ */
 export interface SalesStats {
-  totalOrders: number;
-  pendingOrders: number;
-  todayRevenue: number;
-  monthRevenue: number;
-  completedOrders?: number;
-  cancelledOrders?: number;
+  orders: {
+    total: number;
+    completed: number;
+    cancelled: number;
+    pending: number;
+    processing: number;
+  };
+  revenue: {
+    total: number;
+    today: number;
+    month: number;
+    averageOrderValue: number;
+  };
+  payment: {
+    paid: number;
+    pendingPayment: number;
+  };
 }
 
 // ============ Invoice ============

@@ -73,7 +73,7 @@ export const SalesStatsCards: React.FC<SalesStatsCardsProps> = ({
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <StatCard
         title="Total Orders"
-        value={stats?.totalOrders ?? 0}
+        value={stats?.orders.total ?? 0}
         icon={<ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />}
         bgColor="bg-blue-100 dark:bg-blue-900/30"
         iconColor="text-blue-600 dark:text-blue-400"
@@ -81,7 +81,7 @@ export const SalesStatsCards: React.FC<SalesStatsCardsProps> = ({
       />
       <StatCard
         title="Pending Orders"
-        value={stats?.pendingOrders ?? 0}
+        value={stats?.orders.pending ?? 0}
         icon={<Clock className="w-5 h-5 sm:w-6 sm:h-6" />}
         bgColor="bg-yellow-100 dark:bg-yellow-900/30"
         iconColor="text-yellow-600 dark:text-yellow-400"
@@ -89,7 +89,7 @@ export const SalesStatsCards: React.FC<SalesStatsCardsProps> = ({
       />
       <StatCard
         title="Today's Revenue"
-        value={formatCurrency(stats?.todayRevenue ?? 0)}
+        value={formatCurrency(stats?.revenue.today ?? 0)}
         icon={<DollarSign className="w-5 h-5 sm:w-6 sm:h-6" />}
         bgColor="bg-green-100 dark:bg-green-900/30"
         iconColor="text-green-600 dark:text-green-400"
@@ -97,7 +97,7 @@ export const SalesStatsCards: React.FC<SalesStatsCardsProps> = ({
       />
       <StatCard
         title="Month Revenue"
-        value={formatCurrency(stats?.monthRevenue ?? 0)}
+        value={formatCurrency(stats?.revenue.month ?? 0)}
         icon={<TrendingUp className="w-5 h-5 sm:w-6 sm:h-6" />}
         bgColor="bg-purple-100 dark:bg-purple-900/30"
         iconColor="text-purple-600 dark:text-purple-400"
