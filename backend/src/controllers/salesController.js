@@ -164,6 +164,7 @@ export const getSalesOrdersByBranch = asyncHandler(async (req, res) => {
  */
 export const createSalesOrder = asyncHandler(async (req, res) => {
   const {
+    clientRequestId,
     branch,
     customer,
     items,
@@ -177,6 +178,24 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
   // Validate branch access
   if (!canAccessBranch(req.user, branch)) {
     return ApiResponse.error(res, 403, 'Cannot create order for different branch');
+  }
+
+  // Idempotent replay: a queued offline order can be retried after a dropped
+  // response. Recognise the retry and return the order already created for
+  // this key instead of creating a duplicate. This must run before any stock
+  // is touched below (product/stock lookups, reservations) — otherwise a
+  // replay would silently double-reserve or double-deduct stock while still
+  // appearing to succeed. Scoped to `branch` (already access-checked above)
+  // so this can't be used to read an order from a branch the caller can't
+  // access.
+  if (clientRequestId) {
+    const existing = await SalesOrder.findOne({ clientRequestId, branch })
+      .populate('branch', 'name code')
+      .populate('processedBy', 'name')
+      .populate('items.product', 'sku name brand images');
+    if (existing) {
+      return ApiResponse.success(res, 200, 'Order already recorded', existing);
+    }
   }
 
   // Validate and prepare items
@@ -233,6 +252,7 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
   // Create sales order
   const order = await SalesOrder.create({
     orderNumber,
+    clientRequestId,
     branch,
     customer,
     items: preparedItems,

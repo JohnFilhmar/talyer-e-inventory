@@ -292,6 +292,85 @@ describe('Service Order Management', () => {
     });
   });
 
+  describe('POST /api/services idempotency', () => {
+    it('returns the existing order when the same clientRequestId is replayed', async () => {
+      const admin = await createTestAdmin();
+      const branch = await createTestBranch();
+      const clientRequestId = new mongoose.Types.ObjectId().toString();
+
+      const payload = {
+        clientRequestId,
+        branch: branch._id.toString(),
+        customer: { name: 'Offline Customer', phone: '+63 912 345 6789' },
+        vehicle: { make: 'Toyota', model: 'Vios' },
+        description: 'Brake inspection',
+      };
+
+      const first = await request(app)
+        .post('/api/services')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send(payload);
+      expect(first.status).toBe(201);
+
+      const replay = await request(app)
+        .post('/api/services')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send(payload);
+
+      expect(replay.status).toBe(200);
+      expect(replay.body.data._id).toBe(first.body.data._id);
+      expect(await ServiceOrder.countDocuments({ clientRequestId })).toBe(1);
+    });
+
+    it('still creates separate service orders for different clientRequestIds', async () => {
+      const admin = await createTestAdmin();
+      const branch = await createTestBranch();
+
+      const make = () => request(app)
+        .post('/api/services')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({
+          clientRequestId: new mongoose.Types.ObjectId().toString(),
+          branch: branch._id.toString(),
+          customer: { name: 'Customer', phone: '+63 912 345 6789' },
+          vehicle: { make: 'Toyota', model: 'Vios' },
+          description: 'Brake inspection',
+        });
+
+      const a = await make();
+      const b = await make();
+
+      expect(a.status).toBe(201);
+      expect(b.status).toBe(201);
+      expect(a.body.data._id).not.toBe(b.body.data._id);
+    });
+
+    it('allows two service orders with no clientRequestId to coexist (sparse unique index)', async () => {
+      // Regression guard: without `sparse: true` on the unique index, the
+      // second online create (which sends no clientRequestId at all) would
+      // collide on a duplicate `null` key and fail with a 500.
+      const admin = await createTestAdmin();
+      const branch = await createTestBranch();
+
+      const make = () => request(app)
+        .post('/api/services')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({
+          branch: branch._id.toString(),
+          customer: { name: 'Walk-in Customer', phone: '+63 912 345 6789' },
+          vehicle: { make: 'Toyota', model: 'Vios' },
+          description: 'Brake inspection',
+        });
+
+      const a = await make();
+      const b = await make();
+
+      expect(a.status).toBe(201);
+      expect(b.status).toBe(201);
+      expect(a.body.data._id).not.toBe(b.body.data._id);
+    });
+  });
+
   describe('PUT /api/services/:id/assign - Assign Mechanic', () => {
     it('should assign mechanic to service order', async () => {
       const admin = await createTestAdmin();

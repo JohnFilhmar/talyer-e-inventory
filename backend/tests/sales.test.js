@@ -1,4 +1,5 @@
 import request from 'supertest';
+import mongoose from 'mongoose';
 import express from 'express';
 import * as dbHandler from './setup/dbHandler.js';
 import { createTestUser, createTestAdmin, createTestSalesperson, createTestMechanic } from './setup/testHelpers.js';
@@ -390,6 +391,94 @@ describe('Sales Order Management', () => {
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe('POST /api/sales idempotency', () => {
+    it('returns the existing order when the same clientRequestId is replayed', async () => {
+      const admin = await createTestAdmin();
+      const category = await createTestCategory();
+      const branch = await createTestBranch();
+      const product = await createTestProduct(category);
+      await createTestStock(product, branch, { quantity: 100, sellingPrice: 150 });
+      const clientRequestId = new mongoose.Types.ObjectId().toString();
+
+      const payload = {
+        clientRequestId,
+        branch: branch._id.toString(),
+        customer: { name: 'Offline Customer', phone: '09171234567' },
+        items: [{ product: product._id.toString(), quantity: 1 }],
+        paymentMethod: 'cash',
+      };
+
+      const first = await request(app)
+        .post('/api/sales')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send(payload);
+      expect(first.status).toBe(201);
+
+      const replay = await request(app)
+        .post('/api/sales')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send(payload);
+
+      expect(replay.status).toBe(200);
+      expect(replay.body.data._id).toBe(first.body.data._id);
+      expect(await SalesOrder.countDocuments({ clientRequestId })).toBe(1);
+    });
+
+    it('still creates separate orders for different clientRequestIds', async () => {
+      const admin = await createTestAdmin();
+      const category = await createTestCategory();
+      const branch = await createTestBranch();
+      const product = await createTestProduct(category);
+      await createTestStock(product, branch, { quantity: 100, sellingPrice: 150 });
+
+      const make = () => request(app)
+        .post('/api/sales')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({
+          clientRequestId: new mongoose.Types.ObjectId().toString(),
+          branch: branch._id.toString(),
+          customer: { name: 'Customer', phone: '09171234567' },
+          items: [{ product: product._id.toString(), quantity: 1 }],
+          paymentMethod: 'cash',
+        });
+
+      const a = await make();
+      const b = await make();
+
+      expect(a.status).toBe(201);
+      expect(b.status).toBe(201);
+      expect(a.body.data._id).not.toBe(b.body.data._id);
+    });
+
+    it('allows two orders with no clientRequestId to coexist (sparse unique index)', async () => {
+      // Regression guard: without `sparse: true` on the unique index, the
+      // second online create (which sends no clientRequestId at all) would
+      // collide on a duplicate `null` key and fail with a 500.
+      const admin = await createTestAdmin();
+      const category = await createTestCategory();
+      const branch = await createTestBranch();
+      const product = await createTestProduct(category);
+      await createTestStock(product, branch, { quantity: 100, sellingPrice: 150 });
+
+      const make = () => request(app)
+        .post('/api/sales')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({
+          branch: branch._id.toString(),
+          customer: { name: 'Walk-in Customer', phone: '09171234567' },
+          items: [{ product: product._id.toString(), quantity: 1 }],
+          paymentMethod: 'cash',
+        });
+
+      const a = await make();
+      const b = await make();
+
+      expect(a.status).toBe(201);
+      expect(b.status).toBe(201);
+      expect(a.body.data._id).not.toBe(b.body.data._id);
     });
   });
 

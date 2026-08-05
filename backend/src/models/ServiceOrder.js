@@ -9,6 +9,14 @@ const serviceOrderSchema = new mongoose.Schema(
       required: true,
       index: true
     },
+    // Client-generated idempotency key. Lets a queued offline order be
+    // replayed safely: a retry after a dropped connection resolves to the
+    // order already created rather than a duplicate. Sparse because online
+    // creates do not send one.
+    clientRequestId: {
+      type: String,
+      index: { unique: true, sparse: true },
+    },
     branch: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Branch',

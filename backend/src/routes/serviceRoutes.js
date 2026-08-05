@@ -20,6 +20,10 @@ const phoneValidator = body('customer.phone')
 
 // Validation rules for creating service order
 const createServiceValidation = [
+  // Optional idempotency key from an offline device replaying a queued order.
+  // Opaque to the server — it only ever compares it for equality.
+  body('clientRequestId').optional().isString().isLength({ min: 8, max: 100 })
+    .withMessage('clientRequestId must be an opaque string of 8-100 characters'),
   body('branch').notEmpty().withMessage('Branch is required').isMongoId().withMessage('Invalid branch ID'),
   body('customer.name').trim().notEmpty().withMessage('Customer name is required').isLength({ max: 100 }).withMessage('Customer name cannot exceed 100 characters'),
   phoneValidator,

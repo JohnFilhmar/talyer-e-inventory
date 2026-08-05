@@ -174,6 +174,7 @@ export const getServiceOrder = asyncHandler(async (req, res) => {
  */
 export const createServiceOrder = asyncHandler(async (req, res) => {
   const {
+    clientRequestId,
     branch,
     customer,
     vehicle,
@@ -203,6 +204,21 @@ export const createServiceOrder = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 403, 'Cannot create service order for different branch');
   }
 
+  // Idempotent replay of a queued offline order. This must run before any
+  // stock is touched below (parts lookups, reservations) — otherwise a replay
+  // would silently double-reserve or double-deduct stock while still appearing
+  // to succeed. Scoped to `branch` (already access-checked above) so a guessed
+  // key cannot be used to read an order from a branch the caller cannot reach.
+  if (clientRequestId) {
+    const existing = await ServiceOrder.findOne({ clientRequestId, branch })
+      .populate('branch', 'name code')
+      .populate('assignedTo', 'name')
+      .populate('createdBy', 'name');
+    if (existing) {
+      return ApiResponse.success(res, 200, 'Service order already recorded', existing);
+    }
+  }
+
   // Validate mechanic if assigned
   if (assignedTo) {
     const mechanic = await User.findById(assignedTo);
@@ -224,6 +240,7 @@ export const createServiceOrder = asyncHandler(async (req, res) => {
   // Create service order
   const order = await ServiceOrder.create({
     jobNumber,
+    clientRequestId,
     branch,
     customer,
     vehicle,
