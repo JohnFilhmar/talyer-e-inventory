@@ -186,34 +186,47 @@ export const Navbar: React.FC = () => {
               </span>
             </Link>
 
-            {/* Desktop Navigation.
-                Gated at xl, not md. An admin sees nine links here; at md
-                (768px) they need roughly 1160px and overflow the bar, taking
-                the page's horizontal scroll with them. Tablets get the
-                hamburger instead, which is also what the design guidelines
-                ask for. */}
-            <div className="hidden xl:ml-8 xl:flex xl:space-x-4">
-              {accessibleNavItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`
-                    inline-flex items-center px-3 py-2 text-sm font-medium rounded-md
-                    ${isActive(item.href)
-                      ? 'bg-yellow-100 text-black'
-                      : 'text-gray-600 hover:text-black hover:bg-gray-100'
-                    }
-                  `}
-                >
-                  <span className="mr-2">{item.icon}</span>
-                  {item.label}
-                </Link>
-              ))}
+            {/* Desktop Navigation — icon-only, gated at lg (1024px) not xl.
+                Every item renders just its icon; only the active item also
+                shows its label, which is what keeps the bar narrow enough to
+                drop back from xl. An admin's widest case is 8 icon-only
+                buttons (p-2, ~36px each) + 1 active item (icon + "Categories",
+                the longest label, ~132px) + gaps (space-x-1, 4px x 8) = ~452px
+                of nav, plus the logo (~140px) and its ml-8 (32px) = ~624px on
+                the left, and the user menu (~208px) on the right. With page
+                padding that's ~896px total against a 1024px viewport — fits
+                with ~128px to spare. The same math against md (768px) does
+                not fit (~880px needed), which is why lg and not md. */}
+            <div className="hidden lg:ml-8 lg:flex lg:items-center lg:space-x-1">
+              {accessibleNavItems.map((item) => {
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={active ? 'page' : undefined}
+                    aria-label={active ? undefined : item.label}
+                    title={active ? undefined : item.label}
+                    className={`
+                      inline-flex items-center rounded-md
+                      ${active
+                        ? 'px-3 py-2 text-sm font-medium bg-yellow-100 text-black'
+                        : 'p-2 text-gray-600 hover:text-black hover:bg-gray-100'
+                      }
+                    `}
+                  >
+                    <span className={active ? 'mr-2' : ''} aria-hidden="true">
+                      {item.icon}
+                    </span>
+                    {active && item.label}
+                  </Link>
+                );
+              })}
             </div>
           </div>
 
           {/* Desktop User Menu */}
-          <div className="hidden xl:flex xl:items-center shrink-0">
+          <div className="hidden lg:flex lg:items-center shrink-0">
             <div className="relative">
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -280,7 +293,7 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Mobile menu button */}
-          <div className="flex items-center xl:hidden shrink-0">
+          <div className="flex items-center lg:hidden shrink-0">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 rounded-md text-gray-600 hover:text-black hover:bg-gray-100"
@@ -300,9 +313,10 @@ export const Navbar: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Menu — shown wherever the inline nav is hidden, i.e. below xl. */}
+      {/* Mobile Menu — shown wherever the inline nav is hidden, i.e. below lg.
+          Unchanged: a vertical list, so icon + label both fit comfortably. */}
       {mobileMenuOpen && (
-        <div className="xl:hidden border-t border-gray-200">
+        <div className="lg:hidden border-t border-gray-200">
           <div className="px-4 py-3 space-y-1">
             {accessibleNavItems.map((item) => (
               <Link
