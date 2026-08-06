@@ -22,7 +22,7 @@ Two independent npm packages, no workspace root. Every command must be run from 
 # Backend (cd backend)
 npm run dev                       # nodemon on src/server.js, port 5000
 npm start                         # node src/server.js
-npm test                          # jest --runInBand (NODE_ENV=test) — green: 14 suites, 407 tests
+npm test                          # jest --runInBand (NODE_ENV=test) — green: 15 suites, 474 tests
 npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
@@ -353,14 +353,43 @@ app.use(express.json());
 app.use('/api/stock', stockRoutes);
 ```
 
-`npm test` is green — verified 14 suites / 407 tests passing (before the motorcycle-fitment work,
-which adds `tests/motorcycleModel.test.js` and extends `tests/product.test.js`; those two suites
-could not be run locally because the sandbox network policy blocks `fastdl.mongodb.org`, so
-`mongodb-memory-server` cannot fetch a `mongod` binary — CI's `backend-test` job is the check):
+`npm test` is green — 15 suites / 474 tests, verified by CI's `backend-test` job:
 
 ```bash
 npm test
 ```
+
+**The suite may be unrunnable locally.** `mongodb-memory-server` downloads a `mongod` binary from
+`fastdl.mongodb.org` on first run; in a sandbox whose network policy blocks that host, every
+DB-backed suite fails in `beforeAll` with a 403 `DownloadError` — including suites that were
+passing before your change. That is an environment failure, not a regression. When it happens,
+push and read `backend-test`; do not infer anything from the local red.
+
+### Two traps in the mount-the-router pattern
+
+Both of these produced a **500 where the test expected a 2xx/4xx**, and both were invisible until
+CI ran, so check for them before pushing:
+
+- **The app under test has no `errorHandler`.** A Mongoose `ValidationError` from a schema
+  validator only becomes a 400 through
+  [middleware/errorHandler.js](backend/src/middleware/errorHandler.js), which `server.js` mounts
+  and the suites deliberately do not. Any rule that must produce a 4xx has to live in the route's
+  express-validator chain; keep the schema validator as the backstop for writes that bypass the
+  route (seeds, migrations, other controllers), not as the only enforcement. The
+  `yearFrom`/`yearTo` ordering rule on `MotorcycleModel` is the worked example — it exists in both
+  places for exactly this reason.
+
+- **A `ref` is resolved by name against a global registry, at populate time.** Declaring
+  `ref: 'MotorcycleModel'` on a schema does not load that model. A suite that mounts only
+  `stockRoutes` never imports it, so `.populate('motorcycleModels')` throws `MissingSchemaError`
+  and the read 500s — while the motorcycle and product suites pass, because their test files
+  import the model directly and mask it. **A model that declares a `ref` must import the target
+  module for its registration side effect**; `models/Product.js` imports `./MotorcycleModel.js`
+  for no other purpose. Check with:
+
+  ```bash
+  node -e "import('./src/routes/stockRoutes.js').then(async()=>{const m=(await import('mongoose')).default;console.log(Object.keys(m.models).sort())})"
+  ```
 
 [tests/user.test.js](backend/tests/user.test.js) used to be the one file that broke this: it
 imported `../src/server.js`, which executes `startServer()` and calls `connectDB()` against the
@@ -432,6 +461,42 @@ findings to GitHub code scanning (SARIF) but never fails the job regardless of w
 That's deliberate — base-image CVEs are frequently unfixable upstream, and failing the build on
 them would block every merge. The checks that actually fail on a real problem are `backend-test`,
 `frontend-build`, `docker-build`, `dependency-audit`, and `secret-scan`.
+
+### CodeQL
+
+The `codeql` job runs the `security-and-quality` suite. Two separate things appear in a PR: the
+**`codeql` job** (green as long as the analysis runs) and a **`CodeQL` check run** that lists
+*new* alerts in the code this PR changed and fails the PR. A green job with a red check is the
+normal shape of a CodeQL failure — read the check, not the job.
+
+There is no MCP tool for code-scanning alerts. The alert list is readable from the check run's
+page (`https://github.com/<owner>/<repo>/runs/<checkRunId>`); dismissing one is a human action in
+the Security tab.
+
+**"New" means new flow, not new file.** An alert is attributed to the PR that opens the path to it,
+so it will point at files the PR never touched. Routing user-supplied text into an existing helper
+is enough to light up that helper.
+
+- **`utils/cache.js` — log injection + externally-controlled format string.** Cache keys embed
+  caller text (a product search term, a motorcycle filter value), and every `CacheUtil` method logs
+  its key when Redis errors. `forLog()` sanitises at the sink, so every current and future caller
+  is covered. Two details are load-bearing and easy to undo:
+  - The key is passed to `console.error` as a **`%s` argument against a literal format string**,
+    never interpolated into the template. Interpolating it makes the message itself externally
+    controlled, so a key containing `%s` or `%d` reshuffles everything after it.
+  - CR and LF are removed **one constant pattern at a time, replaced with `''`**. A combined
+    `[\r\n]` class, or replacing with `' '`, is equally safe at runtime but is not the shape
+    CodeQL recognises as a log-injection barrier, and the alerts stay open.
+
+- **Missing CSRF middleware (`server.js`, the `cookieParser()` line) — assessed; dismiss, don't fix.**
+  It fires whenever the app has cookie middleware plus state-changing handlers, so **adding any
+  router with a POST/PUT/DELETE re-triggers it**. Do not "fix" it by bolting on CSRF middleware:
+  it is not exploitable as the app is built — every protected route authenticates with a Bearer
+  token from `localStorage`, which a cross-site page cannot set, and the only cookie-borne
+  credential is the refresh token, which is `httpOnly` and `sameSite: 'strict'` in production.
+  Real CSRF tokens would be an API-wide change that also has to thread through the offline outbox
+  replay. If it reappears on a new PR, dismiss it again rather than re-litigating it; revisit only
+  if the app ever starts authenticating a state-changing route from a cookie.
 
 These checks are only advisory until branch protection requires them. Enable it once with:
 
