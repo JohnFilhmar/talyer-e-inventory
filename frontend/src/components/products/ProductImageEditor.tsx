@@ -16,6 +16,9 @@ import { Alert } from '@/components/ui/Alert';
 import { useUploadProductImage, useDeleteProductImage, useSetProductImageAsPrimary, useUpdateProduct } from '@/hooks/useProducts';
 import type { ProductImage } from '@/types/product';
 
+/** Matches multer's limit on the server, so the form cannot accept what the API refuses. */
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
 interface ProductImageEditorProps {
   productId: string;
   images: ProductImage[];
@@ -89,9 +92,11 @@ export const ProductImageEditor: React.FC<ProductImageEditorProps> = ({
         continue;
       }
 
-      // Validate file size (10MB max)
-      if (file.size > 10 * 1024 * 1024) {
-        setUploadError(`${file.name} is too large. Max size is 10MB`);
+      // 5MB, matching multer's limit on the server. This said 10MB, so a 6MB
+      // file passed here and was then rejected by the API — while the help text
+      // below actively told the user 10MB was allowed.
+      if (file.size > MAX_FILE_SIZE) {
+        setUploadError(`${file.name} is too large. Max size is 5MB`);
         continue;
       }
 
@@ -251,7 +256,7 @@ export const ProductImageEditor: React.FC<ProductImageEditorProps> = ({
           <div className="flex flex-col items-center gap-2 text-gray-500 dark:text-gray-400">
             <ImagePlus className="w-8 h-8" />
             <span className="text-sm font-medium">Click to upload images</span>
-            <span className="text-xs">JPEG, PNG, or WebP (max 10MB each)</span>
+            <span className="text-xs">JPEG, PNG, or WebP (max 5MB each)</span>
 
             {/* Shooting a photo straight into the product is the common case on
                 a phone at the counter — a stock photo rarely matches the box on

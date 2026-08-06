@@ -305,6 +305,22 @@ applied to the pre-rotation dimensions. `tests/imageUpload.test.js` guards this 
 database and does run in a sandbox. Note the fix only affects new uploads: images already written
 sideways have no EXIF left to recover from and must be re-uploaded.
 
+**Photos are downscaled in the browser before upload**
+([lib/imageDownscale.ts](frontend/src/lib/imageDownscale.ts), called from `productService.uploadImage`
+so all three image UIs get it). The server resizes to 800x800 anyway, so a 12MP phone photo
+uploaded ~9 MB to be stored as ~90 KB — 99% of the bytes discarded after crossing the wire. That is
+what made uploads fail with `timeout of 15000ms exceeded`: `apiClient`'s blanket 15s default is
+sized for JSON, and 2.9 MB needs ≥1.59 Mbit/s sustained *upstream* to fit inside it. Uploads now
+also carry their own 60s timeout as a backstop.
+
+**The downscaler must apply EXIF orientation itself.** Canvas output carries no EXIF, so resizing
+without applying the tag first would hand the server sideways pixels *and* no tag to correct by —
+re-breaking the rotation fix above, this time unrecoverably. `createImageBitmap(file, {
+imageOrientation: 'from-image' })` is what makes it safe; where that is unavailable the original
+file is uploaded untouched rather than guessed at. Verified end to end in Chromium: a 3000x2000
+landscape JPEG tagged orientation 6 comes out 1067x1600 portrait with the pixels moved correctly,
+and stays correct through the server pipeline.
+
 "Take photo" is a second `<input type="file" capture="environment">` alongside the gallery input,
 in all three image UIs ([ProductImagePicker](frontend/src/components/products/ProductImagePicker.tsx)
 on create, [ProductImageEditor](frontend/src/components/products/ProductImageEditor.tsx) on edit,
