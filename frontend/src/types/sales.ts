@@ -65,10 +65,19 @@ export const PAYMENT_METHOD_OPTIONS = [
 ] as const;
 
 /**
- * Valid status transitions
+ * Valid status transitions.
+ *
+ * Must mirror `validTransitions` in backend/src/controllers/salesController.js.
+ * The server is the authority; this copy exists so the UI only offers moves
+ * that will be accepted. Letting them drift means either an option that always
+ * 400s, or a legal move the user cannot reach.
+ *
+ * pending -> completed is deliberate: 'processing' is a real state for an order
+ * being picked, but forcing every counter sale through it made the common case
+ * a two-step chore, which is why orders were being left at pending.
  */
 export const VALID_ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  pending: ['processing', 'cancelled'],
+  pending: ['processing', 'completed', 'cancelled'],
   processing: ['completed', 'cancelled'],
   completed: [],
   cancelled: [],

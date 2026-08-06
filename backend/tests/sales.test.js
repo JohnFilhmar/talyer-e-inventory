@@ -195,9 +195,15 @@ describe('Sales Order Management', () => {
       expect(res.body.data.items[0].unitPrice).toBe(150); // Branch-specific price
       expect(res.body.data.payment.status).toBe('paid'); // amountPaid > total
 
-      // Verify stock was reserved
+      // Paid in full at the counter, so the sale is already finished: the
+      // reservation has been converted into an actual deduction rather than
+      // left hanging for someone to walk through two more status changes.
+      expect(res.body.data.status).toBe('completed');
+      expect(res.body.data.completedAt).toBeDefined();
+
       const updatedStock = await Stock.findById(stock._id);
-      expect(updatedStock.reservedQuantity).toBe(2);
+      expect(updatedStock.quantity).toBe(98);
+      expect(updatedStock.reservedQuantity).toBe(0);
       expect(updatedStock.availableQuantity).toBe(98);
     });
 
@@ -507,8 +513,8 @@ describe('Sales Order Management', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.order.status).toBe('completed');
-      expect(res.body.data.order.completedAt).toBeDefined();
+      expect(res.body.data.status).toBe('completed');
+      expect(res.body.data.completedAt).toBeDefined();
 
       // Verify stock was deducted
       const updatedStock = await Stock.findById(stock._id);
@@ -549,7 +555,7 @@ describe('Sales Order Management', () => {
         .send({ status: 'completed' });
 
       expect(res.status).toBe(200);
-      expect(res.body.data.order.status).toBe('completed');
+      expect(res.body.data.status).toBe('completed');
 
       // Verify NO transaction was created
       const transaction = await Transaction.findOne({
@@ -580,7 +586,7 @@ describe('Sales Order Management', () => {
         .send({ status: 'cancelled' });
 
       expect(res.status).toBe(200);
-      expect(res.body.data.order.status).toBe('cancelled');
+      expect(res.body.data.status).toBe('cancelled');
 
       // Verify reserved stock was released
       const updatedStock = await Stock.findById(stock._id);
@@ -1135,6 +1141,160 @@ describe('Sales Order Management', () => {
     });
   });
 
+
+  describe('Payment-driven completion flow', () => {
+    const buildOrder = async (admin, branch, product, amountPaid) =>
+      request(app)
+        .post('/api/sales')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({
+          branch: branch._id.toString(),
+          customer: { name: 'Walk-in Customer' },
+          items: [{ product: product._id.toString(), quantity: 2 }],
+          paymentMethod: 'cash',
+          amountPaid,
+        });
+
+    const setup = async () => {
+      const admin = await createTestAdmin();
+      const category = await createTestCategory();
+      const branch = await createTestBranch();
+      const product = await createTestProduct(category);
+      const stock = await createTestStock(product, branch, {
+        quantity: 100,
+        reservedQuantity: 0,
+        sellingPrice: 100,
+      });
+      return { admin, branch, product, stock };
+    };
+
+    it('leaves an unpaid order pending with stock only reserved', async () => {
+      const { admin, branch, product, stock } = await setup();
+
+      const res = await buildOrder(admin, branch, product, 0);
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.status).toBe('pending');
+      expect(res.body.data.payment.status).toBe('pending');
+
+      const updated = await Stock.findById(stock._id);
+      expect(updated.quantity).toBe(100);
+      expect(updated.reservedQuantity).toBe(2);
+    });
+
+    it('leaves a partially paid order pending', async () => {
+      const { admin, branch, product, stock } = await setup();
+
+      // ₱50 against a ₱200 total.
+      const res = await buildOrder(admin, branch, product, 50);
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.status).toBe('pending');
+      expect(res.body.data.payment.status).toBe('partial');
+
+      const updated = await Stock.findById(stock._id);
+      expect(updated.quantity).toBe(100);
+      expect(updated.reservedQuantity).toBe(2);
+    });
+
+    it('completes on creation when paid in full, recording change and a transaction', async () => {
+      const { admin, branch, product, stock } = await setup();
+
+      const res = await buildOrder(admin, branch, product, 300);
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.status).toBe('completed');
+      expect(res.body.data.payment.status).toBe('paid');
+      expect(res.body.data.payment.change).toBe(100); // 300 tendered on a 200 total
+
+      const updated = await Stock.findById(stock._id);
+      expect(updated.quantity).toBe(98);
+      expect(updated.reservedQuantity).toBe(0);
+
+      const transaction = await Transaction.findOne({
+        'reference.model': 'SalesOrder',
+        'reference.id': res.body.data._id,
+      });
+      expect(transaction).not.toBeNull();
+      expect(transaction.amount).toBe(200);
+    });
+
+    it('completes a pending order once the balance is settled', async () => {
+      const { admin, branch, product, stock } = await setup();
+
+      const created = await buildOrder(admin, branch, product, 0);
+      expect(created.body.data.status).toBe('pending');
+
+      const paid = await request(app)
+        .put(`/api/sales/${created.body.data._id}/payment`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ amountPaid: 200 });
+
+      expect(paid.status).toBe(200);
+      expect(paid.body.data.status).toBe('completed');
+      expect(paid.body.data.payment.status).toBe('paid');
+
+      const updated = await Stock.findById(stock._id);
+      expect(updated.quantity).toBe(98);
+      expect(updated.reservedQuantity).toBe(0);
+    });
+
+    it('does not write a second transaction for the same sale', async () => {
+      const { admin, branch, product } = await setup();
+
+      const res = await buildOrder(admin, branch, product, 300);
+      const orderId = res.body.data._id;
+
+      // The order is already completed, so this is rejected — but the guard in
+      // completeSalesOrder is what stops a second deduction if any future path
+      // reaches completion twice.
+      await request(app)
+        .put(`/api/sales/${orderId}/status`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ status: 'completed' });
+
+      const transactions = await Transaction.find({
+        'reference.model': 'SalesOrder',
+        'reference.id': orderId,
+      });
+      expect(transactions).toHaveLength(1);
+    });
+
+    it('allows pending to go straight to completed without passing through processing', async () => {
+      const { admin, branch, product } = await setup();
+
+      const created = await buildOrder(admin, branch, product, 0);
+
+      const res = await request(app)
+        .put(`/api/sales/${created.body.data._id}/status`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ status: 'completed' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe('completed');
+    });
+
+    it('reports the transition in meta, keeping the order itself as the payload', async () => {
+      const { admin, branch, product } = await setup();
+
+      const created = await buildOrder(admin, branch, product, 0);
+
+      const res = await request(app)
+        .put(`/api/sales/${created.body.data._id}/status`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ status: 'processing' });
+
+      // The client reads _id off data to invalidate its detail query; wrapping
+      // the order made that undefined and left the UI showing a stale status.
+      expect(res.body.data._id).toBe(created.body.data._id);
+      expect(res.body.data.status).toBe('processing');
+      expect(res.body.meta.statusChange).toMatchObject({
+        from: 'pending',
+        to: 'processing',
+      });
+    });
+  });
+
   describe('Stock Integration Tests', () => {
     it('should complete full order lifecycle: create → complete → verify stock & transaction', async () => {
       const admin = await createTestAdmin();
@@ -1162,28 +1322,13 @@ describe('Sales Order Management', () => {
       expect(createRes.status).toBe(201);
       const orderId = createRes.body.data._id;
 
-      // Verify: Stock reserved
-      let updatedStock = await Stock.findById(stock._id);
-      expect(updatedStock.quantity).toBe(100);
-      expect(updatedStock.reservedQuantity).toBe(5);
-      expect(updatedStock.availableQuantity).toBe(95);
-
-      // Step 2: Move order to processing (required before completion)
-      await request(app)
-        .put(`/api/sales/${orderId}/status`)
-        .set('Authorization', `Bearer ${admin.token}`)
-        .send({ status: 'processing' });
-
-      // Step 3: Complete order
-      const completeRes = await request(app)
-        .put(`/api/sales/${orderId}/status`)
-        .set('Authorization', `Bearer ${admin.token}`)
-        .send({ status: 'completed' });
-
-      expect(completeRes.status).toBe(200);
+      // ₱1200 tendered against a ₱1000 total settles the sale outright, so
+      // creation IS the completion — there is no pending or processing step to
+      // walk through.
+      expect(createRes.body.data.status).toBe('completed');
 
       // Verify: Stock deducted
-      updatedStock = await Stock.findById(stock._id);
+      const updatedStock = await Stock.findById(stock._id);
       expect(updatedStock.quantity).toBe(95);
       expect(updatedStock.reservedQuantity).toBe(0);
       expect(updatedStock.availableQuantity).toBe(95);

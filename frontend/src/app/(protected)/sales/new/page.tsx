@@ -19,6 +19,8 @@ import {
   Calculator,
   Camera,
   Bike,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useBranches } from '@/hooks/useBranches';
@@ -58,6 +60,20 @@ function isStockProductPopulated(product: Stock['product']): product is StockPro
   return typeof product === 'object' && product !== null && '_id' in product;
 }
 
+/**
+ * react-hook-form's `valueAsNumber` turns an emptied number input into NaN.
+ * NaN fails `z.number()`, so clearing the tax box made the whole form fail
+ * validation — silently, because these inputs render no error text. The sale
+ * simply would not submit and nothing on screen said why.
+ *
+ * An empty numeric field on this screen always means zero.
+ */
+const numberFromInput = (value: unknown): number => {
+  if (value === '' || value === null || value === undefined) return 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 // Local item type for display (includes price info for calculations)
 interface LocalOrderItem {
   product: string;
@@ -86,6 +102,9 @@ const formSchema = z.object({
 });
 
 type FormData = z.infer<typeof formSchema>;
+
+/** What a sale is filed under when nobody gives a name. */
+const DEFAULT_CUSTOMER_NAME = 'Walk-in Customer';
 type PaymentMethodType = FormData['paymentMethod'];
 
 /**
@@ -112,6 +131,11 @@ export default function NewSalePage() {
   
   // Local state for order items (with display info)
   const [orderItems, setOrderItems] = useState<LocalOrderItem[]>([]);
+
+  // Customer details are collapsed by default. The overwhelming majority of
+  // counter sales are anonymous cash sales, and four always-visible fields
+  // pushed the payment controls below the fold on a tablet.
+  const [customerOpen, setCustomerOpen] = useState(false);
 
   // Get user's branch or allow selection for admin
   const userBranchId = useMemo(() => {
@@ -169,7 +193,10 @@ export default function NewSalePage() {
     defaultValues: {
       branch: activeBranchId,
       customer: {
-        name: '',
+        // Pre-filled so the counter is never blocked on typing a name for a
+        // customer who is standing there paying cash. Overwritable, and still
+        // required in the data so orders and invoices always show something.
+        name: DEFAULT_CUSTOMER_NAME,
         phone: '',
         email: '',
         address: '',
@@ -187,6 +214,12 @@ export default function NewSalePage() {
   const discount = useWatch({ control, name: 'discount', defaultValue: 0 }) || 0;
   const paymentMethod = useWatch({ control, name: 'paymentMethod', defaultValue: 'cash' });
   const amountPaid = useWatch({ control, name: 'amountPaid', defaultValue: 0 }) || 0;
+  // Shown in the collapsed customer header, so closing the section never hides
+  // who the sale is for.
+  const customerName = useWatch({ control, name: 'customer.name' });
+  // A name error must stay visible when the section is collapsed, or the form
+  // refuses to submit with the reason hidden inside a closed panel.
+  const customerNameError = errors.customer?.name?.message;
 
   // Update branch when activeBranchId changes
   useEffect(() => {
@@ -703,11 +736,37 @@ export default function NewSalePage() {
 
             {/* Customer Information */}
             <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                Customer Information
-              </h3>
+              <button
+                type="button"
+                onClick={() => setCustomerOpen((open) => !open)}
+                className="w-full flex items-center justify-between gap-3 text-left"
+                aria-expanded={customerOpen}
+              >
+                <span className="min-w-0">
+                  <span className="block text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    Customer
+                  </span>
+                  <span className="block text-sm text-gray-500 dark:text-gray-400 truncate">
+                    {customerName?.trim() || DEFAULT_CUSTOMER_NAME}
+                  </span>
+                </span>
+                <span className="flex items-center gap-1 shrink-0 text-sm font-medium text-blue-600 dark:text-blue-400">
+                  {customerOpen ? 'Hide' : 'Add details'}
+                  {customerOpen ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </span>
+              </button>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {customerNameError && (
+                <p className="mt-2 text-sm text-red-600">{customerNameError}</p>
+              )}
+
+              <div
+                className={`grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 ${customerOpen ? '' : 'hidden'}`}
+              >
                 {/* Customer Name */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -811,7 +870,7 @@ export default function NewSalePage() {
                   <div className="flex items-center gap-2">
                     <span className="text-gray-600 dark:text-gray-400">Tax</span>
                     <input
-                      {...register('taxRate', { valueAsNumber: true })}
+                      {...register('taxRate', { setValueAs: numberFromInput })}
                       type="number"
                       step="0.1"
                       min="0"
@@ -831,7 +890,7 @@ export default function NewSalePage() {
                     <span className="text-gray-600 dark:text-gray-400">Discount</span>
                     <span className="text-gray-500">₱</span>
                     <input
-                      {...register('discount', { valueAsNumber: true })}
+                      {...register('discount', { setValueAs: numberFromInput })}
                       type="number"
                       step="0.01"
                       min="0"
@@ -846,9 +905,9 @@ export default function NewSalePage() {
                 <hr className="border-gray-200 dark:border-gray-700" />
 
                 {/* Total */}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">Total</span>
-                  <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                  <span className="text-3xl font-bold tabular-nums text-blue-600 dark:text-blue-400">
                     {formatCurrency(orderTotals.total)}
                   </span>
                 </div>
@@ -866,13 +925,15 @@ export default function NewSalePage() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Payment Method
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                {/* Two columns, not three: these are hit with a thumb, often
+                    one-handed, and ~44px is the floor for a reliable tap. */}
+                <div className="grid grid-cols-2 gap-2">
                   {PAYMENT_METHOD_OPTIONS.map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       onClick={() => setValue('paymentMethod', option.value as PaymentMethodType)}
-                      className={`px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                      className={`min-h-12 px-3 py-3 rounded-lg border-2 text-base font-semibold ${
                         paymentMethod === option.value
                           ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
                           : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
@@ -889,24 +950,30 @@ export default function NewSalePage() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Amount Paid
                 </label>
-                <input
-                  {...register('amountPaid', { valueAsNumber: true })}
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="0.00"
-                />
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-gray-400 pointer-events-none">
+                    ₱
+                  </span>
+                  <input
+                    {...register('amountPaid', { setValueAs: numberFromInput })}
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-2xl font-bold tabular-nums bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0.00"
+                  />
+                </div>
               </div>
 
               {/* Quick Pay Buttons */}
-              <div className="flex flex-wrap gap-2 mb-4">
+              <div className="grid grid-cols-3 gap-2 mb-4">
                 {quickPayAmounts.map((qa) => (
                   <button
                     key={qa.label}
                     type="button"
                     onClick={() => applyQuickPay(qa)}
-                    className="px-2 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                    className="min-h-11 px-2 py-2 text-base font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40"
                   >
                     {qa.label}
                   </button>
@@ -914,22 +981,42 @@ export default function NewSalePage() {
               </div>
 
               {/* Balance / Change Display */}
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 space-y-2">
+              {/* The number the cashier reads out loud — sized to be legible
+                  across a counter at arm's length. */}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                 {change > 0 ? (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Change</span>
-                    <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-base font-medium text-gray-600 dark:text-gray-400">
+                      Change
+                    </span>
+                    <span className="text-3xl font-bold tabular-nums text-green-600 dark:text-green-400">
                       {formatCurrency(change)}
                     </span>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Balance Due</span>
-                    <span className={`text-lg font-bold ${balanceDue > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-base font-medium text-gray-600 dark:text-gray-400">
+                      Balance Due
+                    </span>
+                    <span className={`text-3xl font-bold tabular-nums ${balanceDue > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                       {formatCurrency(balanceDue)}
                     </span>
                   </div>
                 )}
+
+                {/* States what Create Order will actually do. The old screen
+                    left every sale reading 'Pending' with no hint that a fully
+                    paid one was finished, which is what made the status flow
+                    look broken. */}
+                <p className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400">
+                  {orderItems.length === 0
+                    ? 'Add an item to start the sale.'
+                    : balanceDue === 0
+                      ? 'Paid in full — this order completes immediately and stock is deducted.'
+                      : amountPaid > 0
+                        ? 'Partly paid — the order stays pending until the balance is settled.'
+                        : 'Unpaid — the order stays pending and stock is only reserved.'}
+                </p>
               </div>
             </div>
 

@@ -309,13 +309,21 @@ export const restockProduct = asyncHandler(async (req, res) => {
     
     await stock.save();
   } else {
-    // Create new stock record
+    // A branch stocking this product for the first time inherits the catalog
+    // price. Product prices are the reference — what the manufacturer or
+    // supplier lists — and Stock owns what this branch actually charges, which
+    // legitimately differs by location.
+    //
+    // Inheritance happens here and only here. Once a branch has a stock record,
+    // later edits to the Product never reach back and overwrite it: a branch
+    // manager's deliberate price is not something a catalog update may silently
+    // undo. Branches that want the new reference price re-enter it.
     stock = await Stock.create({
       product,
       branch: targetBranch,
       quantity,
-      costPrice,
-      sellingPrice,
+      costPrice: costPrice !== undefined ? costPrice : productExists.costPrice,
+      sellingPrice: sellingPrice !== undefined ? sellingPrice : productExists.sellingPrice,
       reorderPoint,
       reorderQuantity,
       supplier,
@@ -698,12 +706,17 @@ export const updateStockTransferStatus = asyncHandler(async (req, res) => {
   // Invalidate cache
   await CacheUtil.delPattern('cache:stock:*');
 
+  // The transfer itself is the payload, not { transfer, statusChange } — the
+  // client types this as a StockTransfer and reads `_id` off it to invalidate
+  // the detail query. Wrapped, that id was undefined and the screen kept the
+  // stale status after a successful write. Same defect as the sales status
+  // endpoint; the transition moves to meta, where it is optional to consume.
   return ApiResponse.success(
     res,
     200,
     'Stock transfer status updated successfully',
+    populatedTransfer,
     {
-      transfer: populatedTransfer,
       statusChange: {
         from: oldStatus,
         to: status,

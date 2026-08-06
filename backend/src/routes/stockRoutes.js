@@ -12,8 +12,11 @@ const restockValidation = [
   body('product').notEmpty().isMongoId().withMessage('Valid product ID is required'),
   body('branch').notEmpty().isMongoId().withMessage('Valid branch ID is required'),
   body('quantity').notEmpty().isInt({ min: 1 }).withMessage('Quantity must be at least 1').toInt(),
-  body('costPrice').notEmpty().isFloat({ min: 0 }).withMessage('Cost price must be a positive number').toFloat(),
-  body('sellingPrice').notEmpty().isFloat({ min: 0 }).withMessage('Selling price must be a positive number').toFloat(),
+  // Optional: a branch stocking a product for the first time inherits the
+  // catalog price from the Product, which is the reference (supplier/market)
+  // price. Sending a price here overrides it for this branch only.
+  body('costPrice').optional().isFloat({ min: 0 }).withMessage('Cost price must be a positive number').toFloat(),
+  body('sellingPrice').optional().isFloat({ min: 0 }).withMessage('Selling price must be a positive number').toFloat(),
   body('reorderPoint').optional().isInt({ min: 0 }).withMessage('Reorder point must be a non-negative integer').toInt(),
   body('reorderQuantity').optional().isInt({ min: 0 }).withMessage('Reorder quantity must be a non-negative integer').toInt(),
   body('supplier').optional().isMongoId().withMessage('Valid supplier ID required if provided'),

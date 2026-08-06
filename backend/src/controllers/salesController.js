@@ -1,7 +1,6 @@
 import SalesOrder from '../models/SalesOrder.js';
 import Stock from '../models/Stock.js';
 import Product from '../models/Product.js';
-import Transaction from '../models/Transaction.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
@@ -9,6 +8,7 @@ import { PAGINATION, USER_ROLES } from '../config/constants.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
 import { getReportingPeriodBounds } from '../utils/reportingPeriod.js';
 import { canAccessBranch } from '../utils/branchScope.js';
+import { completeSalesOrder } from '../utils/salesCompletion.js';
 
 /**
  * Normalize a branch reference that may be a populated Branch document or a
@@ -275,14 +275,29 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
     notes
   });
 
+  // A counter sale paid in full is finished the moment it is rung up: the cash
+  // is in the drawer and the goods have left with the customer. Leaving it
+  // 'pending' meant the stock stayed reserved rather than deducted, so the shelf
+  // count stayed wrong until someone remembered to walk the order through two
+  // more status changes — and the sale never reached the transaction log.
+  //
+  // Partial or unpaid orders stay pending, which is what that status is for.
+  if (order.payment.status === 'paid') {
+    await completeSalesOrder(order, req.user);
+    await order.save();
+  }
+
   // Populate for response
   const populatedOrder = await SalesOrder.findById(order._id)
     .populate('branch', 'name code')
     .populate('processedBy', 'name')
     .populate('items.product', 'sku name brand images');
 
-  // Invalidate cache
+  // Invalidate cache. Stock too when the order completed, since quantities moved.
   await CacheUtil.delPattern('cache:sales:*');
+  if (order.status === 'completed') {
+    await CacheUtil.delPattern('cache:stock:*');
+  }
 
   return ApiResponse.success(
     res,
@@ -312,9 +327,14 @@ export const updateSalesOrderStatus = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 403, 'Access denied to this order');
   }
 
-  // Validate status transition
+  // Valid status transitions.
+  //
+  // pending -> completed is allowed directly. 'processing' is a real state for
+  // an order being picked or packed, but forcing every sale through it made the
+  // common case — hand over the goods, done — a two-step chore, which is what
+  // pushed staff to leave orders sitting at pending.
   const validTransitions = {
-    pending: ['processing', 'cancelled'],
+    pending: ['processing', 'completed', 'cancelled'],
     processing: ['completed', 'cancelled'],
     completed: [],
     cancelled: []
@@ -329,54 +349,13 @@ export const updateSalesOrderStatus = asyncHandler(async (req, res) => {
   }
 
   const oldStatus = order.status;
-  order.status = status;
 
   if (status === 'completed') {
-    // Deduct stock from inventory
-    for (const item of order.items) {
-      const stock = await Stock.findOne({
-        product: item.product,
-        branch: order.branch
-      });
-      
-      if (stock) {
-        const oldQuantity = stock.quantity;
-        await stock.deductStock(item.quantity);
-        
-        // Log stock movement for sale
-        await createMovementWithOldQuantity(stock, oldQuantity, {
-          type: MOVEMENT_TYPES.SALE,
-          reference: { type: 'SalesOrder', id: order._id },
-          notes: `Sale order ${order.orderNumber}`,
-          performedBy: req.user._id,
-        });
-      }
-    }
-
-    // Create transaction record (MVP CRITICAL - CASH FLOW)
-    if (order.payment.status === 'paid') {
-      // Generate transaction number
-      const txnCount = await Transaction.countDocuments();
-      const timestamp = Date.now().toString().slice(-6);
-      const transactionNumber = `TXN-${String(txnCount + 1).padStart(6, '0')}-${timestamp}`;
-      
-      await Transaction.create({
-        transactionNumber,
-        type: 'sale',
-        branch: order.branch,
-        amount: order.total,
-        paymentMethod: order.payment.method,
-        reference: {
-          model: 'SalesOrder',
-          id: order._id
-        },
-        description: `Sales Order ${order.orderNumber}`,
-        processedBy: req.user._id
-      });
-    }
-
-    order.completedAt = new Date();
+    // Shared with the create and payment paths — stock deduction, the movement
+    // ledger entry and the transaction record must not drift between them.
+    await completeSalesOrder(order, req.user);
   } else if (status === 'cancelled') {
+    order.status = status;
     // Release reserved stock
     for (const item of order.items) {
       const stock = await Stock.findOne({
@@ -397,6 +376,8 @@ export const updateSalesOrderStatus = asyncHandler(async (req, res) => {
         });
       }
     }
+  } else {
+    order.status = status;
   }
 
   await order.save();
@@ -410,15 +391,22 @@ export const updateSalesOrderStatus = asyncHandler(async (req, res) => {
   await CacheUtil.delPattern('cache:sales:*');
   await CacheUtil.delPattern('cache:stock:*');
 
+  // The order itself is the payload, not { order, statusChange }.
+  //
+  // The wrapper was typed as a SalesOrder on the client, so `updated._id` was
+  // undefined and the detail query was invalidated under the key
+  // ['sales','detail',undefined] — which matches nothing. The write succeeded
+  // and the screen kept showing the old badge until a remount. The transition
+  // is still reported, as a sibling field the client can ignore.
   return ApiResponse.success(
     res,
     200,
     `Sales order ${status} successfully`,
+    populatedOrder,
     {
-      order: populatedOrder,
       statusChange: {
         from: oldStatus,
-        to: status,
+        to: order.status,
         changedBy: req.user.name,
         changedAt: new Date()
       }
@@ -460,12 +448,24 @@ export const updateSalesOrderPayment = asyncHandler(async (req, res) => {
 
   await order.save(); // Pre-save hook will recalculate payment status and change
 
+  // Settling the balance finishes the sale, the same way paying in full at the
+  // counter does. Without this an order paid off later would sit at 'pending'
+  // with its stock still merely reserved, which is the confusion this flow was
+  // reworked to remove.
+  if (order.payment.status === 'paid') {
+    await completeSalesOrder(order, req.user);
+    await order.save();
+  }
+
   const populatedOrder = await SalesOrder.findById(order._id)
     .populate('branch', 'name code')
     .populate('processedBy', 'name');
 
   // Invalidate cache
   await CacheUtil.delPattern('cache:sales:*');
+  if (order.status === 'completed') {
+    await CacheUtil.delPattern('cache:stock:*');
+  }
 
   return ApiResponse.success(res, 200, 'Payment updated successfully', populatedOrder);
 });

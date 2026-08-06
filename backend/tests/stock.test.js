@@ -121,6 +121,98 @@ describe('Stock API Tests', () => {
   // RESTOCK PRODUCT TESTS
   // ===================
   describe('POST /api/stock/restock - Restock Product', () => {
+    it('inherits catalog pricing when a branch stocks a product for the first time', async () => {
+      // Product prices are the reference (supplier/market) price; a branch that
+      // has no opinion yet starts from them rather than being forced to retype
+      // them or, worse, being blocked from stocking the item at all.
+      const res = await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          quantity: 10,
+        });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body.data.costPrice).toBe(product.costPrice);
+      expect(res.body.data.sellingPrice).toBe(product.sellingPrice);
+    });
+
+    it('lets a branch override either price at creation', async () => {
+      const res = await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          quantity: 10,
+          sellingPrice: 999,
+        });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body.data.sellingPrice).toBe(999);
+      // The price that was not supplied still comes from the catalog.
+      expect(res.body.data.costPrice).toBe(product.costPrice);
+    });
+
+    it('never overwrites an existing branch price on a later restock', async () => {
+      await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          quantity: 10,
+          costPrice: 300,
+          sellingPrice: 400,
+        });
+
+      // Restocking without prices is a quantity top-up. A branch manager's
+      // deliberate price must survive it — and must survive a later catalog
+      // edit too, which is why inheritance happens only at creation.
+      const res = await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          quantity: 5,
+        });
+
+      // The endpoint answers 201 for a top-up as well as a first stocking.
+      expect(res.statusCode).toBe(201);
+      expect(res.body.data.quantity).toBe(15);
+      expect(res.body.data.costPrice).toBe(300);
+      expect(res.body.data.sellingPrice).toBe(400);
+    });
+
+    it('keeps branches independent: the same product can cost different amounts', async () => {
+      await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          quantity: 10,
+          sellingPrice: 500,
+        });
+
+      const branchBRes = await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchB._id.toString(),
+          quantity: 10,
+        });
+
+      expect(branchBRes.statusCode).toBe(201);
+      // Branch B inherits the catalog price, unaffected by what A charges.
+      expect(branchBRes.body.data.sellingPrice).toBe(product.sellingPrice);
+      expect(branchBRes.body.data.sellingPrice).not.toBe(500);
+    });
+
     it('should create new stock record for branch', async () => {
       const stockData = {
         product: product._id.toString(),
@@ -670,8 +762,8 @@ describe('Stock API Tests', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.transfer.status).toBe('in-transit');
-      expect(res.body.data.transfer).toHaveProperty('shippedAt');
+      expect(res.body.data.status).toBe('in-transit');
+      expect(res.body.data).toHaveProperty('shippedAt');
     });
 
     it('should complete transfer and update stock', async () => {
@@ -686,8 +778,8 @@ describe('Stock API Tests', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.transfer.status).toBe('completed');
-      expect(res.body.data.transfer).toHaveProperty('receivedAt');
+      expect(res.body.data.status).toBe('completed');
+      expect(res.body.data).toHaveProperty('receivedAt');
 
       // Verify stock was deducted from source
       const sourceStock = await Stock.findOne({ product: product._id, branch: branchA._id });
@@ -707,7 +799,7 @@ describe('Stock API Tests', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.transfer.status).toBe('cancelled');
+      expect(res.body.data.status).toBe('cancelled');
 
       // Verify reserved stock was released
       const stock = await Stock.findOne({ product: product._id, branch: branchA._id });
