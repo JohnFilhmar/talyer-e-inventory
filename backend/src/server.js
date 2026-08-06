@@ -84,6 +84,7 @@ import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import branchRoutes from './routes/branchRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
+import motorcycleModelRoutes from './routes/motorcycleModelRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import stockRoutes from './routes/stockRoutes.js';
 import supplierRoutes from './routes/supplierRoutes.js';
@@ -95,6 +96,7 @@ app.use('/api/auth', apiLimiter, authRoutes);
 app.use('/api/users', apiLimiter, userRoutes);
 app.use('/api/branches', apiLimiter, branchRoutes);
 app.use('/api/categories', apiLimiter, categoryRoutes);
+app.use('/api/motorcycle-models', apiLimiter, motorcycleModelRoutes);
 app.use('/api/products', apiLimiter, productRoutes);
 app.use('/api/stock', apiLimiter, stockRoutes);
 app.use('/api/suppliers', apiLimiter, supplierRoutes);
@@ -121,6 +123,7 @@ app.get('/', (req, res) => {
       users: '/users',
       branches: '/branches',
       categories: '/categories',
+      motorcycleModels: '/motorcycle-models',
       products: '/products',
       stock: '/stock',
       suppliers: '/suppliers',

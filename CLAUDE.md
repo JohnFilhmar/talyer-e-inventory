@@ -27,6 +27,7 @@ npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
 node src/utils/seedBranches.js    # DESTRUCTIVE: deletes ALL existing branches, then seeds 3 Philippine branches into MONGODB_URI
+npm run migrate:product-model     # one-off: renames Product.model → Product.productModel; idempotent
 
 # Frontend (cd frontend)
 npm run dev                       # next dev, port 3000
@@ -141,6 +142,37 @@ different branches. Orders always price from the branch's `Stock`, not from `Pro
 
 `Stock.availableQuantity` is a virtual (`quantity - reservedQuantity`). Check
 `availableQuantity`, never raw `quantity`, before committing stock to an order.
+
+### Domain model — motorcycle fitment
+
+`MotorcycleModel` (`make` + `model` + optional `yearFrom`/`yearTo`) is a flat collection of the
+motorcycles the shop stocks parts for. `Product.motorcycleModels` references it many-to-many and
+is appendable like `tags` — one part fits several bikes, one bike takes many parts.
+
+Two fields on `Product` sound alike and must not be confused: **`productModel`** is the
+manufacturer's designation for the part itself (`45120-KVB-901`), while **`motorcycleModels`** is
+what the part *fits*. `productModel` was renamed from `model` for exactly that reason;
+[utils/migrateProductModel.js](backend/src/utils/migrateProductModel.js) (`npm run
+migrate:product-model`) does the one-off `$rename` and must be run against any database that
+predates the change, or every product silently loses its manufacturer designation.
+
+Identity is a derived, unique `code` (`HONDA-CLICK-125I-2018-2023`) rebuilt in a `pre('save')`
+hook whenever make/model/years change — which is why `updateMotorcycleModel` uses `set` + `save`
+rather than `findByIdAndUpdate`, since query middleware would never run the hook and a renamed
+model would keep its old identity. That code is what makes "Honda"/"HONDA" a duplicate rather
+than two makes.
+
+`GET /products?motorcycleModel=a,b` matches products fitting **any** of the listed ids
+(comma-joined, not an array — axios serialises arrays as `key[]=…`, which Express parses under
+the literal key `key[]`). `GET /products/search` is *mixed*: one `q` matches the part (name, SKU,
+brand, `productModel`, barcode) and the motorcycle, by resolving motorcycle models to ids first
+and folding them into the same `$or`. It also accepts `motorcycleModel` with no `q` at all.
+
+Deleting a motorcycle model is refused while any product references it, and every mutation
+invalidates `cache:product:*` as well as its own keys — product reads embed populated fitment, so
+a rename would otherwise leave cached products showing the old label. The stock reads that back
+the New Sale picker nest-populate fitment for the same reason: offline, an unpopulated id is an
+opaque string with nothing to match against.
 
 ### StockMovement ledger
 
@@ -260,7 +292,9 @@ There is no client-side force or override, and adding one would let a user overs
    falls back to `/offline` for uncached navigations. It deliberately does **not** cache API
    responses: a shared HTTP cache on a shared tablet can serve one user's data to the next.
 2. **IndexedDB mirror** ([lib/offline/db.ts](frontend/src/lib/offline/db.ts)) holds the working
-   set. `authStore.logout()` calls `clearOfflineCache()` in its `finally`, so the mirror never
+   set. `DB_VERSION` must be bumped whenever a store is added — it is at 4 (v2 outbox,
+   v3 stockTransfers, v4 motorcycleModels); leave it and an existing browser keeps its old schema
+   and every read of the new store throws `NotFoundError`. `authStore.logout()` calls `clearOfflineCache()` in its `finally`, so the mirror never
    survives into the next person's session — including when the logout request itself fails
    offline.
 3. **Outbox** ([lib/offline/outbox.ts](frontend/src/lib/offline/outbox.ts),
@@ -319,7 +353,10 @@ app.use(express.json());
 app.use('/api/stock', stockRoutes);
 ```
 
-`npm test` is green — verified 14 suites / 407 tests passing:
+`npm test` is green — verified 14 suites / 407 tests passing (before the motorcycle-fitment work,
+which adds `tests/motorcycleModel.test.js` and extends `tests/product.test.js`; those two suites
+could not be run locally because the sandbox network policy blocks `fastdl.mongodb.org`, so
+`mongodb-memory-server` cannot fetch a `mongod` binary — CI's `backend-test` job is the check):
 
 ```bash
 npm test

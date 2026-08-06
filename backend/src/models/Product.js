@@ -29,11 +29,22 @@ const productSchema = new mongoose.Schema(
       trim: true,
       maxlength: [100, 'Brand name cannot exceed 100 characters']
     },
-    model: {
+    // The manufacturer's model designation for the part itself (e.g. "45120-KVB-901").
+    // Named `productModel` rather than `model` so it is never confused with
+    // `motorcycleModels` below, which is what the part *fits*. Renamed from
+    // `model` — see utils/migrateProductModel.js for the one-off data move.
+    productModel: {
       type: String,
       trim: true,
-      maxlength: [100, 'Model cannot exceed 100 characters']
+      maxlength: [100, 'Product model cannot exceed 100 characters']
     },
+    // The motorcycles this part fits. Many-to-many and appendable like `tags`,
+    // because one part legitimately fits several models and one model takes
+    // many parts.
+    motorcycleModels: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MotorcycleModel'
+    }],
     costPrice: {
       type: Number,
       required: [true, 'Cost price is required'],
@@ -117,6 +128,9 @@ productSchema.index({ name: 'text', description: 'text', brand: 'text' }); // Fu
 productSchema.index({ category: 1 });
 productSchema.index({ brand: 1 });
 productSchema.index({ isActive: 1 });
+// Multikey index — "which parts fit this motorcycle?" is the query the sales
+// counter runs constantly, and it is an $in over this array.
+productSchema.index({ motorcycleModels: 1 });
 
 // Virtual for primary image
 productSchema.virtual('primaryImage').get(function() {
@@ -146,7 +160,20 @@ productSchema.pre('save', async function(next) {
     const count = await this.constructor.countDocuments();
     this.sku = `PROD-${String(count + 1).padStart(6, '0')}`;
   }
-  
+
+  // The fitment list is appended to the way tags are, so the same motorcycle
+  // can arrive twice from a form that was edited without a reload. Duplicates
+  // would double-count the product in every "fits this bike" listing.
+  if (this.isModified('motorcycleModels') && Array.isArray(this.motorcycleModels)) {
+    const seen = new Set();
+    this.motorcycleModels = this.motorcycleModels.filter((id) => {
+      const key = String(id);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   // Ensure only one primary image
   if (this.images && this.images.length > 0) {
     const primaryImages = this.images.filter(img => img.isPrimary);

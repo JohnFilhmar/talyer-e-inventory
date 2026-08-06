@@ -1,9 +1,68 @@
 import Product from '../models/Product.js';
 import Category from '../models/Category.js';
+import MotorcycleModel from '../models/MotorcycleModel.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { CACHE_TTL, PAGINATION } from '../config/constants.js';
+
+/** Fields of a motorcycle model a product read needs to render a fitment chip. */
+const MOTORCYCLE_MODEL_SELECT = 'make model yearFrom yearTo code';
+
+/**
+ * Escapes a user-supplied string for use inside a RegExp. A shopper searching
+ * "125i (2018)" must not have the parentheses read as a capture group.
+ */
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Normalises the `motorcycleModel` filter, which arrives either as a repeated
+ * query param (`?motorcycleModel=a&motorcycleModel=b`, parsed by Express into
+ * an array) or as one comma-joined string — the form the frontend sends, since
+ * axios's default array serialisation appends `[]` to the key.
+ *
+ * @param {string|string[]|undefined} raw
+ * @returns {string[]} ids, empty when nothing usable was supplied
+ */
+const parseMotorcycleModelFilter = (raw) => {
+  if (raw === undefined || raw === null) return [];
+
+  const values = Array.isArray(raw) ? raw : String(raw).split(',');
+
+  return values
+    .map((value) => String(value).trim())
+    .filter((value) => /^[0-9a-fA-F]{24}$/.test(value));
+};
+
+/**
+ * Verifies every id in a fitment list refers to a real motorcycle model.
+ *
+ * Without this a typo'd id is stored happily and simply populates to nothing,
+ * so the product silently claims to fit no motorcycle while the form shows a
+ * saved change.
+ *
+ * @param {string[]|undefined} ids
+ * @returns {Promise<{ ok: true, ids: string[] } | { ok: false, message: string }>}
+ */
+const validateMotorcycleModels = async (ids) => {
+  if (ids === undefined) return { ok: true, ids: undefined };
+  if (!Array.isArray(ids)) return { ok: true, ids: undefined };
+  if (ids.length === 0) return { ok: true, ids: [] };
+
+  const unique = [...new Set(ids.map((id) => String(id)))];
+  const found = await MotorcycleModel.find({ _id: { $in: unique } }).select('_id').lean();
+
+  if (found.length !== unique.length) {
+    const foundIds = new Set(found.map((doc) => String(doc._id)));
+    const missing = unique.filter((id) => !foundIds.has(id));
+    return {
+      ok: false,
+      message: `Motorcycle model not found: ${missing.join(', ')}`
+    };
+  }
+
+  return { ok: true, ids: unique };
+};
 
 /**
  * Find a product already holding this barcode, if any.
@@ -43,6 +102,7 @@ export const getProducts = asyncHandler(async (req, res) => {
   const {
     category,
     brand,
+    motorcycleModel,
     active,
     discontinued,
     search,
@@ -56,15 +116,23 @@ export const getProducts = asyncHandler(async (req, res) => {
 
   // Build query
   const query = {};
-  
+
   if (category) {
     query.category = category;
   }
-  
+
   if (brand) {
     query.brand = { $regex: brand, $options: 'i' };
   }
-  
+
+  // Several motorcycles match ANY of them, not all: a customer with a Click
+  // 125i and a PCX wants the parts fitting either bike, not only the parts
+  // that happen to fit both.
+  const motorcycleModelIds = parseMotorcycleModelFilter(motorcycleModel);
+  if (motorcycleModelIds.length > 0) {
+    query.motorcycleModels = { $in: motorcycleModelIds };
+  }
+
   if (active !== undefined) {
     query.isActive = active === 'true';
   }
@@ -96,6 +164,7 @@ export const getProducts = asyncHandler(async (req, res) => {
   const [products, total] = await Promise.all([
     Product.find(query)
       .populate('category', 'name code color')
+      .populate('motorcycleModels', MOTORCYCLE_MODEL_SELECT)
       .sort(sort)
       .skip(skip)
       .limit(limitNum),
@@ -128,7 +197,9 @@ export const getProduct = asyncHandler(async (req, res) => {
     return ApiResponse.success(res, 200, 'Product retrieved from cache', cached);
   }
 
-  const product = await Product.findById(id).populate('category', 'name code color');
+  const product = await Product.findById(id)
+    .populate('category', 'name code color')
+    .populate('motorcycleModels', MOTORCYCLE_MODEL_SELECT);
 
   if (!product) {
     return ApiResponse.error(res, 404, 'Product not found');
@@ -146,31 +217,69 @@ export const getProduct = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const searchProducts = asyncHandler(async (req, res) => {
-  const { q, limit = 10 } = req.query;
+  const { q, motorcycleModel, limit = 10 } = req.query;
 
-  if (!q) {
+  const motorcycleModelIds = parseMotorcycleModelFilter(motorcycleModel);
+
+  // A motorcycle filter on its own is a complete search — "show me everything
+  // that fits this bike" needs no text — so the text requirement only applies
+  // when no fitment was picked.
+  if (!q && motorcycleModelIds.length === 0) {
     return ApiResponse.error(res, 400, 'Search query is required');
   }
 
   // Check cache
-  const cacheKey = CacheUtil.generateKey('products', 'search', q, limit);
+  const cacheKey = CacheUtil.generateKey(
+    'products',
+    'search',
+    q ?? '',
+    motorcycleModelIds.join(',') || 'any',
+    limit
+  );
   const cached = await CacheUtil.get(cacheKey);
-  
+
   if (cached) {
     return ApiResponse.success(res, 200, 'Search results from cache', cached);
   }
 
-  const products = await Product.find({
-    $or: [
-      { name: { $regex: q, $options: 'i' } },
-      { sku: { $regex: q, $options: 'i' } },
-      { brand: { $regex: q, $options: 'i' } },
-      { barcode: { $regex: q, $options: 'i' } }
-    ],
-    isActive: true
-  })
-    .select('sku name brand sellingPrice images category')
+  const query = { isActive: true };
+
+  if (motorcycleModelIds.length > 0) {
+    query.motorcycleModels = { $in: motorcycleModelIds };
+  }
+
+  if (q) {
+    const pattern = { $regex: escapeRegex(q), $options: 'i' };
+
+    // Mixed search: the same box resolves a part ("brake pad", a SKU, a
+    // barcode) and a motorcycle ("Click 125i"). Motorcycles are resolved to
+    // ids first, then folded into the same $or — a two-step that a single
+    // query cannot express, since the text lives in another collection.
+    const matchingMotorcycles = await MotorcycleModel.find({
+      $or: [{ make: pattern }, { model: pattern }, { code: pattern }]
+    })
+      .select('_id')
+      .lean();
+
+    const textOr = [
+      { name: pattern },
+      { sku: pattern },
+      { brand: pattern },
+      { productModel: pattern },
+      { barcode: pattern }
+    ];
+
+    if (matchingMotorcycles.length > 0) {
+      textOr.push({ motorcycleModels: { $in: matchingMotorcycles.map((m) => m._id) } });
+    }
+
+    query.$or = textOr;
+  }
+
+  const products = await Product.find(query)
+    .select('sku name brand productModel sellingPrice images category motorcycleModels')
     .populate('category', 'name code')
+    .populate('motorcycleModels', MOTORCYCLE_MODEL_SELECT)
     .limit(parseInt(limit));
 
   // Cache for short time
@@ -191,7 +300,8 @@ export const createProduct = asyncHandler(async (req, res) => {
     description,
     category,
     brand,
-    model,
+    productModel,
+    motorcycleModels,
     costPrice,
     sellingPrice,
     barcode,
@@ -204,6 +314,11 @@ export const createProduct = asyncHandler(async (req, res) => {
   const categoryExists = await Category.findById(category);
   if (!categoryExists) {
     return ApiResponse.error(res, 404, 'Category not found');
+  }
+
+  const fitment = await validateMotorcycleModels(motorcycleModels);
+  if (!fitment.ok) {
+    return ApiResponse.error(res, 404, fitment.message);
   }
 
   const barcodeConflict = await findBarcodeConflict(barcode);
@@ -219,7 +334,8 @@ export const createProduct = asyncHandler(async (req, res) => {
       description,
       category,
       brand,
-      model,
+      productModel,
+      motorcycleModels: fitment.ids,
       costPrice,
       sellingPrice,
       barcode,
@@ -228,7 +344,9 @@ export const createProduct = asyncHandler(async (req, res) => {
       tags
     });
 
-    const populatedProduct = await Product.findById(product._id).populate('category', 'name code');
+    const populatedProduct = await Product.findById(product._id)
+      .populate('category', 'name code')
+      .populate('motorcycleModels', MOTORCYCLE_MODEL_SELECT);
 
     // Invalidate cache
     await CacheUtil.delPattern('cache:products:*');
@@ -268,6 +386,16 @@ export const updateProduct = asyncHandler(async (req, res) => {
     }
   }
 
+  // An empty array is a legitimate update ("this part fits nothing specific"),
+  // so this checks for the key's presence rather than its truthiness.
+  if ('motorcycleModels' in req.body) {
+    const fitment = await validateMotorcycleModels(req.body.motorcycleModels);
+    if (!fitment.ok) {
+      return ApiResponse.error(res, 404, fitment.message);
+    }
+    req.body.motorcycleModels = fitment.ids ?? [];
+  }
+
   // Excluding this product is what makes a no-op save work — re-submitting the
   // edit form without touching the barcode must not conflict with itself.
   const barcodeConflict = await findBarcodeConflict(req.body.barcode, id);
@@ -281,7 +409,9 @@ export const updateProduct = asyncHandler(async (req, res) => {
       id,
       req.body,
       { new: true, runValidators: true }
-    ).populate('category', 'name code');
+    )
+      .populate('category', 'name code')
+      .populate('motorcycleModels', MOTORCYCLE_MODEL_SELECT);
   } catch (error) {
     // The check above loses to a concurrent write; the unique index does not.
     if (error.code === 11000) {
@@ -378,6 +508,7 @@ export const addProductImage = asyncHandler(async (req, res) => {
 
   // Populate category for response
   await product.populate('category', 'name code color');
+  await product.populate('motorcycleModels', MOTORCYCLE_MODEL_SELECT);
 
   // Invalidate cache
   await CacheUtil.del(CacheUtil.generateKey('product', id));
@@ -416,6 +547,7 @@ export const addProductImageUrl = asyncHandler(async (req, res) => {
 
   // Populate category for response
   await product.populate('category', 'name code color');
+  await product.populate('motorcycleModels', MOTORCYCLE_MODEL_SELECT);
 
   // Invalidate cache
   await CacheUtil.del(CacheUtil.generateKey('product', id));
@@ -468,6 +600,7 @@ export const deleteProductImage = asyncHandler(async (req, res) => {
 
   // Populate category for response
   await product.populate('category', 'name code color');
+  await product.populate('motorcycleModels', MOTORCYCLE_MODEL_SELECT);
 
   // Invalidate cache
   await CacheUtil.del(CacheUtil.generateKey('product', id));

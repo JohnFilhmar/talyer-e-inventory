@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
 import { calculateProfitMargin, isPopulatedCategory } from '@/types/product';
+import { MotorcycleModelBadges } from '@/components/motorcycle-models';
 
 /**
  * Format price in Philippine Peso
@@ -245,11 +246,24 @@ export default function ProductDetailPage() {
             <span>SKU: {product.sku}</span>
           </div>
 
-          {/* Brand & Model */}
-          {(product.brand || product.model) && (
+          {/* Brand & Product Model */}
+          {(product.brand || product.productModel) && (
             <p className="text-gray-600 dark:text-gray-300 mb-4">
-              {product.brand}{product.brand && product.model && ' • '}{product.model}
+              {product.brand}{product.brand && product.productModel && ' • '}{product.productModel}
             </p>
+          )}
+
+          {/* Motorcycles this part fits */}
+          {(product.motorcycleModels?.length ?? 0) > 0 && (
+            <div className="mb-4">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Fits Motorcycles
+              </p>
+              <MotorcycleModelBadges
+                motorcycleModels={product.motorcycleModels}
+                showIcon={false}
+              />
+            </div>
           )}
 
           {/* Prices */}

@@ -77,11 +77,15 @@ const baseProductFields = {
     .max(100, 'Brand must not exceed 100 characters')
     .optional()
     .or(z.literal('')),
-  model: z
+  productModel: z
     .string()
-    .max(100, 'Model must not exceed 100 characters')
+    .max(100, 'Product model must not exceed 100 characters')
     .optional()
     .or(z.literal('')),
+  motorcycleModels: z
+    .array(z.string())
+    .max(50, 'Cannot list more than 50 motorcycle models')
+    .optional(),
   costPrice: z
     .number()
     .min(0, 'Cost price cannot be negative'),
@@ -143,11 +147,15 @@ export const updateProductSchema = z.object({
     .max(100, 'Brand must not exceed 100 characters')
     .optional()
     .or(z.literal('')),
-  model: z
+  productModel: z
     .string()
-    .max(100, 'Model must not exceed 100 characters')
+    .max(100, 'Product model must not exceed 100 characters')
     .optional()
     .or(z.literal('')),
+  motorcycleModels: z
+    .array(z.string())
+    .max(50, 'Cannot list more than 50 motorcycle models')
+    .optional(),
   costPrice: z
     .number()
     .min(0, 'Cost price cannot be negative')
@@ -200,18 +208,26 @@ export const imageUploadSchema = z.object({
 /**
  * Product search schema (for debounced search)
  */
-export const productSearchSchema = z.object({
-  q: z
-    .string()
-    .min(1, 'Search query is required')
-    .max(100, 'Search query must not exceed 100 characters'),
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(50)
-    .optional(),
-});
+export const productSearchSchema = z
+  .object({
+    q: z
+      .string()
+      .max(100, 'Search query must not exceed 100 characters')
+      .optional(),
+    motorcycleModel: z.string().optional(),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional(),
+  })
+  // A motorcycle filter is a complete search on its own ("everything that fits
+  // a Click 125i"), so the text is only required when no fitment was picked.
+  .refine((data) => Boolean(data.q) || Boolean(data.motorcycleModel), {
+    message: 'Enter a search term or pick a motorcycle model',
+    path: ['q'],
+  });
 
 /**
  * Product list filter schema
@@ -219,6 +235,7 @@ export const productSearchSchema = z.object({
 export const productFilterSchema = z.object({
   category: z.string().optional(),
   brand: z.string().optional(),
+  motorcycleModel: z.string().optional(),
   active: z.enum(['true', 'false']).optional(),
   discontinued: z.enum(['true', 'false']).optional(),
   search: z.string().max(100).optional(),

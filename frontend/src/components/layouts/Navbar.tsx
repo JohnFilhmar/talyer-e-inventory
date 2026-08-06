@@ -52,6 +52,16 @@ const navItems: NavItem[] = [
     roles: ['admin'],
   },
   {
+    label: 'Motorcycles',
+    href: '/motorcycle-models',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 18a3 3 0 100-6 3 3 0 000 6zm14 0a3 3 0 100-6 3 3 0 000 6zM8 15h5l3-5h3m-6 0L11 7H8m-3 8l3-5h3" />
+      </svg>
+    ),
+    roles: ['admin'],
+  },
+  {
     label: 'Products',
     href: '/products',
     icon: (

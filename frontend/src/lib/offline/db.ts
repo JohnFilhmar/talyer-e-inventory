@@ -27,6 +27,7 @@ import { openDB, type IDBPDatabase } from 'idb';
 export const OFFLINE_STORE_NAMES = [
   'products',
   'categories',
+  'motorcycleModels',
   'stock',
   'suppliers',
   'salesOrders',
@@ -57,8 +58,8 @@ const DB_NAME = 'talyer-offline';
 // missing from OFFLINE_STORE_NAMES, but it only runs when this number rises —
 // leave it and an existing browser keeps its old schema and every read of the
 // new store throws NotFoundError.
-// v2 added the outbox; v3 added stockTransfers.
-const DB_VERSION = 3;
+// v2 added the outbox; v3 added stockTransfers; v4 added motorcycleModels.
+const DB_VERSION = 4;
 const META_STORE = 'meta';
 
 /**

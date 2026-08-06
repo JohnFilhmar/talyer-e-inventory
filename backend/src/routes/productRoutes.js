@@ -56,11 +56,20 @@ const createProductValidation = [
     .isLength({ max: 100 })
     .withMessage('Brand cannot exceed 100 characters'),
   
-  body('model')
+  body('productModel')
     .optional()
     .trim()
     .isLength({ max: 100 })
-    .withMessage('Model cannot exceed 100 characters'),
+    .withMessage('Product model cannot exceed 100 characters'),
+  
+  body('motorcycleModels')
+    .optional()
+    .isArray({ max: 50 })
+    .withMessage('Motorcycle models must be an array of at most 50 entries'),
+  
+  body('motorcycleModels.*')
+    .isMongoId()
+    .withMessage('Invalid motorcycle model ID'),
   
   body('costPrice')
     .notEmpty()
@@ -146,11 +155,20 @@ const updateProductValidation = [
     .isLength({ max: 100 })
     .withMessage('Brand cannot exceed 100 characters'),
   
-  body('model')
+  body('productModel')
     .optional()
     .trim()
     .isLength({ max: 100 })
-    .withMessage('Model cannot exceed 100 characters'),
+    .withMessage('Product model cannot exceed 100 characters'),
+  
+  body('motorcycleModels')
+    .optional()
+    .isArray({ max: 50 })
+    .withMessage('Motorcycle models must be an array of at most 50 entries'),
+  
+  body('motorcycleModels.*')
+    .isMongoId()
+    .withMessage('Invalid motorcycle model ID'),
   
   body('costPrice')
     .optional()
@@ -226,13 +244,23 @@ const deleteImageValidation = [
     .withMessage('Invalid image ID')
 ];
 
+// `q` is optional here rather than required, because a motorcycle-model filter
+// is a complete search on its own ("everything that fits a Click 125i"). The
+// controller rejects the case where neither was supplied — the rule cannot live
+// in a per-field chain, since it depends on two fields at once.
 const searchValidation = [
   query('q')
+    // `values: 'falsy'` so a cleared search box arriving as `?q=` is treated as
+    // "no text" rather than failing the length check — otherwise a
+    // motorcycle-only search sent from a form with an empty text input 400s.
+    .optional({ values: 'falsy' })
     .trim()
-    .notEmpty()
-    .withMessage('Search query is required')
     .isLength({ min: 1 })
-    .withMessage('Search query cannot be empty')
+    .withMessage('Search query cannot be empty'),
+
+  query('motorcycleModel')
+    .optional()
+    .trim()
 ];
 
 // Routes

@@ -5,6 +5,7 @@ export * from './api';
 export * from './auth';
 export * from './branch';
 export * from './category';
+export * from './motorcycleModel';
 export * from './product';
 export * from './stock';
 export * from './supplier';

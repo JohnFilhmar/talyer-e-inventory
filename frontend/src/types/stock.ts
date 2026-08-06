@@ -4,6 +4,7 @@
  */
 
 import type { ProductCategory } from './product';
+import type { ProductMotorcycleModel } from './motorcycleModel';
 
 /**
  * Stock record - represents inventory of a product at a specific branch
@@ -44,7 +45,16 @@ export interface StockProduct {
    * trip, which is what lets scanning work with no connection.
    */
   barcode?: string;
+  /** The manufacturer's designation for the part itself. */
+  productModel?: string;
   category?: ProductCategory;
+  /**
+   * The motorcycles this part fits, populated on stock reads so the New Sale
+   * picker can search and filter by motorcycle against the offline mirror
+   * without a round trip — an unpopulated id would be an opaque string with
+   * nothing to match against.
+   */
+  motorcycleModels?: Array<ProductMotorcycleModel | string>;
   images?: Array<{ url: string; isPrimary: boolean }>;
   primaryImage?: string;
 }

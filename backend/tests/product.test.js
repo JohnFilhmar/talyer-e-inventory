@@ -5,6 +5,7 @@ import { createTestUser, createTestAdmin } from './setup/testHelpers.js';
 import productRoutes from '../src/routes/productRoutes.js';
 import Product from '../src/models/Product.js';
 import Category from '../src/models/Category.js';
+import MotorcycleModel from '../src/models/MotorcycleModel.js';
 import Branch from '../src/models/Branch.js';
 
 // Create Express app for testing
@@ -339,7 +340,7 @@ describe('Product API Tests', () => {
           description: 'Full product description',
           category: testCategory._id,
           brand: 'Test Brand',
-          model: 'Model X',
+          productModel: 'Model X',
           costPrice: 100,
           sellingPrice: 150,
           barcode: '1234567890123',
@@ -721,6 +722,327 @@ describe('Product API Tests', () => {
       });
 
       expect(product.sku).toBe('CUSTOM-ABC-123');
+    });
+  });
+
+  describe('Motorcycle model fitment', () => {
+    let click, pcx, mio;
+
+    beforeEach(async () => {
+      click = await MotorcycleModel.create({ make: 'Honda', model: 'Click 125i' });
+      pcx = await MotorcycleModel.create({ make: 'Honda', model: 'PCX 160' });
+      mio = await MotorcycleModel.create({ make: 'Yamaha', model: 'Mio i 125' });
+    });
+
+    it('should create a product with motorcycle models attached', async () => {
+      const res = await request(app)
+        .post('/api/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Brake Pad',
+          category: testCategory._id,
+          costPrice: 100,
+          sellingPrice: 150,
+          motorcycleModels: [click._id, pcx._id]
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.motorcycleModels).toHaveLength(2);
+      // Populated, not raw ids — the frontend renders these as chips.
+      expect(res.body.data.motorcycleModels[0].make).toBe('Honda');
+    });
+
+    it('should reject a fitment referring to a motorcycle model that does not exist', async () => {
+      const res = await request(app)
+        .post('/api/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Brake Pad',
+          category: testCategory._id,
+          costPrice: 100,
+          sellingPrice: 150,
+          motorcycleModels: ['507f1f77bcf86cd799439011']
+        });
+
+      expect(res.status).toBe(404);
+      expect(res.body.message).toMatch(/motorcycle model not found/i);
+    });
+
+    it('should reject a malformed motorcycle model id', async () => {
+      const res = await request(app)
+        .post('/api/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Brake Pad',
+          category: testCategory._id,
+          costPrice: 100,
+          sellingPrice: 150,
+          motorcycleModels: ['not-an-id']
+        });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should collapse duplicates in the fitment list', async () => {
+      const res = await request(app)
+        .post('/api/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Brake Pad',
+          category: testCategory._id,
+          costPrice: 100,
+          sellingPrice: 150,
+          motorcycleModels: [click._id, click._id]
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.motorcycleModels).toHaveLength(1);
+    });
+
+    it('should replace the fitment list on update', async () => {
+      const product = await createTestProduct({
+        name: 'Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [click._id]
+      });
+
+      const res = await request(app)
+        .put(`/api/products/${product._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ motorcycleModels: [pcx._id, mio._id] });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.motorcycleModels).toHaveLength(2);
+      expect(res.body.data.motorcycleModels.map((m) => m.model).sort()).toEqual([
+        'Mio i 125',
+        'PCX 160'
+      ]);
+    });
+
+    it('should allow clearing the fitment list with an empty array', async () => {
+      const product = await createTestProduct({
+        name: 'Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [click._id]
+      });
+
+      const res = await request(app)
+        .put(`/api/products/${product._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ motorcycleModels: [] });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.motorcycleModels).toHaveLength(0);
+    });
+
+    it('should leave the fitment list alone when the key is absent', async () => {
+      const product = await createTestProduct({
+        name: 'Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [click._id]
+      });
+
+      const res = await request(app)
+        .put(`/api/products/${product._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Brake Pad (rear)' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.motorcycleModels).toHaveLength(1);
+    });
+
+    it('should filter the product list by a single motorcycle model', async () => {
+      await createTestProduct({
+        name: 'Click Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [click._id]
+      });
+      await createTestProduct({
+        name: 'Mio Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [mio._id]
+      });
+
+      const res = await request(app)
+        .get(`/api/products?motorcycleModel=${click._id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].name).toBe('Click Brake Pad');
+    });
+
+    it('should match ANY of several motorcycle models, not all', async () => {
+      await createTestProduct({
+        name: 'Click Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [click._id]
+      });
+      await createTestProduct({
+        name: 'Mio Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [mio._id]
+      });
+      await createTestProduct({
+        name: 'PCX Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [pcx._id]
+      });
+
+      const res = await request(app)
+        .get(`/api/products?motorcycleModel=${click._id},${mio._id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(2);
+    });
+
+    it('should ignore a malformed id in the filter rather than erroring', async () => {
+      await createTestProduct({ name: 'Click Brake Pad', category: testCategory._id });
+
+      const res = await request(app)
+        .get('/api/products?motorcycleModel=garbage')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+    });
+  });
+
+  describe('GET /api/products/search - motorcycle awareness', () => {
+    let click, mio;
+
+    beforeEach(async () => {
+      click = await MotorcycleModel.create({ make: 'Honda', model: 'Click 125i' });
+      mio = await MotorcycleModel.create({ make: 'Yamaha', model: 'Mio i 125' });
+    });
+
+    it('should find products by the motorcycle they fit', async () => {
+      await createTestProduct({
+        name: 'Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [click._id]
+      });
+      await createTestProduct({
+        name: 'Air Filter',
+        category: testCategory._id,
+        motorcycleModels: [mio._id]
+      });
+
+      const res = await request(app)
+        .get('/api/products/search?q=Click')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].name).toBe('Brake Pad');
+    });
+
+    it('should match the motorcycle make as well as the model', async () => {
+      await createTestProduct({
+        name: 'Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [click._id]
+      });
+
+      const res = await request(app)
+        .get('/api/products/search?q=honda')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.body.data).toHaveLength(1);
+    });
+
+    it('should still match product fields in the same query (mixed search)', async () => {
+      await createTestProduct({
+        name: 'Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [click._id]
+      });
+      await createTestProduct({
+        name: 'Click Pen',
+        category: testCategory._id
+      });
+
+      const res = await request(app)
+        .get('/api/products/search?q=Click')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      // One matched via its own name, one via its fitment.
+      expect(res.body.data).toHaveLength(2);
+    });
+
+    it('should search by productModel', async () => {
+      await createTestProduct({
+        name: 'Brake Pad',
+        category: testCategory._id,
+        productModel: '45120-KVB-901'
+      });
+
+      const res = await request(app)
+        .get('/api/products/search?q=KVB')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.body.data).toHaveLength(1);
+    });
+
+    it('should accept a motorcycle model filter with no text query', async () => {
+      await createTestProduct({
+        name: 'Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [click._id]
+      });
+      await createTestProduct({
+        name: 'Air Filter',
+        category: testCategory._id,
+        motorcycleModels: [mio._id]
+      });
+
+      const res = await request(app)
+        .get(`/api/products/search?motorcycleModel=${click._id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].name).toBe('Brake Pad');
+    });
+
+    it('should still fail when neither a query nor a fitment filter is given', async () => {
+      const res = await request(app)
+        .get('/api/products/search')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should narrow by both text and fitment when given together', async () => {
+      await createTestProduct({
+        name: 'Brake Pad',
+        category: testCategory._id,
+        motorcycleModels: [click._id]
+      });
+      await createTestProduct({
+        name: 'Air Filter',
+        category: testCategory._id,
+        motorcycleModels: [click._id]
+      });
+
+      const res = await request(app)
+        .get(`/api/products/search?q=Brake&motorcycleModel=${click._id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].name).toBe('Brake Pad');
+    });
+
+    it('should treat regex metacharacters in the query as literal text', async () => {
+      await createTestProduct({ name: 'Brake Pad (rear)', category: testCategory._id });
+
+      const res = await request(app)
+        .get('/api/products/search?q=(rear)')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
     });
   });
 

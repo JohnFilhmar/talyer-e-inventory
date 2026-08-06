@@ -5,6 +5,8 @@ import { Search, Filter, X } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useActiveCategories } from '@/hooks/useCategories';
+import { useActiveMotorcycleModels, groupByMake } from '@/hooks/useMotorcycleModels';
+import { motorcycleModelLabel } from '@/types/motorcycleModel';
 import type { ProductListParams } from '@/types/product';
 
 interface ProductFiltersProps {
@@ -18,12 +20,18 @@ interface LocalFilters {
   search: string;
   category: string;
   brand: string;
+  /** Comma-joined motorcycle model ids — the wire format the API expects. */
+  motorcycleModel: string;
   active: string;
   minPrice: string;
   maxPrice: string;
   sortBy: string;
   sortOrder: string;
 }
+
+/** Splits the comma-joined filter value into ids, tolerating an empty string. */
+const splitIds = (value: string): string[] =>
+  value ? value.split(',').filter(Boolean) : [];
 
 /**
  * ProductFilters component
@@ -36,12 +44,15 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
   onReset,
 }) => {
   const { data: categories, isLoading: categoriesLoading } = useActiveCategories();
+  const { data: motorcycleModels, isLoading: motorcycleModelsLoading } =
+    useActiveMotorcycleModels();
   
   // Local state for all filter inputs (for immediate UI feedback)
   const [localFilters, setLocalFilters] = useState<LocalFilters>({
     search: filters.search ?? '',
     category: filters.category ?? '',
     brand: filters.brand ?? '',
+    motorcycleModel: filters.motorcycleModel ?? '',
     active: filters.active ?? '',
     minPrice: filters.minPrice?.toString() ?? '',
     maxPrice: filters.maxPrice?.toString() ?? '',
@@ -69,6 +80,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
       search: filters.search ?? '',
       category: filters.category ?? '',
       brand: filters.brand ?? '',
+      motorcycleModel: filters.motorcycleModel ?? '',
       active: filters.active ?? '',
       minPrice: filters.minPrice?.toString() ?? '',
       maxPrice: filters.maxPrice?.toString() ?? '',
@@ -86,6 +98,9 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
     if (newLocalFilters.search) newFilters.search = newLocalFilters.search;
     if (newLocalFilters.category) newFilters.category = newLocalFilters.category;
     if (newLocalFilters.brand) newFilters.brand = newLocalFilters.brand;
+    if (newLocalFilters.motorcycleModel) {
+      newFilters.motorcycleModel = newLocalFilters.motorcycleModel;
+    }
     if (newLocalFilters.active) newFilters.active = newLocalFilters.active;
     if (newLocalFilters.minPrice) newFilters.minPrice = Number(newLocalFilters.minPrice);
     if (newLocalFilters.maxPrice) newFilters.maxPrice = Number(newLocalFilters.maxPrice);
@@ -110,6 +125,23 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
       applyFilters(newLocalFilters);
     }, 800);
   }, [localFilters, applyFilters]);
+
+  // Adding and removing a motorcycle both go through the same debounced path
+  // as every other filter, so a burst of picks results in one refetch rather
+  // than one per chip.
+  const selectedMotorcycleIds = splitIds(localFilters.motorcycleModel);
+
+  const handleMotorcycleAdd = useCallback((id: string) => {
+    if (!id) return;
+    const current = splitIds(localFilters.motorcycleModel);
+    if (current.includes(id)) return;
+    handleLocalChange('motorcycleModel', [...current, id].join(','));
+  }, [localFilters.motorcycleModel, handleLocalChange]);
+
+  const handleMotorcycleRemove = useCallback((id: string) => {
+    const current = splitIds(localFilters.motorcycleModel);
+    handleLocalChange('motorcycleModel', current.filter((v) => v !== id).join(','));
+  }, [localFilters.motorcycleModel, handleLocalChange]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -183,6 +215,63 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
             value={localFilters.brand}
             onChange={(e) => handleLocalChange('brand', e.target.value)}
           />
+        </div>
+
+        {/* Motorcycle models — multi-select. Products matching ANY of the
+            picked motorcycles are shown: a customer with two bikes wants the
+            parts for either, not only those fitting both. */}
+        <div className="sm:col-span-2">
+          <select
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
+            // Always resets to the placeholder: this is an "add" control, not
+            // a bound single value — the real state is the chip list below.
+            value=""
+            onChange={(e) => handleMotorcycleAdd(e.target.value)}
+            disabled={motorcycleModelsLoading}
+          >
+            <option value="">Add a motorcycle...</option>
+            {groupByMake(
+              (motorcycleModels ?? []).filter(
+                (m) => !selectedMotorcycleIds.includes(m._id)
+              )
+            ).map(({ make, models }) => (
+              <optgroup key={make} label={make}>
+                {models.map((motorcycleModel) => (
+                  <option key={motorcycleModel._id} value={motorcycleModel._id}>
+                    {motorcycleModelLabel(motorcycleModel)}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+
+          {selectedMotorcycleIds.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {selectedMotorcycleIds.map((id) => {
+                const motorcycleModel = motorcycleModels?.find((m) => m._id === id);
+                const text = motorcycleModel
+                  ? motorcycleModelLabel(motorcycleModel)
+                  : 'Unknown motorcycle';
+
+                return (
+                  <span
+                    key={id}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded text-xs"
+                  >
+                    {text}
+                    <button
+                      type="button"
+                      onClick={() => handleMotorcycleRemove(id)}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                      aria-label={`Remove ${text} filter`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Status */}

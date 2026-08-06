@@ -14,9 +14,15 @@ import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { ProductImageEditor } from '@/components/products';
+import { MotorcycleModelPicker } from '@/components/motorcycle-models';
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
 import { updateProductSchema, type UpdateProductFormData } from '@/utils/validators/product';
 import { calculateProfitMargin } from '@/types/product';
+import {
+  isPopulatedMotorcycleModel,
+  motorcycleModelId,
+  motorcycleModelLabel,
+} from '@/types/motorcycleModel';
 
 /**
  * Edit Product Page
@@ -60,7 +66,8 @@ export default function EditProductPage() {
       description: '',
       category: '',
       brand: '',
-      model: '',
+      productModel: '',
+      motorcycleModels: [],
       costPrice: 0,
       sellingPrice: 0,
       barcode: '',
@@ -82,11 +89,25 @@ export default function EditProductPage() {
   const costPrice = useWatch({ control, name: 'costPrice' }) ?? 0;
   const sellingPrice = useWatch({ control, name: 'sellingPrice' }) ?? 0;
   const tags = useWatch({ control, name: 'tags' }) ?? [];
+  const motorcycleModels = useWatch({ control, name: 'motorcycleModels' }) ?? [];
 
   // Calculate profit margin in real-time
   const profitMargin = useMemo(() => {
     return calculateProfitMargin(costPrice, sellingPrice);
   }, [costPrice, sellingPrice]);
+
+  // Labels for motorcycles this product carries that are no longer active, so
+  // their chips read as names rather than raw ids. Without this, deactivating a
+  // motorcycle turns every product still carrying it into "Unknown motorcycle".
+  const motorcycleModelFallbackLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const entry of product?.motorcycleModels ?? []) {
+      if (isPopulatedMotorcycleModel(entry)) {
+        labels[entry._id] = motorcycleModelLabel(entry);
+      }
+    }
+    return labels;
+  }, [product]);
 
   // Populate form when product loads
   useEffect(() => {
@@ -101,7 +122,8 @@ export default function EditProductPage() {
         description: product.description ?? '',
         category: categoryId,
         brand: product.brand ?? '',
-        model: product.model ?? '',
+        productModel: product.productModel ?? '',
+        motorcycleModels: (product.motorcycleModels ?? []).map(motorcycleModelId),
         costPrice: product.costPrice,
         sellingPrice: product.sellingPrice,
         barcode: product.barcode ?? '',
@@ -129,7 +151,11 @@ export default function EditProductPage() {
         sku: data.sku || undefined,
         description: data.description || undefined,
         brand: data.brand || undefined,
-        model: data.model || undefined,
+        productModel: data.productModel || undefined,
+        // Sent even when empty, unlike the other optional fields: [] is a
+        // meaningful value here ("fits nothing in particular"), and dropping it
+        // would make a cleared fitment list impossible to save.
+        motorcycleModels: data.motorcycleModels ?? [],
         // '' rather than undefined: JSON.stringify drops undefined keys, so
         // `|| undefined` made a cleared barcode unsendable and the old value
         // survived every save. The model turns '' into an $unset.
@@ -373,10 +399,10 @@ export default function EditProductPage() {
             />
 
             <Input
-              label="Model"
-              placeholder="e.g., DCD771C2"
-              error={errors.model?.message}
-              {...register('model')}
+              label="Product Model"
+              placeholder="e.g., 45120-KVB-901"
+              error={errors.productModel?.message}
+              {...register('productModel')}
             />
 
             <div>
@@ -431,6 +457,20 @@ export default function EditProductPage() {
               {errors.description?.message && (
                 <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
               )}
+            </div>
+
+            <div className="md:col-span-2">
+              <MotorcycleModelPicker
+                value={motorcycleModels}
+                onChange={(ids) =>
+                  setValue('motorcycleModels', ids, { shouldDirty: true })
+                }
+                disabled={isSubmitting}
+                label="Fits Motorcycles"
+                helperText="Add every motorcycle this part fits. Staff can then filter products and search sales by motorcycle."
+                error={errors.motorcycleModels?.message}
+                fallbackLabels={motorcycleModelFallbackLabels}
+              />
             </div>
           </div>
         </div>
