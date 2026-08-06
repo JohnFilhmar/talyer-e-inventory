@@ -41,12 +41,45 @@ const SKIP_BELOW_BYTES = 400 * 1024;
 /** Only these are re-encoded. Anything else is passed through untouched. */
 const DOWNSCALABLE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
+/**
+ * The server's multer limit, which applies to the file that actually crosses
+ * the wire — i.e. the *downscaled* one.
+ */
+const SERVER_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Ceiling for an original that will be shrunk before sending. A 12MP phone
+ * photo is routinely 8-12MB and downscales to a few hundred KB, so rejecting it
+ * against the server's 5MB limit would block the camera path for files that
+ * upload perfectly well. This is a sanity bound against someone picking a video
+ * frame dump, not a bandwidth limit.
+ */
+const ORIGINAL_MAX_BYTES = 25 * 1024 * 1024;
+
 function canDownscale(): boolean {
   return (
     typeof createImageBitmap === 'function' &&
     typeof document !== 'undefined' &&
     typeof HTMLCanvasElement !== 'undefined'
   );
+}
+
+/**
+ * Largest original this file is allowed to be, given what will happen to it.
+ *
+ * A UI that checks the raw file against the server's limit is measuring the
+ * wrong thing: what the server sees is whatever `downscaleImage` returns. Types
+ * that are passed through untouched still have to satisfy the server directly.
+ */
+export function maxUploadBytes(file: File): number {
+  return DOWNSCALABLE_TYPES.includes(file.type) && canDownscale()
+    ? ORIGINAL_MAX_BYTES
+    : SERVER_MAX_BYTES;
+}
+
+/** Human-readable form of {@link maxUploadBytes}, for error text. */
+export function maxUploadLabel(file: File): string {
+  return `${Math.round(maxUploadBytes(file) / (1024 * 1024))}MB`;
 }
 
 /**

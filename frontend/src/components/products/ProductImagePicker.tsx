@@ -3,8 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, ImagePlus, X } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
+import { maxUploadBytes, maxUploadLabel } from '@/lib/imageDownscale';
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_IMAGES = 6;
 
@@ -60,8 +60,12 @@ export const ProductImagePicker: React.FC<ProductImagePickerProps> = ({
           rejection = `${file.name} is not a JPEG, PNG, WebP or GIF.`;
           continue;
         }
-        if (file.size > MAX_FILE_SIZE) {
-          rejection = `${file.name} is larger than 5MB.`;
+        // Measured against what will actually be sent: uploads are downscaled
+        // in the browser first, so a normal 9MB phone photo is fine even though
+        // the server's own limit is 5MB. Checking the raw file against that
+        // limit would reject the camera path for images that upload cleanly.
+        if (file.size > maxUploadBytes(file)) {
+          rejection = `${file.name} is larger than ${maxUploadLabel(file)}.`;
           continue;
         }
         accepted.push(file);
@@ -183,7 +187,7 @@ export const ProductImagePicker: React.FC<ProductImagePickerProps> = ({
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
         {isFull
           ? `Maximum of ${MAX_IMAGES} images reached.`
-          : `JPEG, PNG, WebP or GIF, up to 5MB each. Photos upload after the product is saved.`}
+          : `JPEG, PNG, WebP or GIF. Large photos are shrunk automatically. Photos upload after the product is saved.`}
       </p>
     </div>
   );

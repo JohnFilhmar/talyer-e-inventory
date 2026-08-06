@@ -6,6 +6,7 @@ import { Upload, X, Image as ImageIcon, AlertCircle, Camera } from 'lucide-react
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
+import { maxUploadBytes, maxUploadLabel } from '@/lib/imageDownscale';
 
 interface ImageUploadModalProps {
   isOpen: boolean;
@@ -17,7 +18,6 @@ interface ImageUploadModalProps {
   error?: Error | null;
 }
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 /**
@@ -49,8 +49,11 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
     if (!ALLOWED_TYPES.includes(file.type)) {
       return 'Please select an image file (JPEG, PNG, WebP, or GIF)';
     }
-    if (file.size > MAX_FILE_SIZE) {
-      return 'File size must be less than 5MB';
+    // Checked against what is actually sent. uploadImage downscales in the
+    // browser first, so the server's 5MB limit applies to the shrunk file, not
+    // to the phone photo the user picked.
+    if (file.size > maxUploadBytes(file)) {
+      return `File size must be less than ${maxUploadLabel(file)}`;
     }
     return null;
   };
@@ -199,7 +202,7 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
                 <span className="font-medium">Click to upload</span> or drag and drop
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                JPEG, PNG, WebP, or GIF (max 5MB)
+                JPEG, PNG, WebP or GIF — large photos are shrunk automatically
               </p>
 
               {/* Photographing the item is the common case on a phone — a
