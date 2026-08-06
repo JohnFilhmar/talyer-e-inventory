@@ -1,4 +1,5 @@
 import apiClient from '@/lib/apiClient';
+import { downscaleImage } from '@/lib/imageDownscale';
 import type { ApiResponse, PaginatedResponse } from '@/types/api';
 import type {
   Product,
@@ -9,6 +10,16 @@ import type {
   ProductSearchParams,
   ProductSearchResult,
 } from '@/types/product';
+
+/**
+ * How long an image upload may take before the client gives up.
+ *
+ * Deliberately far above the 15s default on `apiClient`: that default suits a
+ * small JSON round trip, but applying it to a multi-megabyte multipart body
+ * made uploads fail with "timeout of 15000ms exceeded" whenever mobile upstream
+ * dipped below ~1.6 Mbit/s.
+ */
+const UPLOAD_TIMEOUT_MS = 60000;
 
 /**
  * Product service
@@ -117,8 +128,15 @@ export const productService = {
     file: File,
     isPrimary = false
   ): Promise<ProductImage> {
+    // Shrunk here rather than in each of the three image UIs, so every upload
+    // path gets it. A 12MP phone photo goes from ~9MB to a couple of hundred
+    // KB, which is the difference between finishing instantly and exceeding the
+    // request timeout on mobile upstream. The server still resizes and
+    // re-encodes; this only stops the wasted bytes crossing the wire.
+    const upload = await downscaleImage(file);
+
     const formData = new FormData();
-    formData.append('image', file);
+    formData.append('image', upload);
     formData.append('isPrimary', String(isPrimary));
 
     const { data } = await apiClient.post<ApiResponse<ProductImage>>(
@@ -128,6 +146,12 @@ export const productService = {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        // The client's 15s default is sized for JSON calls. An upload is a
+        // sustained transfer whose duration depends on the connection, and the
+        // shop runs on mobile data — this is the backstop for the case where
+        // downscaling was skipped (an unsupported browser) or the link is very
+        // slow, not the primary fix.
+        timeout: UPLOAD_TIMEOUT_MS,
       }
     );
 
