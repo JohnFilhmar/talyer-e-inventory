@@ -1046,6 +1046,113 @@ describe('Product API Tests', () => {
     });
   });
 
+  describe('Barcode character set', () => {
+    const create = (barcode) =>
+      request(app)
+        .post('/api/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: `Product ${barcode || 'none'}`,
+          category: testCategory._id,
+          costPrice: 100,
+          sellingPrice: 150,
+          barcode
+        });
+
+    it('accepts a purely numeric barcode (EAN-13)', async () => {
+      const res = await create('4801234567890');
+      expect(res.status).toBe(201);
+      expect(res.body.data.barcode).toBe('4801234567890');
+    });
+
+    it('accepts letters — Code 39 and Code 128 encode them, and parts carry them', async () => {
+      const res = await create('ABC12345');
+      expect(res.status).toBe(201);
+      expect(res.body.data.barcode).toBe('ABC12345');
+    });
+
+    it('accepts a manufacturer part number with hyphens', async () => {
+      const res = await create('45120-KVB-901');
+      expect(res.status).toBe(201);
+    });
+
+    it('preserves case rather than folding it', async () => {
+      // Code 128 distinguishes case, so normalising would change the code.
+      const res = await create('abc12345');
+      expect(res.status).toBe(201);
+      expect(res.body.data.barcode).toBe('abc12345');
+    });
+
+    it('accepts the Code 39 punctuation that appears in part numbers', async () => {
+      const res = await create('PART.123/A');
+      expect(res.status).toBe(201);
+    });
+
+    it('rejects an interior space, which would break the unique index', async () => {
+      // Stored trimmed and matched exactly, so "AB 123" and "AB123" would read
+      // alike to a human but be two different products.
+      const res = await create('ABC 12345');
+      expect(res.status).toBe(400);
+      expect(res.body.message ?? JSON.stringify(res.body.errors)).toMatch(/letters, numbers/i);
+    });
+
+    it('rejects punctuation outside the allowed set', async () => {
+      const res = await create('ABC#12345');
+      expect(res.status).toBe(400);
+    });
+
+    it('still enforces the length bounds', async () => {
+      expect((await create('ABC123')).status).toBe(400);
+      expect((await create('123456789012345678901')).status).toBe(400);
+    });
+
+    it('still allows a barcode to be cleared', async () => {
+      const product = await createTestProduct({
+        name: 'Has barcode',
+        category: testCategory._id,
+        barcode: 'ABC12345'
+      });
+
+      const res = await request(app)
+        .put(`/api/products/${product._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ barcode: '' });
+
+      expect(res.status).toBe(200);
+      const reloaded = await Product.findById(product._id);
+      expect(reloaded.barcode).toBeUndefined();
+    });
+
+    it('accepts an alphanumeric barcode on update', async () => {
+      const product = await createTestProduct({
+        name: 'No barcode yet',
+        category: testCategory._id
+      });
+
+      const res = await request(app)
+        .put(`/api/products/${product._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ barcode: 'STP-10W40-900ML' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.barcode).toBe('STP-10W40-900ML');
+    });
+
+    it('rejects a bad character set on update too', async () => {
+      const product = await createTestProduct({
+        name: 'No barcode yet',
+        category: testCategory._id
+      });
+
+      const res = await request(app)
+        .put(`/api/products/${product._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ barcode: 'ABC 12345' });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe('Barcode uniqueness', () => {
     // Index builds are async under autoIndex; without this the DB-level
     // constraint test can run before barcode_unique exists.
