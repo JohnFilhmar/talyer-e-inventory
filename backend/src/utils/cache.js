@@ -13,11 +13,17 @@ const MAX_LOGGED_KEY_LENGTH = 200;
  *
  * Keys embed caller-supplied text — a product search term, a motorcycle filter
  * value — so by the time one reaches a log line it is user-controlled data.
- * Newlines are stripped first and explicitly, because that is the whole of the
- * log-injection trick: a search for "x\n2026-01-01 INFO admin deleted nothing"
- * would otherwise write a second, entirely fabricated log line. The remaining
- * control characters go too, since a terminal reading the log will happily
- * interpret escape sequences.
+ * Newlines go first, because that is the whole of the log-injection trick: a
+ * search for "x\n2026-01-01 INFO admin deleted nothing" would otherwise write a
+ * second, entirely fabricated log line. The remaining control characters go too,
+ * since a terminal reading the log will happily interpret escape sequences.
+ *
+ * CR and LF are removed one constant pattern at a time, and replaced with the
+ * empty string rather than a space, because that is the shape static analysis
+ * recognises as a log-injection barrier — a combined `[\r\n]` class replaced
+ * with ' ' is equally safe at runtime but reads to the analyser as an unrelated
+ * transformation. The trailing sweep would catch both anyway; keeping them
+ * explicit is what makes the intent legible to a reader and a scanner alike.
  *
  * Sanitising here rather than in each caller means every current and future
  * `CacheUtil` user is covered, including the pre-existing category and product
@@ -25,7 +31,8 @@ const MAX_LOGGED_KEY_LENGTH = 200;
  */
 const forLog = (key) =>
   String(key)
-    .replace(/[\r\n]/g, ' ')
+    .replace(/\r/g, '')
+    .replace(/\n/g, '')
     .replace(/[\u0000-\u001F\u007F]/g, '')
     .slice(0, MAX_LOGGED_KEY_LENGTH);
 
