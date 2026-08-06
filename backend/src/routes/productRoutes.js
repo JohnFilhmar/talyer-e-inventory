@@ -17,6 +17,17 @@ import validate from '../middleware/validate.js';
 import { uploadSingleImage, processImage, handleUploadError } from '../middleware/imageUpload.js';
 import { USER_ROLES } from '../config/constants.js';
 
+// Barcodes are alphanumeric, not digits-only: EAN-13 and UPC-A are numeric, but
+// Code 39 and Code 128 — which the scanner reads and which manufacturers print
+// on parts — encode letters. The punctuation allowed is the subset of Code 39's
+// symbol set that appears in real part numbers; spaces are excluded because a
+// barcode is trimmed before storage and matched against a unique index, so an
+// interior space would create two codes that read alike but store differently.
+//
+// Enforced here as well as in the frontend schema: the client can be bypassed,
+// and the model itself carries no charset rule.
+const BARCODE_PATTERN = /^[A-Za-z0-9._\/+-]+$/;
+
 // Validation chains
 const productIdValidation = [
   param('id')
@@ -90,6 +101,8 @@ const createProductValidation = [
     // normalised to absent in the model so they never collide in the unique index.
     .optional({ values: 'falsy' })
     .trim()
+    .custom((value) => value === '' || BARCODE_PATTERN.test(value))
+    .withMessage('Barcode may contain only letters, numbers and - . _ / +')
     .custom((value) => value === '' || (value.length >= 8 && value.length <= 20))
     .withMessage('Barcode must be between 8 and 20 characters'),
   
@@ -187,6 +200,8 @@ const updateProductValidation = [
     // normalised to absent in the model so they never collide in the unique index.
     .optional({ values: 'falsy' })
     .trim()
+    .custom((value) => value === '' || BARCODE_PATTERN.test(value))
+    .withMessage('Barcode may contain only letters, numbers and - . _ / +')
     .custom((value) => value === '' || (value.length >= 8 && value.length <= 20))
     .withMessage('Barcode must be between 8 and 20 characters'),
   

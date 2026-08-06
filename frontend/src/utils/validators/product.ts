@@ -8,10 +8,19 @@ import { z } from 'zod';
 const skuRegex = /^[A-Z0-9-]+$/;
 
 /**
- * Barcode validation regex (EAN-13, UPC-A, or custom)
- * Allows digits, some may include dashes
+ * Barcode validation regex.
+ *
+ * Alphanumeric, not digits-only: EAN-13 and UPC-A are numeric, but Code 39 and
+ * Code 128 — which the scanner reads and which manufacturers use on parts —
+ * encode letters too. A digits-only rule rejected those outright.
+ *
+ * The punctuation allowed here (`. _ / + -`) is the subset of Code 39's symbol
+ * set that shows up in real part numbers. Spaces are deliberately excluded:
+ * a barcode is trimmed before storage and matched against a unique index, so
+ * an interior space would create two codes that read identically but are
+ * stored differently.
  */
-const barcodeRegex = /^[\d-]+$/;
+const barcodeRegex = /^[A-Za-z0-9._\/+-]+$/;
 
 /**
  * Product specifications schema
@@ -94,8 +103,10 @@ const baseProductFields = {
     .min(0, 'Selling price cannot be negative'),
   barcode: z
     .string()
-    .max(50, 'Barcode must not exceed 50 characters')
-    .regex(barcodeRegex, 'Barcode must be numeric (hyphens allowed)')
+    // 20, not 50: the API rejects anything longer, so a higher bound here only
+    // let the form accept a value the save would then refuse.
+    .max(20, 'Barcode must not exceed 20 characters')
+    .regex(barcodeRegex, 'Barcode may contain only letters, numbers and - . _ / +')
     .optional()
     .or(z.literal('')),
   specifications: productSpecificationsSchema.optional(),
@@ -166,8 +177,10 @@ export const updateProductSchema = z.object({
     .optional(),
   barcode: z
     .string()
-    .max(50, 'Barcode must not exceed 50 characters')
-    .regex(barcodeRegex, 'Barcode must be numeric (hyphens allowed)')
+    // 20, not 50: the API rejects anything longer, so a higher bound here only
+    // let the form accept a value the save would then refuse.
+    .max(20, 'Barcode must not exceed 20 characters')
+    .regex(barcodeRegex, 'Barcode may contain only letters, numbers and - . _ / +')
     .optional()
     .or(z.literal('')),
   specifications: productSpecificationsSchema.optional(),
