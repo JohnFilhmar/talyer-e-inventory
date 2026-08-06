@@ -29,8 +29,14 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Cookie parser middleware (for httpOnly refresh token)
-app.use(cookieParser());
+// Cookie parser middleware (for the httpOnly refresh token and the CSRF token).
+//
+// Mounted on /api/auth rather than globally: those are the only handlers that
+// read req.cookies. Parsing cookies for routes that never consult them buys
+// nothing and widens the set of handlers a browser-attached cookie can reach,
+// which is the precondition for CSRF. Every other router authenticates from an
+// Authorization header a cross-site page cannot set.
+app.use('/api/auth', cookieParser());
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

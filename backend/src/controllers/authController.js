@@ -5,6 +5,7 @@ import ApiResponse from '../utils/apiResponse.js';
 import { USER_ROLES } from '../config/constants.js';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { issueCsrfToken, clearCsrfToken } from '../middleware/csrf.js';
 
 // Cookie options for refresh token
 const getRefreshTokenCookieOptions = () => ({
@@ -20,6 +21,11 @@ const getRefreshTokenCookieOptions = () => ({
  */
 const setRefreshTokenCookie = (res, refreshToken) => {
   res.cookie('refreshToken', refreshToken, getRefreshTokenCookieOptions());
+  // Issued here rather than at each call site so the CSRF token and the cookie
+  // it protects are always established together — a refresh cookie without a
+  // matching CSRF cookie silently falls into the migration allowance in
+  // requireCsrfToken and loses its protection.
+  issueCsrfToken(res);
 };
 
 /**
@@ -31,6 +37,7 @@ const clearRefreshTokenCookie = (res) => {
     expires: new Date(0),
     path: '/',
   });
+  clearCsrfToken(res);
 };
 
 // @desc    Register new user
@@ -169,6 +176,15 @@ const refreshToken = asyncHandler(async (req, res) => {
 
     // Generate new access token
     const newAccessToken = generateToken(user._id);
+
+    // A successful refresh does not re-issue the refresh cookie, so this is the
+    // only place a session established before CSRF protection shipped can pick
+    // up a token. Without it those sessions would sit in requireCsrfToken's
+    // migration allowance for the full 30-day refresh lifetime instead of
+    // becoming protected after one refresh. Rotating it on every refresh also
+    // keeps the CSRF token's lifetime tied to active use rather than to the
+    // moment of login.
+    issueCsrfToken(res);
 
     return ApiResponse.success(res, 200, 'Token refreshed successfully', {
       accessToken: newAccessToken,

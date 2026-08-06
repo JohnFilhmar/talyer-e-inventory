@@ -109,7 +109,10 @@ export const CORS = {
     'Content-Type',
     'Accept',
     'Authorization',
-    'X-Refresh-Token'
+    'X-Refresh-Token',
+    // Without this the preflight for the refresh call fails and the SPA can
+    // never renew a token — the header is rejected before the route is reached.
+    'X-XSRF-TOKEN'
   ],
   EXPOSED_HEADERS: ['X-Total-Count', 'X-Total-Pages'],
   CREDENTIALS: true,

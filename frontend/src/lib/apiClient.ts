@@ -72,6 +72,26 @@ apiClient.interceptors.request.use(
 );
 
 /**
+ * Reads the CSRF token the backend sets alongside the refresh cookie.
+ *
+ * Deliberately not httpOnly on the server, because this double-submit scheme
+ * depends on being able to read it here. Returns undefined during SSR (no
+ * `document`) and when no session has been established yet — both cases send
+ * no header, which the backend handles.
+ */
+function readCsrfCookie(): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+
+  const match = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith('XSRF-TOKEN='));
+
+  if (!match) return undefined;
+
+  return decodeURIComponent(match.slice('XSRF-TOKEN='.length)) || undefined;
+}
+
+/**
  * Auth endpoints that should NOT trigger token refresh on 401
  * These endpoints return 401 for invalid credentials, not expired tokens
  */
@@ -162,11 +182,23 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        // Call refresh endpoint - backend reads httpOnly cookie
+        // Call refresh endpoint - backend reads httpOnly cookie.
+        //
+        // The CSRF token rides along in a header. /auth/refresh-token is the
+        // one endpoint that authenticates from a cookie rather than from the
+        // Authorization header, so the backend requires the header to echo the
+        // readable XSRF-TOKEN cookie — proof the caller can read cookies for
+        // this origin, which a cross-site page cannot. An absent cookie sends
+        // no header, which the backend treats as a pre-CSRF session and lets
+        // through once.
+        const csrfToken = readCsrfCookie();
         const { data } = await axios.post<ApiResponse<RefreshTokenResponse>>(
           `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/auth/refresh-token`,
           {},
-          { withCredentials: true }
+          {
+            withCredentials: true,
+            headers: csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : undefined,
+          }
         );
 
         if (data.success && data.data?.accessToken) {

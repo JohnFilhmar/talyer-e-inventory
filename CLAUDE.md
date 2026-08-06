@@ -115,6 +115,30 @@ and on every token expiry, so a strict limiter there locks out a whole office sh
 Both `skip` whenever `NODE_ENV === 'test'`, so the Jest suites never see rate limiting. Both key
 clients by `req.ip`, which is why `TRUST_PROXY` (see Environment) matters behind any reverse proxy.
 
+**CSRF.** `cookieParser()` is mounted on `/api/auth` only, not globally — `authController` is the
+sole reader of `req.cookies` in the backend, and parsing cookies for routers that never consult
+them only widens the set of handlers a browser-attached cookie can reach.
+
+Every route except one authenticates from `Authorization: Bearer`, which a cross-site page cannot
+set, so those routes are not forgeable. `POST /auth/refresh-token` is the exception — it reads the
+`refreshToken` cookie — and is guarded by `requireCsrfToken`
+([middleware/csrf.js](backend/src/middleware/csrf.js)): a double-submit check requiring the
+`X-XSRF-TOKEN` header to echo a readable `XSRF-TOKEN` cookie. That cookie is deliberately **not**
+`httpOnly` (the SPA has to read it to echo it) and is not a credential — it proves only that the
+sender can read cookies for this origin. `setRefreshTokenCookie` issues it and
+`clearRefreshTokenCookie` clears it, so the pair never drifts apart, and a successful refresh
+rotates it.
+
+Two things are load-bearing:
+- `X-XSRF-TOKEN` must stay in `CORS.ALLOWED_HEADERS`. Drop it and the preflight for the refresh
+  call fails, so the SPA can never renew a token — a total logout at the first expiry.
+- A request carrying **no** `XSRF-TOKEN` cookie is allowed through. That is a migration allowance
+  for sessions established before this shipped; rejecting them would sign out every logged-in user
+  on deploy. It is not a hole — an attacker cannot delete a victim's cookie cross-site, so they
+  cannot push a protected session back into the unprotected state. The refresh handler issues a
+  token, so each such session becomes protected after one refresh. Once every live session
+  predates the deploy by more than the 30-day refresh lifetime, this branch can become a rejection.
+
 [middleware/errorHandler.js](backend/src/middleware/errorHandler.js) collapses every 5xx message
 to `'Server Error'` when `NODE_ENV === 'production'` — internal failures can otherwise leak
 connection strings or file paths — while 4xx messages always pass through unchanged so clients
@@ -488,15 +512,17 @@ is enough to light up that helper.
     `[\r\n]` class, or replacing with `' '`, is equally safe at runtime but is not the shape
     CodeQL recognises as a log-injection barrier, and the alerts stay open.
 
-- **Missing CSRF middleware (`server.js`, the `cookieParser()` line) — assessed; dismiss, don't fix.**
-  It fires whenever the app has cookie middleware plus state-changing handlers, so **adding any
-  router with a POST/PUT/DELETE re-triggers it**. Do not "fix" it by bolting on CSRF middleware:
-  it is not exploitable as the app is built — every protected route authenticates with a Bearer
-  token from `localStorage`, which a cross-site page cannot set, and the only cookie-borne
-  credential is the refresh token, which is `httpOnly` and `sameSite: 'strict'` in production.
-  Real CSRF tokens would be an API-wide change that also has to thread through the offline outbox
-  replay. If it reappears on a new PR, dismiss it again rather than re-litigating it; revisit only
-  if the app ever starts authenticating a state-changing route from a cookie.
+- **Missing CSRF middleware — fixed, not dismissed.** The alert fires on handlers that are
+  preceded by cookie middleware, touch `req.user`/`req.cookies`/`req.session`, and answer an
+  unsafe method. It flagged ~50 handlers because `cookieParser()` was global and every
+  `protect`-ed route sets `req.user` — not because those routes read cookies. Two changes:
+  - `cookieParser()` is mounted on `/api/auth` only. `authController` is the sole reader of
+    `req.cookies` in the backend, so parsing them app-wide bought nothing and put every handler
+    behind cookie middleware. **Do not move it back to `app.use(cookieParser())`.**
+  - `POST /auth/refresh-token` — the one route that authenticates from a cookie rather than an
+    Authorization header, and therefore the only one a cross-site page could ride — is guarded by
+    `requireCsrfToken` ([middleware/csrf.js](backend/src/middleware/csrf.js)), a double-submit
+    check against a readable `XSRF-TOKEN` cookie issued alongside the refresh cookie.
 
 These checks are only advisory until branch protection requires them. Enable it once with:
 
