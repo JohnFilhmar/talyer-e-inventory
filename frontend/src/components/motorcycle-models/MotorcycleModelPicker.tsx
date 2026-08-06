@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { X } from 'lucide-react';
-import { Spinner } from '@/components/ui/Spinner';
+import { Combobox, type ComboboxOption } from '@/components/ui/Combobox';
 import { useActiveMotorcycleModels, groupByMake } from '@/hooks/useMotorcycleModels';
 import { motorcycleModelLabel, type MotorcycleModel } from '@/types/motorcycleModel';
 
@@ -54,9 +54,19 @@ export const MotorcycleModelPicker: React.FC<MotorcycleModelPickerProps> = ({
 
   const selectedSet = useMemo(() => new Set(value), [value]);
 
-  const availableGroups = useMemo(() => {
+  // Flattened into Combobox rows, grouped by make and pre-sorted so the
+  // combobox can render headings by comparing each row to the previous one.
+  // Already-selected motorcycles drop out, so the same one cannot be added
+  // twice.
+  const availableOptions = useMemo<ComboboxOption[]>(() => {
     const available = (motorcycleModels ?? []).filter((m) => !selectedSet.has(m._id));
-    return groupByMake(available);
+    return groupByMake(available).flatMap(({ make, models }) =>
+      models.map((motorcycleModel) => ({
+        value: motorcycleModel._id,
+        label: motorcycleModelLabel(motorcycleModel),
+        group: make,
+      }))
+    );
   }, [motorcycleModels, selectedSet]);
 
   const handleAdd = (id: string) => {
@@ -80,37 +90,21 @@ export const MotorcycleModelPicker: React.FC<MotorcycleModelPickerProps> = ({
         {label}
       </label>
 
-      {isLoading ? (
-        <div className="flex items-center gap-2 p-2">
-          <Spinner size="sm" />
-          <span className="text-sm text-gray-500">Loading motorcycle models...</span>
-        </div>
-      ) : (
-        <select
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent disabled:opacity-50"
-          // Always reset to the placeholder: this select is an "add" action,
-          // not a bound field. Leaving the last pick shown would read as a
-          // single-value selection when the real state is the chip list below.
-          value=""
-          onChange={(e) => handleAdd(e.target.value)}
-          disabled={disabled}
-        >
-          <option value="">
-            {availableGroups.length === 0
-              ? 'No more motorcycle models to add'
-              : 'Add a motorcycle model...'}
-          </option>
-          {availableGroups.map(({ make, models }) => (
-            <optgroup key={make} label={make}>
-              {models.map((motorcycleModel) => (
-                <option key={motorcycleModel._id} value={motorcycleModel._id}>
-                  {motorcycleModelLabel(motorcycleModel)}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      )}
+      {/* Always holds '' as its value: this is an "add" action, not a bound
+          field. Showing the last pick would read as a single-value selection
+          when the real state is the chip list below. */}
+      <Combobox
+        options={availableOptions}
+        value=""
+        onChange={handleAdd}
+        isLoading={isLoading}
+        disabled={disabled}
+        placeholder={
+          availableOptions.length === 0
+            ? 'No more motorcycle models to add'
+            : 'Search make or model to add...'
+        }
+      />
 
       {value.length > 0 && (
         <div className="flex flex-wrap gap-2 mt-3">

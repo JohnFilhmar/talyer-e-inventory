@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
-import { Upload, X, Image as ImageIcon, AlertCircle } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, AlertCircle, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
@@ -40,6 +40,10 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Separate from the gallery input: `capture` is read when the picker opens,
+  // so it cannot be toggled on a single shared input per click. Desktop
+  // browsers ignore the attribute and fall back to a normal file picker.
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const validateFile = (file: File): string | null => {
     if (!ALLOWED_TYPES.includes(file.type)) {
@@ -182,6 +186,14 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
                 onChange={handleInputChange}
                 className="hidden"
               />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleInputChange}
+                className="hidden"
+              />
               <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 dark:text-gray-300 mb-1">
                 <span className="font-medium">Click to upload</span> or drag and drop
@@ -189,6 +201,22 @@ export const ImageUploadModal: React.FC<ImageUploadModalProps> = ({
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 JPEG, PNG, WebP, or GIF (max 5MB)
               </p>
+
+              {/* Photographing the item is the common case on a phone — a
+                  supplier's stock photo rarely matches what is on the shelf.
+                  stopPropagation keeps this click off the drop zone, which
+                  opens the gallery picker instead. */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cameraInputRef.current?.click();
+                }}
+                className="mt-4 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <Camera className="w-4 h-4" />
+                Take photo
+              </button>
             </div>
           ) : (
             <div className="space-y-4">

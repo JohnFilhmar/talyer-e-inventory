@@ -65,8 +65,21 @@ const processImage = async (req, res, next) => {
     const filename = `${uuidv4()}.${IMAGE_CONFIG.OUTPUT_FORMAT}`;
     const outputPath = path.join(uploadsDir, filename);
 
-    // Process image with sharp
+    // Process image with sharp.
+    //
+    // .rotate() with no argument applies the EXIF orientation tag and is what
+    // makes phone photos come out upright. A camera does not physically rotate
+    // its sensor when the phone is turned; it writes the pixels in sensor order
+    // and records the orientation in EXIF for the viewer to apply. sharp strips
+    // metadata on output, so without this the tag is discarded while the pixels
+    // stay as-shot — every portrait photo lands on its side, which is exactly
+    // what the product grid was showing.
+    //
+    // It must come BEFORE .resize(), or the 800x800 bound is applied to the
+    // pre-rotation dimensions and a portrait photo is fitted as if it were
+    // landscape.
     await sharp(req.file.buffer)
+      .rotate()
       .resize(IMAGE_CONFIG.OUTPUT_WIDTH, IMAGE_CONFIG.OUTPUT_HEIGHT, {
         fit: 'inside', // Maintain aspect ratio, fit within bounds
         withoutEnlargement: true, // Don't upscale small images
@@ -80,6 +93,13 @@ const processImage = async (req, res, next) => {
     // Get file stats for size information
     const stats = fs.statSync(outputPath);
 
+    // Actual dimensions, read back from the written file. `fit: 'inside'`
+    // preserves aspect ratio, so the output is only ever 800x800 for a square
+    // source — reporting the configured bounds as the result was wrong for
+    // every other image, and wrong in a new way now that orientation can swap
+    // the axes.
+    const { width, height } = await sharp(outputPath).metadata();
+
     // Get backend URL from environment variable (with fallback)
     const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
 
@@ -90,8 +110,8 @@ const processImage = async (req, res, next) => {
       url: `${backendUrl}/uploads/products/${filename}`,
       size: stats.size,
       mimetype: `image/${IMAGE_CONFIG.OUTPUT_FORMAT}`,
-      width: IMAGE_CONFIG.OUTPUT_WIDTH,
-      height: IMAGE_CONFIG.OUTPUT_HEIGHT,
+      width,
+      height,
     };
 
     next();

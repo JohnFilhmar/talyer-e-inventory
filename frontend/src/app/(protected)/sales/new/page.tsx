@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
+import { Combobox, type ComboboxOption } from '@/components/ui/Combobox';
 import { useActiveMotorcycleModels, groupByMake } from '@/hooks/useMotorcycleModels';
 import { MotorcycleModelBadges } from '@/components/motorcycle-models';
 import {
@@ -138,6 +139,19 @@ export default function NewSalePage() {
   // dropped connection.
   const { data: motorcycleModels, isLoading: motorcycleModelsLoading } =
     useActiveMotorcycleModels();
+
+  // Grouped by make and pre-sorted so the combobox can render make headings.
+  const motorcycleOptions = useMemo<ComboboxOption[]>(
+    () =>
+      groupByMake(motorcycleModels ?? []).flatMap(({ make, models }) =>
+        models.map((motorcycleModel) => ({
+          value: motorcycleModel._id,
+          label: motorcycleModelLabel(motorcycleModel),
+          group: make,
+        }))
+      ),
+    [motorcycleModels]
+  );
 
   // Create order mutation
   const createOrderMutation = useCreateSalesOrder();
@@ -512,26 +526,18 @@ export default function NewSalePage() {
                     <Bike className="w-4 h-4 inline mr-1" />
                     Fits motorcycle
                   </label>
-                  <select
+                  <Combobox
+                    options={motorcycleOptions}
                     value={motorcycleFilter}
-                    onChange={(e) => {
-                      setMotorcycleFilter(e.target.value);
+                    onChange={(next) => {
+                      setMotorcycleFilter(next);
                       setShowProductDropdown(true);
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    disabled={motorcycleModelsLoading || stockLoading}
-                  >
-                    <option value="">Any motorcycle</option>
-                    {groupByMake(motorcycleModels ?? []).map(({ make, models }) => (
-                      <optgroup key={make} label={make}>
-                        {models.map((motorcycleModel) => (
-                          <option key={motorcycleModel._id} value={motorcycleModel._id}>
-                            {motorcycleModelLabel(motorcycleModel)}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
+                    isLoading={motorcycleModelsLoading}
+                    disabled={stockLoading}
+                    placeholder="Any motorcycle"
+                    emptyOptionLabel="Any motorcycle"
+                  />
                 </div>
               )}
 

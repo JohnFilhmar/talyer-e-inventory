@@ -18,6 +18,7 @@ import { ProductImagePicker } from '@/components/products/ProductImagePicker';
 import { MotorcycleModelPicker } from '@/components/motorcycle-models';
 import { useActiveCategories } from '@/hooks/useCategories';
 import { Input } from '@/components/ui/Input';
+import { Combobox, type ComboboxOption } from '@/components/ui/Combobox';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
@@ -56,6 +57,14 @@ function ProductForm({ mode, productId }: ProductFormProps) {
 
   // Fetch categories for dropdown
   const { data: categories, isLoading: categoriesLoading } = useActiveCategories();
+
+  // Categories are a flat list here rather than the indented tree the old
+  // select showed — the combobox filters by substring, so hierarchy is not what
+  // the user navigates by any more.
+  const categoryOptions = useMemo<ComboboxOption[]>(
+    () => (categories ?? []).map((cat) => ({ value: cat._id, label: cat.name })),
+    [categories]
+  );
 
   // Mutations
   const createMutation = useCreateProduct();
@@ -396,27 +405,20 @@ function ProductForm({ mode, productId }: ProductFormProps) {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Category *
               </label>
-              {categoriesLoading ? (
-                <div className="flex items-center gap-2 p-2">
-                  <Spinner size="sm" />
-                  <span className="text-sm text-gray-500">Loading categories...</span>
-                </div>
-              ) : (
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
-                  {...register('category')}
-                >
-                  <option value="">Select a category</option>
-                  {categories?.map((cat) => (
-                    <option key={cat._id} value={cat._id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {errors.category?.message && (
-                <p className="mt-1 text-sm text-red-600">{errors.category.message}</p>
-              )}
+              <Controller
+                name="category"
+                control={control}
+                render={({ field }) => (
+                  <Combobox
+                    options={categoryOptions}
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    isLoading={categoriesLoading}
+                    placeholder="Search categories..."
+                    error={errors.category?.message}
+                  />
+                )}
+              />
             </div>
 
             <Input

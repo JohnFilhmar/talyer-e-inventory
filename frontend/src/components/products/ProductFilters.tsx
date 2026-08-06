@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, Filter, X } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { Combobox, type ComboboxOption } from '@/components/ui/Combobox';
 import { useActiveCategories } from '@/hooks/useCategories';
 import { useActiveMotorcycleModels, groupByMake } from '@/hooks/useMotorcycleModels';
 import { motorcycleModelLabel } from '@/types/motorcycleModel';
@@ -46,6 +47,11 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
   const { data: categories, isLoading: categoriesLoading } = useActiveCategories();
   const { data: motorcycleModels, isLoading: motorcycleModelsLoading } =
     useActiveMotorcycleModels();
+
+  const categoryOptions = useMemo<ComboboxOption[]>(
+    () => (categories ?? []).map((cat) => ({ value: cat._id, label: cat.name })),
+    [categories]
+  );
   
   // Local state for all filter inputs (for immediate UI feedback)
   const [localFilters, setLocalFilters] = useState<LocalFilters>({
@@ -131,6 +137,18 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
   // than one per chip.
   const selectedMotorcycleIds = splitIds(localFilters.motorcycleModel);
 
+  // Already-picked motorcycles drop out of the list, so the same filter cannot
+  // be added twice. Grouped by make and pre-sorted for the combobox headings.
+  const motorcycleOptions: ComboboxOption[] = groupByMake(
+    (motorcycleModels ?? []).filter((m) => !selectedMotorcycleIds.includes(m._id))
+  ).flatMap(({ make, models }) =>
+    models.map((motorcycleModel) => ({
+      value: motorcycleModel._id,
+      label: motorcycleModelLabel(motorcycleModel),
+      group: make,
+    }))
+  );
+
   const handleMotorcycleAdd = useCallback((id: string) => {
     if (!id) return;
     const current = splitIds(localFilters.motorcycleModel);
@@ -193,19 +211,14 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
 
         {/* Category */}
         <div>
-          <select
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
+          <Combobox
+            options={categoryOptions}
             value={localFilters.category}
-            onChange={(e) => handleLocalChange('category', e.target.value)}
-            disabled={categoriesLoading}
-          >
-            <option value="">All Categories</option>
-            {categories?.map((cat) => (
-              <option key={cat._id} value={cat._id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => handleLocalChange('category', next)}
+            isLoading={categoriesLoading}
+            placeholder="All categories"
+            emptyOptionLabel="All categories"
+          />
         </div>
 
         {/* Brand */}
@@ -221,29 +234,15 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
             picked motorcycles are shown: a customer with two bikes wants the
             parts for either, not only those fitting both. */}
         <div className="sm:col-span-2">
-          <select
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent"
-            // Always resets to the placeholder: this is an "add" control, not
-            // a bound single value — the real state is the chip list below.
+          {/* Always holds '' — an "add" control, not a bound single value.
+              The real state is the chip list below. */}
+          <Combobox
+            options={motorcycleOptions}
             value=""
-            onChange={(e) => handleMotorcycleAdd(e.target.value)}
-            disabled={motorcycleModelsLoading}
-          >
-            <option value="">Add a motorcycle...</option>
-            {groupByMake(
-              (motorcycleModels ?? []).filter(
-                (m) => !selectedMotorcycleIds.includes(m._id)
-              )
-            ).map(({ make, models }) => (
-              <optgroup key={make} label={make}>
-                {models.map((motorcycleModel) => (
-                  <option key={motorcycleModel._id} value={motorcycleModel._id}>
-                    {motorcycleModelLabel(motorcycleModel)}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+            onChange={handleMotorcycleAdd}
+            isLoading={motorcycleModelsLoading}
+            placeholder="Search a motorcycle to filter by..."
+          />
 
           {selectedMotorcycleIds.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
