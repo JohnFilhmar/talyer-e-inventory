@@ -1,4 +1,12 @@
 import mongoose from 'mongoose';
+// Imported for its side effect of registering the model, not for a binding.
+// `motorcycleModels` below declares `ref: 'MotorcycleModel'`, and Mongoose
+// resolves that name at populate time against the global model registry — so
+// any consumer that populates fitment without having loaded this module
+// separately throws MissingSchemaError. Keeping the import here means loading
+// Product is enough, which is what the leaner routers (stock, sales) rely on.
+// Safe in this direction only: MotorcycleModel does not import Product.
+import './MotorcycleModel.js';
 
 const productSchema = new mongoose.Schema(
   {

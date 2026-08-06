@@ -35,6 +35,25 @@ const yearValidation = (field, label) =>
     .withMessage(`${label} must be a year between 1900 and 2200`)
     .toInt();
 
+// A range that runs backwards is always a mistake, but it can only be checked
+// once both ends are known — so it lives on `yearTo` and reaches across to
+// `yearFrom` rather than in either field's own chain.
+//
+// The model carries the same rule as a schema validator, but that fires during
+// save and surfaces as a Mongoose ValidationError, which only becomes a 400 if
+// the app-level errorHandler is mounted. Enforcing it here means the rejection
+// travels the same validated-request path as every other field error, with the
+// same payload shape.
+const yearRangeValidation = body('yearTo').custom((value, { req }) => {
+  const from = req.body?.yearFrom;
+  if (value === undefined || value === null || value === '') return true;
+  if (from === undefined || from === null || from === '') return true;
+  if (Number(value) < Number(from)) {
+    throw new Error('Year to must be greater than or equal to year from');
+  }
+  return true;
+});
+
 const createMotorcycleModelValidation = [
   body('make')
     .trim()
@@ -52,6 +71,7 @@ const createMotorcycleModelValidation = [
 
   yearValidation('yearFrom', 'Year from'),
   yearValidation('yearTo', 'Year to'),
+  yearRangeValidation,
 
   body('description')
     .optional()
@@ -83,6 +103,7 @@ const updateMotorcycleModelValidation = [
 
   yearValidation('yearFrom', 'Year from'),
   yearValidation('yearTo', 'Year to'),
+  yearRangeValidation,
 
   body('description')
     .optional()
