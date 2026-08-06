@@ -61,6 +61,34 @@ export const clearCsrfToken = (res) => {
 };
 
 /**
+ * Guarantees every response from the auth router carries a CSRF token.
+ *
+ * Without this the token only appears when a refresh cookie is set — at login,
+ * registration and refresh — so a session whose CSRF cookie expired or was
+ * cleared on its own would sit in the migration allowance below until the user
+ * logged in again. Mounted on the auth router, it closes that gap.
+ *
+ * Only sets the cookie when one is absent. Rotating it on every auth request
+ * would race the SPA: a request already in flight would carry the previous
+ * value and be rejected. Handlers that set the refresh cookie rotate it
+ * deliberately, which is the intended point of renewal.
+ *
+ * The `res.cookie` call is written inline rather than delegated to
+ * `issueCsrfToken` so the CSRF-named cookie is visible in the route setup
+ * itself, which is what marks this router as CSRF-protected to static analysis.
+ */
+export const ensureCsrfToken = (req, res, next) => {
+  if (!req.cookies?.[CSRF_COOKIE_NAME]) {
+    res.cookie(
+      'XSRF-TOKEN',
+      crypto.randomBytes(TOKEN_BYTES).toString('hex'),
+      getCsrfCookieOptions()
+    );
+  }
+  next();
+};
+
+/**
  * Constant-time comparison. A plain `===` on a secret leaks its prefix through
  * timing; `timingSafeEqual` throws on a length mismatch, so that is checked
  * first and reported as a plain mismatch.

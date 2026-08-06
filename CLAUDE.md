@@ -127,7 +127,9 @@ set, so those routes are not forgeable. `POST /auth/refresh-token` is the except
 `httpOnly` (the SPA has to read it to echo it) and is not a credential — it proves only that the
 sender can read cookies for this origin. `setRefreshTokenCookie` issues it and
 `clearRefreshTokenCookie` clears it, so the pair never drifts apart, and a successful refresh
-rotates it.
+rotates it. `ensureCsrfToken` is mounted router-wide so every auth response carries a token even
+when no refresh cookie is being set — it only fills in a missing cookie and never rotates one,
+because rotating on every request would reject a request the SPA already had in flight.
 
 Two things are load-bearing:
 - `X-XSRF-TOKEN` must stay in `CORS.ALLOWED_HEADERS`. Drop it and the preflight for the refresh
@@ -522,7 +524,13 @@ is enough to light up that helper.
   - `POST /auth/refresh-token` — the one route that authenticates from a cookie rather than an
     Authorization header, and therefore the only one a cross-site page could ride — is guarded by
     `requireCsrfToken` ([middleware/csrf.js](backend/src/middleware/csrf.js)), a double-submit
-    check against a readable `XSRF-TOKEN` cookie issued alongside the refresh cookie.
+    check against a readable `XSRF-TOKEN` cookie issued alongside the refresh cookie. See the
+    CSRF paragraph under *Security middleware* for the details that are load-bearing.
+
+  Test harnesses are excluded from analysis via
+  [.github/codeql/codeql-config.yml](.github/codeql/codeql-config.yml): every suite mounts its own
+  Express app, so each one tripped the same web-security queries on code that is never deployed.
+  The exclusion is scoped to the test directories — everything under `src/` is still analysed.
 
 These checks are only advisory until branch protection requires them. Enable it once with:
 

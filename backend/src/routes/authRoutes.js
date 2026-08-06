@@ -11,7 +11,7 @@ import {
   getMe,
 } from '../controllers/authController.js';
 import { protect } from '../middleware/auth.js';
-import { requireCsrfToken } from '../middleware/csrf.js';
+import { requireCsrfToken, ensureCsrfToken } from '../middleware/csrf.js';
 import validate from '../middleware/validate.js';
 import { authLimiter } from '../middleware/rateLimit.js';
 
@@ -86,6 +86,12 @@ const resetPasswordValidation = [
     .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   validate
 ];
+
+// Every auth response carries a CSRF token, so the SPA always has one to echo
+// on the refresh call. Mounted router-wide rather than per-route because a
+// token that only exists after login leaves a session unprotected the moment
+// its cookie lapses.
+router.use(ensureCsrfToken);
 
 // Public routes
 // authLimiter (10 req/15 min) guards only the credential-and-token-issuing

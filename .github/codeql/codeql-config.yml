@@ -1,0 +1,18 @@
+name: talyer-e-inventory CodeQL config
+
+# Test harnesses are excluded from analysis.
+#
+# Every backend suite builds a throwaway Express app and mounts the router under
+# test (see the Testing section of CLAUDE.md), which means each one trips the
+# web-security queries — `js/missing-csrf-middleware` fires on the test app's
+# `cookieParser()` exactly as it does on the real one. Those handlers are never
+# deployed, never reachable, and never serve a request from a browser, so the
+# findings are noise that buries the real ones.
+#
+# This trades away detection inside test code. That is a deliberate and narrow
+# cost: it is scoped to the two test directories, so anything under `src/` — the
+# code that actually ships — is still fully analysed.
+paths-ignore:
+  - backend/tests
+  - frontend/src/**/*.test.ts
+  - frontend/src/**/*.test.tsx

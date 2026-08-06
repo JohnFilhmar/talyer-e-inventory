@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser';
 import * as dbHandler from './setup/dbHandler.js';
 import authRoutes from '../src/routes/authRoutes.js';
 import User from '../src/models/User.js';
-import { requireCsrfToken, issueCsrfToken } from '../src/middleware/csrf.js';
+import { requireCsrfToken, issueCsrfToken, ensureCsrfToken } from '../src/middleware/csrf.js';
 
 // Mirrors server.js: cookieParser is scoped to the auth router, not global.
 const app = express();
@@ -28,12 +28,18 @@ afterAll(async () => {
  * Pulls a cookie's value out of a supertest response's Set-Cookie header.
  * supertest keeps no cookie jar, so every test that needs a session drives the
  * cookies by hand — which is what makes the CSRF behaviour observable at all.
+ *
+ * Takes the **last** matching header, not the first. A response can legitimately
+ * set the same cookie twice — `ensureCsrfToken` issues one for a request that
+ * arrived without it, then the handler rotates it — and per RFC 6265 a browser
+ * applies them in order, so the last is the value the client ends up holding.
+ * Reading the first would assert against a value no client ever sees.
  */
 const readCookie = (res, name) => {
   const jar = res.headers['set-cookie'] ?? [];
-  const entry = jar.find((c) => c.startsWith(`${name}=`));
-  if (!entry) return undefined;
-  const value = entry.split(';')[0].slice(name.length + 1);
+  const matches = jar.filter((c) => c.startsWith(`${name}=`));
+  if (matches.length === 0) return undefined;
+  const value = matches[matches.length - 1].split(';')[0].slice(name.length + 1);
   return value === '' ? undefined : value;
 };
 
@@ -253,6 +259,35 @@ describe('CSRF protection on /api/auth/refresh-token', () => {
 
     it('passes on an exact match', () => {
       expect(runGuard({ 'XSRF-TOKEN': 'abc' }, 'abc').nexted).toBe(true);
+    });
+  });
+
+  describe('ensureCsrfToken', () => {
+    it('issues a token when none is present', () => {
+      const set = [];
+      const res = { cookie: (name, value) => set.push([name, value]) };
+      let nexted = false;
+      ensureCsrfToken({ cookies: {} }, res, () => { nexted = true; });
+
+      expect(nexted).toBe(true);
+      expect(set).toHaveLength(1);
+      expect(set[0][0]).toBe('XSRF-TOKEN');
+      expect(set[0][1]).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('leaves an existing token alone — rotating it would race an in-flight request', () => {
+      const set = [];
+      const res = { cookie: (name, value) => set.push([name, value]) };
+      ensureCsrfToken({ cookies: { 'XSRF-TOKEN': 'existing' } }, res, () => {});
+
+      expect(set).toHaveLength(0);
+    });
+
+    it('does not throw when cookieParser has not run', () => {
+      const res = { cookie: () => {} };
+      let nexted = false;
+      expect(() => ensureCsrfToken({}, res, () => { nexted = true; })).not.toThrow();
+      expect(nexted).toBe(true);
     });
   });
 
