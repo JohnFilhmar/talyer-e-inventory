@@ -295,6 +295,50 @@ client-side.
   Input, PhoneInput, Modal, Alert, Badge, Spinner) — extend those rather than adding new base
   components.
 
+### Uploads and the camera
+
+[middleware/imageUpload.js](backend/src/middleware/imageUpload.js) calls `sharp(...).rotate()`
+**before** `.resize()`. `.rotate()` with no argument applies the EXIF orientation tag; sharp strips
+metadata on output, so without it the tag is discarded while the pixels stay in sensor order and
+every portrait phone photo is stored on its side. It must come first, or the 800x800 bound is
+applied to the pre-rotation dimensions. `tests/imageUpload.test.js` guards this — it needs no
+database and does run in a sandbox. Note the fix only affects new uploads: images already written
+sideways have no EXIF left to recover from and must be re-uploaded.
+
+"Take photo" is a second `<input type="file" capture="environment">` alongside the gallery input,
+in all three image UIs ([ProductImagePicker](frontend/src/components/products/ProductImagePicker.tsx)
+on create, [ProductImageEditor](frontend/src/components/products/ProductImageEditor.tsx) on edit,
+[ImageUploadModal](frontend/src/components/products/ImageUploadModal.tsx) on the detail page). It is
+a separate input because `capture` is read when the picker opens and cannot be toggled per click.
+Desktop browsers ignore the attribute and fall back to a normal file picker.
+
+### Barcode scanner
+
+[BarcodeScanner](frontend/src/components/scanner/BarcodeScanner.tsx) drives zoom, torch and focus
+through `MediaStreamTrack` capabilities, all capability-gated — a desktop webcam reports none of
+them and the controls are simply absent.
+
+Auto-zoom works in two phases, and the distinction is load-bearing: a barcode too small to decode
+produces **no** detection and therefore no bounding box, so there is nothing to "zoom to" yet.
+While nothing decodes it *hunts*, ramping zoom up a step at a time and sweeping back to the wide
+end after a spell at maximum; once a code decodes it *settles*, holding the bounding box inside a
+coverage band and pushing the focus point-of-interest to its centre. The "at maximum" test uses the
+device's zoom step as its tolerance, not the ramp step — using the ramp step stopped the hunt a
+full step short of true maximum, losing exactly the range a small barcode needs.
+
+### Combobox
+
+[components/ui/Combobox.tsx](frontend/src/components/ui/Combobox.tsx) is the type-ahead select used
+wherever a list can grow unbounded — categories and motorcycle models on the product form, the
+product filters, and the sales picker. A native `<select>` has nowhere to type, which stops scaling
+at a few dozen rows. Short fixed enumerations (branch, status, sort field, sort direction)
+deliberately stay native `<select>`s; typeahead to choose between "Asc" and "Desc" is worse.
+
+Two details: the highlighted index is clamped **on read** rather than corrected in an effect (the
+project's React Compiler lint rejects setState in an effect body, and an effect would cost a second
+render pass), and options must arrive pre-sorted by `group`, because group headings are emitted by
+comparing each row to the previous one.
+
 ## Offline / PWA
 
 The app installs as a PWA and keeps working through a wifi drop. The scope is deliberate and

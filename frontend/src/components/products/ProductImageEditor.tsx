@@ -9,6 +9,7 @@ import {
   AlertCircle,
   ImagePlus,
   Loader2,
+  Camera,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
@@ -50,6 +51,11 @@ export const ProductImageEditor: React.FC<ProductImageEditorProps> = ({
   onImagesChange,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // A separate input, because `capture` cannot be toggled per click — the
+  // attribute is read when the picker opens, so the two entry points need
+  // two inputs. On desktop `capture` is ignored and this behaves as a normal
+  // file picker, so the button is harmless there rather than broken.
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [localImages, setLocalImages] = useState<ProductImage[]>(images);
@@ -102,6 +108,9 @@ export const ProductImageEditor: React.FC<ProductImageEditorProps> = ({
     // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = '';
     }
   }, [productId, localImages.length, uploadMutation, onImagesChange]);
 
@@ -223,6 +232,15 @@ export const ProductImageEditor: React.FC<ProductImageEditorProps> = ({
           className="hidden"
           disabled={isLoading}
         />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFileSelect}
+          className="hidden"
+          disabled={isLoading}
+        />
 
         {uploadMutation.isPending ? (
           <div className="flex flex-col items-center gap-2 text-gray-500 dark:text-gray-400">
@@ -234,6 +252,23 @@ export const ProductImageEditor: React.FC<ProductImageEditorProps> = ({
             <ImagePlus className="w-8 h-8" />
             <span className="text-sm font-medium">Click to upload images</span>
             <span className="text-xs">JPEG, PNG, or WebP (max 10MB each)</span>
+
+            {/* Shooting a photo straight into the product is the common case on
+                a phone at the counter — a stock photo rarely matches the box on
+                the shelf. stopPropagation keeps this click off the surrounding
+                drop zone, which opens the gallery picker instead. */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isLoading) cameraInputRef.current?.click();
+              }}
+              disabled={isLoading}
+              className="mt-2 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Camera className="w-4 h-4" />
+              Take photo
+            </button>
           </div>
         )}
       </div>
