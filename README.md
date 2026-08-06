@@ -131,10 +131,11 @@ Four distinct user roles with tailored permissions:
 
 ### 📦 Product Catalog & Inventory
 - **Hierarchical categories** - Unlimited parent-child category nesting
-- **Product management** - Name, SKU, description, brand, images, specifications
+- **Motorcycle model fitment** - Tag each product with every motorcycle it fits (many-to-many, appendable like tags), then filter products and search sales by motorcycle
+- **Product management** - Name, SKU, description, brand, product model, images, specifications
 - **Auto-generated SKUs** - Sequential product codes (PROD-000001)
 - **Multiple product images** - Primary image designation
-- **Full-text search** - Search by name, SKU, brand, barcode
+- **Full-text search** - Search by name, SKU, brand, product model, barcode
 
 ### 📊 Branch-Specific Stock Management (Critical MVP Feature)
 - **Independent pricing per branch** - Same product, different prices across branches
@@ -269,6 +270,7 @@ talyer-e-inventory/
 │   │   │   ├── userRoutes.js          # /api/users/*
 │   │   │   ├── branchRoutes.js        # /api/branches/*
 │   │   │   ├── categoryRoutes.js      # /api/categories/*
+│   │   │   ├── motorcycleModelRoutes.js # /api/motorcycle-models/*
 │   │   │   ├── productRoutes.js       # /api/products/*
 │   │   │   ├── stockRoutes.js         # /api/stock/*
 │   │   │   ├── supplierRoutes.js      # /api/suppliers/*
@@ -303,6 +305,7 @@ talyer-e-inventory/
 │   │   │       ├── dashboard/         # Dashboard page
 │   │   │       ├── branches/          # Branch management
 │   │   │       ├── categories/        # Category management
+│   │   │       ├── motorcycle-models/ # Motorcycle model management
 │   │   │       ├── products/          # Product management
 │   │   │       ├── stock/             # Stock operations
 │   │   │       ├── sales/             # Sales orders
@@ -315,6 +318,7 @@ talyer-e-inventory/
 │   │   │   ├── ui/                    # Reusable UI components
 │   │   │   ├── branches/              # Branch-specific components
 │   │   │   ├── categories/            # Category components
+│   │   │   ├── motorcycle-models/     # Motorcycle model components
 │   │   │   ├── products/              # Product components
 │   │   │   ├── stock/                 # Stock operation components
 │   │   │   ├── sales/                 # Sales components
@@ -325,6 +329,7 @@ talyer-e-inventory/
 │   │   │   ├── useAuth.ts             # Authentication hook
 │   │   │   ├── useBranches.ts         # Branch React Query hooks
 │   │   │   ├── useCategories.ts       # Category hooks
+│   │   │   ├── useMotorcycleModels.ts # Motorcycle model hooks
 │   │   │   ├── useProducts.ts         # Product hooks
 │   │   │   ├── useStock.ts            # Stock hooks
 │   │   │   ├── useSales.ts            # Sales hooks
@@ -584,9 +589,17 @@ After starting the application:
 - `PUT /:id` - Update category (admin)
 - `DELETE /:id` - Delete category (admin, checks for products/children)
 
+### Motorcycle Model Management (`/api/motorcycle-models`)
+- `GET /` - List motorcycle models (filter by `make`, `active`, `search`)
+- `GET /makes` - Distinct list of makes
+- `GET /:id` - Get single motorcycle model
+- `POST /` - Create motorcycle model (admin)
+- `PUT /:id` - Update motorcycle model (admin)
+- `DELETE /:id` - Deactivate motorcycle model (admin, refuses while products reference it)
+
 ### Product Management (`/api/products`)
-- `GET /` - List products (paginated, searchable, filterable)
-- `GET /search` - Search products (full-text)
+- `GET /` - List products (paginated, searchable, filterable — including `motorcycleModel`, a comma-joined list matched as ANY)
+- `GET /search` - Search products; matches name, SKU, brand, product model, barcode **and the motorcycles a product fits**. Accepts `motorcycleModel` on its own, with no `q`
 - `GET /:id` - Get single product
 - `POST /` - Create product (admin, salesperson)
 - `PUT /:id` - Update product (admin, salesperson)
@@ -665,6 +678,8 @@ After starting the application:
 | View products | ✅ | ✅ | ✅ | ✅ |
 | Create/edit products | ✅ | ✅ | ❌ | ❌ |
 | Create/edit categories | ✅ | ❌ | ❌ | ❌ |
+| View motorcycle models | ✅ | ✅ | ✅ | ✅ |
+| Create/edit motorcycle models | ✅ | ❌ | ❌ | ❌ |
 | **Stock** |
 | View stock | ✅ | ✅ | ✅ | ❌ |
 | Add/adjust stock | ✅ | ✅ | ❌ | ❌ |
@@ -868,6 +883,7 @@ Create Order → Validate Stock → Reserve Stock
 | Branches List | 1 hour | `cache:branches:/api/branches?params` | Create/Update/Delete Branch |
 | Branch Detail | 30 min | `cache:branch:/api/branches/:id` | Update Branch |
 | Categories | 30 min | `cache:categories:/api/categories?params` | Create/Update/Delete Category |
+| Motorcycle models | 1 hour | `cache:motorcycleModels:list:<query>` | Create/Update/Delete Motorcycle Model (also clears `cache:product:*`) |
 | Products | 30 min | `cache:products:/api/products?params` | Create/Update/Delete Product |
 | Stock | Not cached | - | Real-time data |
 | Orders | Not cached | - | Real-time data |

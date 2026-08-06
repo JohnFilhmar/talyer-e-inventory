@@ -11,6 +11,7 @@ import {
   getMe,
 } from '../controllers/authController.js';
 import { protect } from '../middleware/auth.js';
+import { requireCsrfToken, ensureCsrfToken } from '../middleware/csrf.js';
 import validate from '../middleware/validate.js';
 import { authLimiter } from '../middleware/rateLimit.js';
 
@@ -86,6 +87,12 @@ const resetPasswordValidation = [
   validate
 ];
 
+// Every auth response carries a CSRF token, so the SPA always has one to echo
+// on the refresh call. Mounted router-wide rather than per-route because a
+// token that only exists after login leaves a session unprotected the moment
+// its cookie lapses.
+router.use(ensureCsrfToken);
+
 // Public routes
 // authLimiter (10 req/15 min) guards only the credential-and-token-issuing
 // endpoints below. /refresh-token, /logout, and /me are deliberately left to
@@ -95,7 +102,11 @@ const resetPasswordValidation = [
 router.post('/register', authLimiter, registerValidation, register);
 router.post('/register-customer', authLimiter, customerRegisterValidation, registerCustomer);
 router.post('/login', authLimiter, loginValidation, login);
-router.post('/refresh-token', refreshTokenValidation, refreshToken);
+// requireCsrfToken guards this route and no other: it is the only endpoint
+// that authenticates from a cookie, so it is the only one a cross-site page
+// could ride. Everything else needs an Authorization header that such a
+// page cannot set.
+router.post('/refresh-token', requireCsrfToken, refreshTokenValidation, refreshToken);
 router.post('/forgot-password', authLimiter, forgotPasswordValidation, forgotPassword);
 router.post('/reset-password', authLimiter, resetPasswordValidation, resetPassword);
 

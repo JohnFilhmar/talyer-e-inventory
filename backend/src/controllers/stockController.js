@@ -59,7 +59,11 @@ export const getAllStock = asyncHandler(async (req, res) => {
 
   const [stockRecords, total] = await Promise.all([
     Stock.find(query)
-      .populate('product', 'sku name brand barcode images')
+      .populate({
+        path: 'product',
+        select: 'sku name brand productModel barcode images motorcycleModels',
+        populate: { path: 'motorcycleModels', select: 'make model yearFrom yearTo code' }
+      })
       .populate('branch', 'name code')
       .populate('supplier', 'name code')
       .sort({ 'branch.name': 1, 'product.name': 1 })
@@ -119,10 +123,17 @@ export const getBranchStock = asyncHandler(async (req, res) => {
 
   const [stockRecords, total] = await Promise.all([
     Stock.find(query)
+      // motorcycleModels is nested-populated here, not just referenced: the New
+      // Sale picker searches and filters this list client-side, and offline it
+      // reads it back out of the IndexedDB mirror, where an unpopulated id is
+      // just an opaque string with nothing to match against.
       .populate({
         path: 'product',
-        select: 'sku name brand barcode category images',
-        populate: { path: 'category', select: 'name code' }
+        select: 'sku name brand productModel barcode category images motorcycleModels',
+        populate: [
+          { path: 'category', select: 'name code' },
+          { path: 'motorcycleModels', select: 'make model yearFrom yearTo code' }
+        ]
       })
       .populate('supplier', 'name code')
       .sort({ 'product.name': 1 })

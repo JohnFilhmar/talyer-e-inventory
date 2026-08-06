@@ -22,11 +22,12 @@ Two independent npm packages, no workspace root. Every command must be run from 
 # Backend (cd backend)
 npm run dev                       # nodemon on src/server.js, port 5000
 npm start                         # node src/server.js
-npm test                          # jest --runInBand (NODE_ENV=test) — green: 14 suites, 407 tests
+npm test                          # jest --runInBand (NODE_ENV=test) — green: 15 suites, 474 tests
 npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
 node src/utils/seedBranches.js    # DESTRUCTIVE: deletes ALL existing branches, then seeds 3 Philippine branches into MONGODB_URI
+npm run migrate:product-model     # one-off: renames Product.model → Product.productModel; idempotent
 
 # Frontend (cd frontend)
 npm run dev                       # next dev, port 3000
@@ -114,6 +115,32 @@ and on every token expiry, so a strict limiter there locks out a whole office sh
 Both `skip` whenever `NODE_ENV === 'test'`, so the Jest suites never see rate limiting. Both key
 clients by `req.ip`, which is why `TRUST_PROXY` (see Environment) matters behind any reverse proxy.
 
+**CSRF.** `cookieParser()` is mounted on `/api/auth` only, not globally — `authController` is the
+sole reader of `req.cookies` in the backend, and parsing cookies for routers that never consult
+them only widens the set of handlers a browser-attached cookie can reach.
+
+Every route except one authenticates from `Authorization: Bearer`, which a cross-site page cannot
+set, so those routes are not forgeable. `POST /auth/refresh-token` is the exception — it reads the
+`refreshToken` cookie — and is guarded by `requireCsrfToken`
+([middleware/csrf.js](backend/src/middleware/csrf.js)): a double-submit check requiring the
+`X-XSRF-TOKEN` header to echo a readable `XSRF-TOKEN` cookie. That cookie is deliberately **not**
+`httpOnly` (the SPA has to read it to echo it) and is not a credential — it proves only that the
+sender can read cookies for this origin. `setRefreshTokenCookie` issues it and
+`clearRefreshTokenCookie` clears it, so the pair never drifts apart, and a successful refresh
+rotates it. `ensureCsrfToken` is mounted router-wide so every auth response carries a token even
+when no refresh cookie is being set — it only fills in a missing cookie and never rotates one,
+because rotating on every request would reject a request the SPA already had in flight.
+
+Two things are load-bearing:
+- `X-XSRF-TOKEN` must stay in `CORS.ALLOWED_HEADERS`. Drop it and the preflight for the refresh
+  call fails, so the SPA can never renew a token — a total logout at the first expiry.
+- A request carrying **no** `XSRF-TOKEN` cookie is allowed through. That is a migration allowance
+  for sessions established before this shipped; rejecting them would sign out every logged-in user
+  on deploy. It is not a hole — an attacker cannot delete a victim's cookie cross-site, so they
+  cannot push a protected session back into the unprotected state. The refresh handler issues a
+  token, so each such session becomes protected after one refresh. Once every live session
+  predates the deploy by more than the 30-day refresh lifetime, this branch can become a rejection.
+
 [middleware/errorHandler.js](backend/src/middleware/errorHandler.js) collapses every 5xx message
 to `'Server Error'` when `NODE_ENV === 'production'` — internal failures can otherwise leak
 connection strings or file paths — while 4xx messages always pass through unchanged so clients
@@ -141,6 +168,37 @@ different branches. Orders always price from the branch's `Stock`, not from `Pro
 
 `Stock.availableQuantity` is a virtual (`quantity - reservedQuantity`). Check
 `availableQuantity`, never raw `quantity`, before committing stock to an order.
+
+### Domain model — motorcycle fitment
+
+`MotorcycleModel` (`make` + `model` + optional `yearFrom`/`yearTo`) is a flat collection of the
+motorcycles the shop stocks parts for. `Product.motorcycleModels` references it many-to-many and
+is appendable like `tags` — one part fits several bikes, one bike takes many parts.
+
+Two fields on `Product` sound alike and must not be confused: **`productModel`** is the
+manufacturer's designation for the part itself (`45120-KVB-901`), while **`motorcycleModels`** is
+what the part *fits*. `productModel` was renamed from `model` for exactly that reason;
+[utils/migrateProductModel.js](backend/src/utils/migrateProductModel.js) (`npm run
+migrate:product-model`) does the one-off `$rename` and must be run against any database that
+predates the change, or every product silently loses its manufacturer designation.
+
+Identity is a derived, unique `code` (`HONDA-CLICK-125I-2018-2023`) rebuilt in a `pre('save')`
+hook whenever make/model/years change — which is why `updateMotorcycleModel` uses `set` + `save`
+rather than `findByIdAndUpdate`, since query middleware would never run the hook and a renamed
+model would keep its old identity. That code is what makes "Honda"/"HONDA" a duplicate rather
+than two makes.
+
+`GET /products?motorcycleModel=a,b` matches products fitting **any** of the listed ids
+(comma-joined, not an array — axios serialises arrays as `key[]=…`, which Express parses under
+the literal key `key[]`). `GET /products/search` is *mixed*: one `q` matches the part (name, SKU,
+brand, `productModel`, barcode) and the motorcycle, by resolving motorcycle models to ids first
+and folding them into the same `$or`. It also accepts `motorcycleModel` with no `q` at all.
+
+Deleting a motorcycle model is refused while any product references it, and every mutation
+invalidates `cache:product:*` as well as its own keys — product reads embed populated fitment, so
+a rename would otherwise leave cached products showing the old label. The stock reads that back
+the New Sale picker nest-populate fitment for the same reason: offline, an unpopulated id is an
+opaque string with nothing to match against.
 
 ### StockMovement ledger
 
@@ -260,7 +318,9 @@ There is no client-side force or override, and adding one would let a user overs
    falls back to `/offline` for uncached navigations. It deliberately does **not** cache API
    responses: a shared HTTP cache on a shared tablet can serve one user's data to the next.
 2. **IndexedDB mirror** ([lib/offline/db.ts](frontend/src/lib/offline/db.ts)) holds the working
-   set. `authStore.logout()` calls `clearOfflineCache()` in its `finally`, so the mirror never
+   set. `DB_VERSION` must be bumped whenever a store is added — it is at 4 (v2 outbox,
+   v3 stockTransfers, v4 motorcycleModels); leave it and an existing browser keeps its old schema
+   and every read of the new store throws `NotFoundError`. `authStore.logout()` calls `clearOfflineCache()` in its `finally`, so the mirror never
    survives into the next person's session — including when the logout request itself fails
    offline.
 3. **Outbox** ([lib/offline/outbox.ts](frontend/src/lib/offline/outbox.ts),
@@ -319,11 +379,43 @@ app.use(express.json());
 app.use('/api/stock', stockRoutes);
 ```
 
-`npm test` is green — verified 14 suites / 407 tests passing:
+`npm test` is green — 15 suites / 474 tests, verified by CI's `backend-test` job:
 
 ```bash
 npm test
 ```
+
+**The suite may be unrunnable locally.** `mongodb-memory-server` downloads a `mongod` binary from
+`fastdl.mongodb.org` on first run; in a sandbox whose network policy blocks that host, every
+DB-backed suite fails in `beforeAll` with a 403 `DownloadError` — including suites that were
+passing before your change. That is an environment failure, not a regression. When it happens,
+push and read `backend-test`; do not infer anything from the local red.
+
+### Two traps in the mount-the-router pattern
+
+Both of these produced a **500 where the test expected a 2xx/4xx**, and both were invisible until
+CI ran, so check for them before pushing:
+
+- **The app under test has no `errorHandler`.** A Mongoose `ValidationError` from a schema
+  validator only becomes a 400 through
+  [middleware/errorHandler.js](backend/src/middleware/errorHandler.js), which `server.js` mounts
+  and the suites deliberately do not. Any rule that must produce a 4xx has to live in the route's
+  express-validator chain; keep the schema validator as the backstop for writes that bypass the
+  route (seeds, migrations, other controllers), not as the only enforcement. The
+  `yearFrom`/`yearTo` ordering rule on `MotorcycleModel` is the worked example — it exists in both
+  places for exactly this reason.
+
+- **A `ref` is resolved by name against a global registry, at populate time.** Declaring
+  `ref: 'MotorcycleModel'` on a schema does not load that model. A suite that mounts only
+  `stockRoutes` never imports it, so `.populate('motorcycleModels')` throws `MissingSchemaError`
+  and the read 500s — while the motorcycle and product suites pass, because their test files
+  import the model directly and mask it. **A model that declares a `ref` must import the target
+  module for its registration side effect**; `models/Product.js` imports `./MotorcycleModel.js`
+  for no other purpose. Check with:
+
+  ```bash
+  node -e "import('./src/routes/stockRoutes.js').then(async()=>{const m=(await import('mongoose')).default;console.log(Object.keys(m.models).sort())})"
+  ```
 
 [tests/user.test.js](backend/tests/user.test.js) used to be the one file that broke this: it
 imported `../src/server.js`, which executes `startServer()` and calls `connectDB()` against the
@@ -395,6 +487,50 @@ findings to GitHub code scanning (SARIF) but never fails the job regardless of w
 That's deliberate — base-image CVEs are frequently unfixable upstream, and failing the build on
 them would block every merge. The checks that actually fail on a real problem are `backend-test`,
 `frontend-build`, `docker-build`, `dependency-audit`, and `secret-scan`.
+
+### CodeQL
+
+The `codeql` job runs the `security-and-quality` suite. Two separate things appear in a PR: the
+**`codeql` job** (green as long as the analysis runs) and a **`CodeQL` check run** that lists
+*new* alerts in the code this PR changed and fails the PR. A green job with a red check is the
+normal shape of a CodeQL failure — read the check, not the job.
+
+There is no MCP tool for code-scanning alerts. The alert list is readable from the check run's
+page (`https://github.com/<owner>/<repo>/runs/<checkRunId>`); dismissing one is a human action in
+the Security tab.
+
+**"New" means new flow, not new file.** An alert is attributed to the PR that opens the path to it,
+so it will point at files the PR never touched. Routing user-supplied text into an existing helper
+is enough to light up that helper.
+
+- **`utils/cache.js` — log injection + externally-controlled format string.** Cache keys embed
+  caller text (a product search term, a motorcycle filter value), and every `CacheUtil` method logs
+  its key when Redis errors. `forLog()` sanitises at the sink, so every current and future caller
+  is covered. Two details are load-bearing and easy to undo:
+  - The key is passed to `console.error` as a **`%s` argument against a literal format string**,
+    never interpolated into the template. Interpolating it makes the message itself externally
+    controlled, so a key containing `%s` or `%d` reshuffles everything after it.
+  - CR and LF are removed **one constant pattern at a time, replaced with `''`**. A combined
+    `[\r\n]` class, or replacing with `' '`, is equally safe at runtime but is not the shape
+    CodeQL recognises as a log-injection barrier, and the alerts stay open.
+
+- **Missing CSRF middleware — fixed, not dismissed.** The alert fires on handlers that are
+  preceded by cookie middleware, touch `req.user`/`req.cookies`/`req.session`, and answer an
+  unsafe method. It flagged ~50 handlers because `cookieParser()` was global and every
+  `protect`-ed route sets `req.user` — not because those routes read cookies. Two changes:
+  - `cookieParser()` is mounted on `/api/auth` only. `authController` is the sole reader of
+    `req.cookies` in the backend, so parsing them app-wide bought nothing and put every handler
+    behind cookie middleware. **Do not move it back to `app.use(cookieParser())`.**
+  - `POST /auth/refresh-token` — the one route that authenticates from a cookie rather than an
+    Authorization header, and therefore the only one a cross-site page could ride — is guarded by
+    `requireCsrfToken` ([middleware/csrf.js](backend/src/middleware/csrf.js)), a double-submit
+    check against a readable `XSRF-TOKEN` cookie issued alongside the refresh cookie. See the
+    CSRF paragraph under *Security middleware* for the details that are load-bearing.
+
+  Test harnesses are excluded from analysis via
+  [.github/codeql/codeql-config.yml](.github/codeql/codeql-config.yml): every suite mounts its own
+  Express app, so each one tripped the same web-security queries on code that is never deployed.
+  The exclusion is scoped to the test directories — everything under `src/` is still analysed.
 
 These checks are only advisory until branch protection requires them. Enable it once with:
 

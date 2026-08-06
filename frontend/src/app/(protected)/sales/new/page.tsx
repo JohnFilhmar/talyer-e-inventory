@@ -18,6 +18,7 @@ import {
   MapPin,
   Calculator,
   Camera,
+  Bike,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useBranches } from '@/hooks/useBranches';
@@ -27,6 +28,12 @@ import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
+import { useActiveMotorcycleModels, groupByMake } from '@/hooks/useMotorcycleModels';
+import { MotorcycleModelBadges } from '@/components/motorcycle-models';
+import {
+  isPopulatedMotorcycleModel,
+  motorcycleModelLabel,
+} from '@/types/motorcycleModel';
 import {
   PAYMENT_METHOD_OPTIONS,
   calculateOrderTotals,
@@ -97,6 +104,10 @@ export default function NewSalePage() {
   // nothing is completely silent and reads as the camera being broken.
   const [scanFeedback, setScanFeedback] = useState<string | null>(null);
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  // "Fits motorcycle" narrows the picker to parts for one bike. Single-select,
+  // not multi: at the counter there is one customer with one motorcycle in
+  // front of you.
+  const [motorcycleFilter, setMotorcycleFilter] = useState('');
   
   // Local state for order items (with display info)
   const [orderItems, setOrderItems] = useState<LocalOrderItem[]>([]);
@@ -121,6 +132,12 @@ export default function NewSalePage() {
 
   // Fetch stock for the active branch
   const { data: branchStock, isLoading: stockLoading } = useStockByBranch(activeBranchId);
+
+  // Motorcycle models for the fitment dropdown. Read through the offline
+  // mirror like everything else on this screen, so the filter still works on a
+  // dropped connection.
+  const { data: motorcycleModels, isLoading: motorcycleModelsLoading } =
+    useActiveMotorcycleModels();
 
   // Create order mutation
   const createOrderMutation = useCreateSalesOrder();
@@ -184,25 +201,52 @@ export default function NewSalePage() {
     return Math.max(0, orderTotals.total - amountPaid);
   }, [amountPaid, orderTotals.total]);
 
-  // Filter stock by search
+  // Filter stock by the fitment dropdown and the search box.
+  //
+  // The two are independent: picking a motorcycle alone lists everything that
+  // fits it (no typing required), typing alone searches the whole branch, and
+  // both together narrow to parts for that bike matching the text.
+  //
+  // Search is "mixed" — the same box matches a part (name, SKU, barcode, the
+  // manufacturer's model designation) and a motorcycle ("Click 125i"), so a
+  // salesperson does not have to decide which kind of thing they are typing
+  // before they type it.
   const filteredStock = useMemo(() => {
-    if (!branchStock || !productSearch) return [];
-    
-    const searchLower = productSearch.toLowerCase();
-    return branchStock.filter((stock) => {
-      if (!isStockProductPopulated(stock.product)) return false;
-      const product = stock.product;
-      
-      // Only show items with available stock
-      if (stock.available <= 0) return false;
+    if (!branchStock) return [];
+    if (!productSearch && !motorcycleFilter) return [];
 
-      return (
-        product.name.toLowerCase().includes(searchLower) ||
-        product.sku.toLowerCase().includes(searchLower) ||
-        (product.barcode?.toLowerCase().includes(searchLower) ?? false)
-      );
-    }).slice(0, 10); // Limit to 10 results
-  }, [branchStock, productSearch]);
+    const searchLower = productSearch.toLowerCase();
+
+    return branchStock
+      .filter((stock) => {
+        if (!isStockProductPopulated(stock.product)) return false;
+        const product = stock.product;
+
+        // Only show items with available stock
+        if (stock.available <= 0) return false;
+
+        const fitments = (product.motorcycleModels ?? []).filter(
+          isPopulatedMotorcycleModel
+        );
+
+        if (motorcycleFilter && !fitments.some((m) => m._id === motorcycleFilter)) {
+          return false;
+        }
+
+        if (!searchLower) return true;
+
+        return (
+          product.name.toLowerCase().includes(searchLower) ||
+          product.sku.toLowerCase().includes(searchLower) ||
+          (product.productModel?.toLowerCase().includes(searchLower) ?? false) ||
+          (product.barcode?.toLowerCase().includes(searchLower) ?? false) ||
+          fitments.some((m) =>
+            motorcycleModelLabel(m).toLowerCase().includes(searchLower)
+          )
+        );
+      })
+      .slice(0, 10); // Limit to 10 results
+  }, [branchStock, productSearch, motorcycleFilter]);
 
   // Handle adding a product to order
   const handleAddProduct = useCallback((stock: Stock) => {
@@ -458,13 +502,46 @@ export default function NewSalePage() {
                 </div>
               )}
 
+              {/* Fits-motorcycle filter. Sits above the search box because it
+                  is asked first at the counter — "what bike?" then "what
+                  part?" — and on its own it lists every part for that bike
+                  with nothing typed. */}
+              {activeBranchId && (
+                <div className="mb-3">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <Bike className="w-4 h-4 inline mr-1" />
+                    Fits motorcycle
+                  </label>
+                  <select
+                    value={motorcycleFilter}
+                    onChange={(e) => {
+                      setMotorcycleFilter(e.target.value);
+                      setShowProductDropdown(true);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    disabled={motorcycleModelsLoading || stockLoading}
+                  >
+                    <option value="">Any motorcycle</option>
+                    {groupByMake(motorcycleModels ?? []).map(({ make, models }) => (
+                      <optgroup key={make} label={make}>
+                        {models.map((motorcycleModel) => (
+                          <option key={motorcycleModel._id} value={motorcycleModel._id}>
+                            {motorcycleModelLabel(motorcycleModel)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Product Search */}
               {activeBranchId ? (
                 <div className="relative mb-4">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Search products by name, SKU or barcode..."
+                    placeholder="Search by product, SKU, barcode or motorcycle..."
                     value={productSearch}
                     onChange={(e) => {
                       setProductSearch(e.target.value);
@@ -474,9 +551,12 @@ export default function NewSalePage() {
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     disabled={stockLoading}
                   />
-                  
-                  {/* Search Results Dropdown */}
-                  {showProductDropdown && productSearch.length >= 2 && (
+
+                  {/* Search Results Dropdown. Opens on a picked motorcycle as
+                      well as on typed text — a fitment alone is a complete
+                      query, so requiring two characters would hide the results
+                      the dropdown was just told to show. */}
+                  {showProductDropdown && (productSearch.length >= 2 || !!motorcycleFilter) && (
                     <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
                       {stockLoading ? (
                         <div className="p-4 text-center">
@@ -494,13 +574,22 @@ export default function NewSalePage() {
                               className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
                             >
                               <div className="flex items-center justify-between">
-                                <div>
+                                <div className="min-w-0">
                                   <p className="font-medium text-gray-900 dark:text-gray-100">
                                     {product.name}
                                   </p>
                                   <p className="text-sm text-gray-500">
                                     SKU: {product.sku} | Available: {stock.available}
                                   </p>
+                                  {/* Fitment on the row itself: with a mixed
+                                      search, a result can match on the bike
+                                      rather than the part name, and without
+                                      this the match looks arbitrary. */}
+                                  <MotorcycleModelBadges
+                                    motorcycleModels={product.motorcycleModels}
+                                    max={3}
+                                    className="mt-1"
+                                  />
                                 </div>
                                 <span className="font-medium text-green-600 dark:text-green-400">
                                   {formatCurrency(stock.sellingPrice)}
@@ -511,7 +600,9 @@ export default function NewSalePage() {
                         })
                       ) : (
                         <div className="p-4 text-center text-gray-500">
-                          No products found
+                          {motorcycleFilter
+                            ? 'No products in stock for this motorcycle'
+                            : 'No products found'}
                         </div>
                       )}
                     </div>

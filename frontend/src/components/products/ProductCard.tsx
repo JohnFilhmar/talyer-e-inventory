@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { calculateProfitMargin, isPopulatedCategory } from '@/types/product';
 import type { Product } from '@/types/product';
+import { MotorcycleModelBadges } from '@/components/motorcycle-models';
 
 interface ProductCardProps {
   product: Product;
@@ -115,12 +116,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           SKU: {product.sku}
         </p>
 
-        {/* Brand/Model */}
-        {(product.brand || product.model) && (
+        {/* Brand / Product Model */}
+        {(product.brand || product.productModel) && (
           <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 truncate">
-            {product.brand}{product.brand && product.model && ' • '}{product.model}
+            {product.brand}{product.brand && product.productModel && ' • '}{product.productModel}
           </p>
         )}
+
+        {/* Motorcycles this part fits. Capped at two on a card — the full list
+            is on the detail page, and more than two chips pushes the price
+            below the fold on a phone. */}
+        <MotorcycleModelBadges
+          motorcycleModels={product.motorcycleModels}
+          max={2}
+          className="mt-1.5"
+        />
 
         {/* Prices */}
         <div className="mt-3 space-y-1">

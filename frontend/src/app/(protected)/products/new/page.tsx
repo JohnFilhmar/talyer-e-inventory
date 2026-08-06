@@ -15,6 +15,7 @@ import {
 } from '@/hooks/useProducts';
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
 import { ProductImagePicker } from '@/components/products/ProductImagePicker';
+import { MotorcycleModelPicker } from '@/components/motorcycle-models';
 import { useActiveCategories } from '@/hooks/useCategories';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -22,6 +23,11 @@ import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { createProductSchema, updateProductSchema, type CreateProductFormData, type UpdateProductFormData } from '@/utils/validators/product';
 import { calculateProfitMargin } from '@/types/product';
+import {
+  isPopulatedMotorcycleModel,
+  motorcycleModelId,
+  motorcycleModelLabel,
+} from '@/types/motorcycleModel';
 
 interface ProductFormProps {
   mode: 'create' | 'edit';
@@ -84,7 +90,8 @@ function ProductForm({ mode, productId }: ProductFormProps) {
       description: '',
       category: '',
       brand: '',
-      model: '',
+      productModel: '',
+      motorcycleModels: [],
       costPrice: 0,
       sellingPrice: 0,
       barcode: '',
@@ -104,11 +111,26 @@ function ProductForm({ mode, productId }: ProductFormProps) {
   const costPrice = useWatch({ control, name: 'costPrice' }) ?? 0;
   const sellingPrice = useWatch({ control, name: 'sellingPrice' }) ?? 0;
   const tags = useWatch({ control, name: 'tags' }) ?? [];
+  const motorcycleModels = useWatch({ control, name: 'motorcycleModels' }) ?? [];
 
   // Calculate profit margin in real-time
   const profitMargin = useMemo(() => {
     return calculateProfitMargin(costPrice, sellingPrice);
   }, [costPrice, sellingPrice]);
+
+  // Labels for motorcycles this product is already tagged with but that are no
+  // longer active, so their chips read as names rather than raw ids. Without
+  // this, deactivating a motorcycle turns every product still carrying it into
+  // a row of "Unknown motorcycle".
+  const motorcycleModelFallbackLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const entry of product?.motorcycleModels ?? []) {
+      if (isPopulatedMotorcycleModel(entry)) {
+        labels[entry._id] = motorcycleModelLabel(entry);
+      }
+    }
+    return labels;
+  }, [product]);
 
   // Populate form when editing
   useEffect(() => {
@@ -123,7 +145,8 @@ function ProductForm({ mode, productId }: ProductFormProps) {
         description: product.description ?? '',
         category: categoryId,
         brand: product.brand ?? '',
-        model: product.model ?? '',
+        productModel: product.productModel ?? '',
+        motorcycleModels: (product.motorcycleModels ?? []).map(motorcycleModelId),
         costPrice: product.costPrice,
         sellingPrice: product.sellingPrice,
         barcode: product.barcode ?? '',
@@ -149,7 +172,11 @@ function ProductForm({ mode, productId }: ProductFormProps) {
         sku: data.sku || undefined,
         description: data.description || undefined,
         brand: data.brand || undefined,
-        model: data.model || undefined,
+        productModel: data.productModel || undefined,
+        // Sent even when empty, unlike the other optional fields: [] is a
+        // meaningful value here ("fits nothing in particular"), and dropping
+        // it would make a cleared fitment list impossible to save.
+        motorcycleModels: data.motorcycleModels ?? [],
         barcode: data.barcode || undefined,
         tags: data.tags && data.tags.length > 0 ? data.tags : undefined,
         specifications: data.specifications ? {
@@ -400,10 +427,10 @@ function ProductForm({ mode, productId }: ProductFormProps) {
             />
 
             <Input
-              label="Model (Optional)"
-              placeholder="e.g., DCD771C2"
-              error={errors.model?.message}
-              {...register('model')}
+              label="Product Model (Optional)"
+              placeholder="e.g., 45120-KVB-901"
+              error={errors.productModel?.message}
+              {...register('productModel')}
             />
 
             <div>
@@ -458,6 +485,20 @@ function ProductForm({ mode, productId }: ProductFormProps) {
               {errors.description?.message && (
                 <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
               )}
+            </div>
+
+            <div className="md:col-span-2">
+              <MotorcycleModelPicker
+                value={motorcycleModels}
+                onChange={(ids) =>
+                  setValue('motorcycleModels', ids, { shouldDirty: true })
+                }
+                disabled={isSubmitting}
+                label="Fits Motorcycles (Optional)"
+                helperText="Add every motorcycle this part fits. Staff can then filter products and search sales by motorcycle."
+                error={errors.motorcycleModels?.message}
+                fallbackLabels={motorcycleModelFallbackLabels}
+              />
             </div>
 
             <div className="md:col-span-2">

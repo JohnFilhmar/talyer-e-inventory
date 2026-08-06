@@ -4,6 +4,7 @@
  */
 
 import type { Category } from './category';
+import type { ProductMotorcycleModel } from './motorcycleModel';
 
 /**
  * Product image subdocument
@@ -51,7 +52,14 @@ export interface Product {
   description?: string;
   category: ProductCategory | string;
   brand?: string;
-  model?: string;
+  /**
+   * The manufacturer's designation for the part itself (e.g. "45120-KVB-901").
+   * Named `productModel`, never `model`, so it is never confused with
+   * `motorcycleModels` — what the part *fits*.
+   */
+  productModel?: string;
+  /** The motorcycles this part fits. Populated on every product read. */
+  motorcycleModels?: Array<ProductMotorcycleModel | string>;
   costPrice: number;
   sellingPrice: number;
   barcode?: string;
@@ -85,7 +93,9 @@ export interface CreateProductPayload {
   description?: string;
   category: string;
   brand?: string;
-  model?: string;
+  productModel?: string;
+  /** Motorcycle model ids */
+  motorcycleModels?: string[];
   costPrice: number;
   sellingPrice: number;
   barcode?: string;
@@ -103,7 +113,9 @@ export interface UpdateProductPayload {
   description?: string;
   category?: string;
   brand?: string;
-  model?: string;
+  productModel?: string;
+  /** Motorcycle model ids. An empty array clears the fitment list. */
+  motorcycleModels?: string[];
   costPrice?: number;
   sellingPrice?: number;
   barcode?: string;
@@ -120,6 +132,15 @@ export interface UpdateProductPayload {
 export interface ProductListParams {
   category?: string;
   brand?: string;
+  /**
+   * Comma-joined motorcycle model ids. Matches products fitting ANY of them —
+   * a customer with two bikes wants parts for either, not only the parts that
+   * happen to fit both.
+   *
+   * Comma-joined rather than an array because axios serialises arrays as
+   * `key[]=a&key[]=b`, which Express parses under the literal key `key[]`.
+   */
+  motorcycleModel?: string;
   active?: string;
   discontinued?: string;
   search?: string;
@@ -135,7 +156,10 @@ export interface ProductListParams {
  * Search query parameters
  */
 export interface ProductSearchParams {
-  q: string;
+  /** Optional when `motorcycleModel` is given — a fitment is a search on its own. */
+  q?: string;
+  /** Comma-joined motorcycle model ids */
+  motorcycleModel?: string;
   limit?: number;
 }
 
@@ -147,9 +171,11 @@ export interface ProductSearchResult {
   sku: string;
   name: string;
   brand?: string;
+  productModel?: string;
   sellingPrice: number;
   images: ProductImage[];
   category: ProductCategory;
+  motorcycleModels?: Array<ProductMotorcycleModel | string>;
 }
 
 /**
