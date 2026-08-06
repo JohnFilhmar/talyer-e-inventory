@@ -1047,6 +1047,19 @@ describe('Product API Tests', () => {
   });
 
   describe('Barcode character set', () => {
+    /**
+     * The validation messages for the barcode field.
+     *
+     * `validate` answers with `message: 'Validation failed'` and puts the real
+     * text in `errors[]`, so anything asserting on `res.body.message` is really
+     * asserting that validation ran, not which rule tripped.
+     */
+    const barcodeErrors = (res) =>
+      (res.body.errors ?? [])
+        .filter((e) => e.field === 'barcode')
+        .map((e) => e.message)
+        .join(' | ');
+
     const create = (barcode) =>
       request(app)
         .post('/api/products')
@@ -1093,17 +1106,27 @@ describe('Product API Tests', () => {
       // alike to a human but be two different products.
       const res = await create('ABC 12345');
       expect(res.status).toBe(400);
-      expect(res.body.message ?? JSON.stringify(res.body.errors)).toMatch(/letters, numbers/i);
+
+      // These routes use the `validate` middleware, whose envelope is a generic
+      // `message: 'Validation failed'` with the per-field text in `errors[]`.
+      // Reading `message` here asserts nothing about the barcode rule at all.
+      expect(barcodeErrors(res)).toMatch(/letters, numbers/i);
     });
 
     it('rejects punctuation outside the allowed set', async () => {
       const res = await create('ABC#12345');
       expect(res.status).toBe(400);
+      expect(barcodeErrors(res)).toMatch(/letters, numbers/i);
     });
 
     it('still enforces the length bounds', async () => {
-      expect((await create('ABC123')).status).toBe(400);
-      expect((await create('123456789012345678901')).status).toBe(400);
+      const short = await create('ABC123');
+      expect(short.status).toBe(400);
+      expect(barcodeErrors(short)).toMatch(/between 8 and 20/i);
+
+      const long = await create('123456789012345678901');
+      expect(long.status).toBe(400);
+      expect(barcodeErrors(long)).toMatch(/between 8 and 20/i);
     });
 
     it('still allows a barcode to be cleared', async () => {

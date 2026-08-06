@@ -451,6 +451,14 @@ DB-backed suite fails in `beforeAll` with a 403 `DownloadError` — including su
 passing before your change. That is an environment failure, not a regression. When it happens,
 push and read `backend-test`; do not infer anything from the local red.
 
+**Assert on `errors[]`, not `message`, for validation failures.** Routes wired with
+[validate.js](backend/src/middleware/validate.js) answer every rejection with a generic
+`message: 'Validation failed'` and put the per-field text in `errors[]`. A test that reads
+`res.body.message` therefore asserts only that *some* rule tripped, never which one — and
+`res.body.message ?? res.body.errors` silently short-circuits on the always-present message. Routes
+wired with [validationHandler.js](backend/src/middleware/validationHandler.js) do the opposite and
+join the messages into `message`, so check which one the route under test uses.
+
 ### Two traps in the mount-the-router pattern
 
 Both of these produced a **500 where the test expected a 2xx/4xx**, and both were invisible until
