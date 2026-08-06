@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productService } from '@/lib/services/productService';
-import { withOfflinePaginatedList } from '@/lib/offline/offlineQuery';
+import { withOfflineScopedPaginatedList } from '@/lib/offline/offlineQuery';
 import type {
   Product,
   ProductImage,
@@ -52,9 +52,27 @@ export function useDebounce<T>(value: T, delay = 600): T {
 export function useProducts(params: ProductListParams = {}) {
   return useQuery<PaginatedResponse<Product>, Error>({
     queryKey: productKeys.list(params),
-    queryFn: () => withOfflinePaginatedList('products', () => productService.getAll(params)),
+    queryFn: () =>
+      withOfflineScopedPaginatedList(
+        'products',
+        () => productService.getAll(params),
+        // The mirror is merged into, never replaced, so a product archived
+        // after it was cached stays there. Without reproducing the server's
+        // `active` filter on the fallback path, going offline would resurrect
+        // every deleted product in the catalog.
+        (product) => matchesActiveFilter(product, params.active)
+      ),
     staleTime: 30 * 1000, // 30 seconds
   });
+}
+
+/**
+ * Client-side equivalent of the API's `active` filter, for offline fallback.
+ * Absent means "no opinion" — both live and archived rows pass.
+ */
+function matchesActiveFilter(product: Product, active: string | undefined): boolean {
+  if (active === undefined || active === '') return true;
+  return product.isActive === (active === 'true');
 }
 
 /**

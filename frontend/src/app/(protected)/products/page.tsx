@@ -31,6 +31,12 @@ export default function ProductsPage() {
     limit: 12,
     sortBy: 'createdAt',
     sortOrder: 'desc',
+    // Deleting a product is a soft delete — it stays in the collection with
+    // isActive false and isDiscontinued true. Without this the catalog kept
+    // listing everything ever deleted, and a deleted product stayed on screen
+    // after the delete succeeded. Archived rows are reachable through the
+    // Status filter.
+    active: 'true',
   });
 
   // Modal state
@@ -83,6 +89,9 @@ export default function ProductsPage() {
       limit: 12,
       sortBy: 'createdAt',
       sortOrder: 'desc',
+      // Clearing filters returns to the default view, which excludes archived
+      // products. Dropping this would make 'Clear all' quietly reveal them.
+      active: 'true',
     });
   }, []);
 
@@ -146,7 +155,14 @@ export default function ProductsPage() {
         onDelete={showAdminActions ? handleDeleteProduct : undefined}
         isAdmin={showAdminActions}
         emptyMessage={
-          Object.keys(filters).some(k => !['page', 'limit', 'sortBy', 'sortOrder'].includes(k) && filters[k as keyof ProductListParams])
+          Object.keys(filters).some(
+            (k) =>
+              !['page', 'limit', 'sortBy', 'sortOrder'].includes(k) &&
+              filters[k as keyof ProductListParams] &&
+              // The default active filter is not a user choice, so an empty
+              // catalog must not claim nothing matched the filters.
+              !(k === 'active' && filters.active === 'true')
+          )
             ? 'No products match your filters'
             : 'No products yet'
         }

@@ -31,8 +31,16 @@ export const categoryService = {
   /**
    * Get root categories (categories with no parent)
    */
-  async getRootCategories(): Promise<Category[]> {
-    return categoryService.getAll({ parent: 'null', includeChildren: 'true' });
+  async getRootCategories(includeArchived = false): Promise<Category[]> {
+    // Deleting a category is a soft delete (isActive = false), so archived rows
+    // come back from the API unless asked not to. They are excluded by default
+    // — an archived category is not part of the working catalog and reading it
+    // as live is how products get filed under a category nobody uses.
+    return categoryService.getAll({
+      parent: 'null',
+      includeChildren: 'true',
+      ...(includeArchived ? {} : { active: 'true' }),
+    });
   },
 
   /**

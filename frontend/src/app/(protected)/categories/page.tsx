@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { Plus, FolderTree } from 'lucide-react';
+import React, { useState, useCallback, useMemo } from 'react';
+import { Plus, FolderTree, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   useRootCategories,
@@ -35,8 +35,30 @@ export default function CategoriesPage() {
   const [parentCategory, setParentCategory] = useState<Category | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
 
+  // Archived categories are hidden by default and revealed on request.
+  const [showArchived, setShowArchived] = useState(false);
+
   // Fetch root categories with children populated
-  const { data: categories, isLoading, error, refetch } = useRootCategories();
+  const { data: categories, isLoading, error, refetch } = useRootCategories(showArchived);
+
+  // The `active` filter applies to the roots the server selects; `children` is
+  // a populated virtual and is not filtered by it, so an archived subcategory
+  // would still arrive under a live parent. Prune it here so the tree matches
+  // what the toggle promises.
+  const visibleCategories = useMemo(() => {
+    if (showArchived) return categories ?? [];
+
+    const prune = (nodes: Category[]): Category[] =>
+      nodes
+        .filter((node) => node.isActive)
+        .map((node) => ({
+          ...node,
+          children: node.children ? prune(node.children) : node.children,
+        }));
+
+    return prune(categories ?? []);
+  }, [categories, showArchived]);
+
 
   // Delete mutation
   const deleteMutation = useDeleteCategory();
@@ -127,39 +149,54 @@ export default function CategoriesPage() {
           </div>
         </div>
 
-        {showAdminActions && (
-          <Button variant="primary" onClick={handleAddCategory}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Category
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setShowArchived((shown) => !shown)}
+            aria-pressed={showArchived}
+          >
+            {showArchived ? (
+              <EyeOff className="w-4 h-4 mr-2" />
+            ) : (
+              <Eye className="w-4 h-4 mr-2" />
+            )}
+            {showArchived ? 'Hide archived' : 'Show archived'}
           </Button>
-        )}
+
+          {showAdminActions && (
+            <Button variant="primary" onClick={handleAddCategory}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Category
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Stats Summary */}
-      {categories && categories.length > 0 && (
+      {visibleCategories.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Root Categories</p>
             <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              {categories.length}
+              {visibleCategories.length}
             </p>
           </div>
           <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Total Categories</p>
             <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              {countTotalCategories(categories)}
+              {countTotalCategories(visibleCategories)}
             </p>
           </div>
           <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Active</p>
             <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-              {countActiveCategories(categories)}
+              {countActiveCategories(visibleCategories)}
             </p>
           </div>
           <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">With Products</p>
             <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {countCategoriesWithProducts(categories)}
+              {countCategoriesWithProducts(visibleCategories)}
             </p>
           </div>
         </div>
@@ -167,7 +204,7 @@ export default function CategoriesPage() {
 
       {/* Category Tree */}
       <CategoryTree
-        categories={categories ?? []}
+        categories={visibleCategories}
         isLoading={isLoading}
         error={error}
         onEdit={showAdminActions ? handleEditCategory : undefined}

@@ -170,8 +170,14 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
     };
   }, []);
 
+  // `active: 'true'` is the list's default, not something the user chose, so it
+  // must not count as an applied filter — otherwise the badge reads 1 and a
+  // "Clear all" button appears on an untouched page.
   const activeFilterCount = Object.keys(filters).filter(
-    (key) => !['page', 'limit', 'sortBy', 'sortOrder'].includes(key) && filters[key as keyof ProductListParams]
+    (key) =>
+      !['page', 'limit', 'sortBy', 'sortOrder'].includes(key) &&
+      filters[key as keyof ProductListParams] &&
+      !(key === 'active' && filters.active === 'true')
   ).length;
 
   return (
@@ -280,9 +286,12 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
             value={localFilters.active}
             onChange={(e) => handleLocalChange('active', e.target.value)}
           >
-            <option value="">All Status</option>
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
+            {/* Deleting a product is a soft delete (isActive false,
+                isDiscontinued true), so "all" genuinely means archived rows
+                included — worth saying, since the list defaults to active. */}
+            <option value="true">Active only</option>
+            <option value="false">Archived only</option>
+            <option value="">Active + archived</option>
           </select>
         </div>
 

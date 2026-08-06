@@ -36,10 +36,13 @@ export function useCategories(params: CategoryListParams = {}) {
 /**
  * Hook to fetch root categories (for tree view)
  */
-export function useRootCategories() {
+export function useRootCategories(includeArchived = false) {
   return useQuery<Category[], Error>({
-    queryKey: categoryKeys.roots(),
-    queryFn: () => categoryService.getRootCategories(),
+    // The flag is part of the key: the two results are different data, and
+    // sharing one key would serve the archived-inclusive list to the default
+    // view after a toggle.
+    queryKey: [...categoryKeys.roots(), { includeArchived }] as const,
+    queryFn: () => categoryService.getRootCategories(includeArchived),
     staleTime: 60 * 1000,
   });
 }

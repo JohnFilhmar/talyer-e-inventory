@@ -201,7 +201,11 @@ export default function NewSalePage() {
         email: '',
         address: '',
       },
-      taxRate: 12, // Default 12% VAT
+      // No tax by default. Tax is added on top of the branch selling price, so
+      // a non-zero default silently marks up every sale — the cashier has to
+      // notice and zero it, which is the wrong way round. Set it per sale when
+      // a VAT receipt is actually being issued.
+      taxRate: 0,
       discount: 0,
       paymentMethod: 'cash',
       amountPaid: 0,

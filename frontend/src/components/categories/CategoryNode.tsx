@@ -97,21 +97,26 @@ export const CategoryNode: React.FC<CategoryNodeProps> = ({
           </Badge>
         )}
 
-        {/* Status badge */}
+        {/* Status badge. Wording matches the Show archived toggle — deleting a
+            category archives it rather than removing the row. */}
         {!category.isActive && (
           <Badge variant="warning" size="sm">
-            Inactive
+            Archived
           </Badge>
         )}
 
-        {/* Action buttons (admin only) */}
+        {/* Action buttons (admin only).
+            Always visible. These used to be opacity-0 until group-hover, which
+            meant they did not exist at all on a tablet — there is no hover on a
+            touch screen, and a tablet on the counter is the primary device. */}
         {isAdmin && (
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
               onClick={() => onAddChild?.(category)}
               title="Add subcategory"
-              className="h-7 w-7 flex items-center justify-center rounded text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-300 transition-colors"
+              aria-label={`Add subcategory under ${category.name}`}
+              className="h-9 w-9 flex items-center justify-center rounded text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-300"
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -119,15 +124,18 @@ export const CategoryNode: React.FC<CategoryNodeProps> = ({
               type="button"
               onClick={() => onEdit?.(category)}
               title="Edit category"
-              className="h-7 w-7 flex items-center justify-center rounded text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-300 transition-colors"
+              aria-label={`Edit ${category.name}`}
+              className="h-9 w-9 flex items-center justify-center rounded text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-300"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={() => onDelete?.(category)}
-              title="Delete category"
-              className="h-7 w-7 flex items-center justify-center rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              title={category.isActive ? 'Archive category' : 'Archive category (already archived)'}
+              aria-label={`Archive ${category.name}`}
+              className="h-9 w-9 flex items-center justify-center rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={!category.isActive}
             >
               <Trash2 className="w-4 h-4" />
             </button>
