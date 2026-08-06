@@ -16,7 +16,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
-import { Stock, isPopulatedStockProduct, isPopulatedStockBranch } from '@/types/stock';
+import { Stock, isPopulatedStockProduct, isPopulatedStockBranch, canReceiveStock } from '@/types/stock';
 
 interface StockTableProps {
   stocks: Stock[];
@@ -274,7 +274,12 @@ export const StockTable: React.FC<StockTableProps> = ({
                           variant="ghost"
                           size="sm"
                           onClick={() => onRestock(stock)}
-                          title="Add stock"
+                          disabled={!canReceiveStock(stock.product)}
+                          title={
+                            canReceiveStock(stock.product)
+                              ? 'Add stock'
+                              : 'Archived product — restore it before adding stock'
+                          }
                         >
                           <Plus className="w-4 h-4" />
                         </Button>
@@ -378,6 +383,12 @@ export const StockTable: React.FC<StockTableProps> = ({
                     size="sm"
                     className="flex-1"
                     onClick={() => onRestock(stock)}
+                    disabled={!canReceiveStock(stock.product)}
+                    title={
+                      canReceiveStock(stock.product)
+                        ? undefined
+                        : 'Archived product — restore it before adding stock'
+                    }
                   >
                     <Plus className="w-4 h-4 mr-1" />
                     Restock

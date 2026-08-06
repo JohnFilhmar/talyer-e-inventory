@@ -587,6 +587,135 @@ describe('Stock API Tests', () => {
   // ===================
   // ADJUST STOCK TESTS
   // ===================
+  describe('Archived products cannot be stocked up', () => {
+    // Deleting a product is a soft delete: isActive false, isDiscontinued true.
+    // It vanishes from the catalog, so units bought after that point are
+    // invisible until someone audits stock.
+    const archive = async () => {
+      await Product.findByIdAndUpdate(product._id, {
+        isActive: false,
+        isDiscontinued: true,
+      });
+    };
+
+    it('refuses a restock of an archived product', async () => {
+      await archive();
+
+      const res = await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          quantity: 10,
+        });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body.message).toMatch(/archived|discontinued/i);
+    });
+
+    it('refuses a restock by stock id too, not just by product', async () => {
+      const stock = await createTestStock({ product: product._id, branch: branchA._id, quantity: 20 });
+      await archive();
+
+      const res = await request(app)
+        .put(`/api/stock/${stock._id}/restock`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ quantity: 5 });
+
+      expect(res.statusCode).toBe(400);
+
+      const unchanged = await Stock.findById(stock._id);
+      expect(unchanged.quantity).toBe(20);
+    });
+
+    it('refuses an upward adjustment on an archived product', async () => {
+      await createTestStock({ product: product._id, branch: branchA._id, quantity: 20 });
+      await archive();
+
+      const res = await request(app)
+        .post('/api/stock/adjust')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          adjustment: 5,
+          reason: 'Found more in the back',
+        });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('still allows writing archived stock DOWN, or dead units would be trapped', async () => {
+      const stock = await createTestStock({ product: product._id, branch: branchA._id, quantity: 20 });
+      await archive();
+
+      const res = await request(app)
+        .post('/api/stock/adjust')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          adjustment: -20,
+          reason: 'Written off',
+        });
+
+      expect(res.statusCode).toBe(200);
+
+      const cleared = await Stock.findById(stock._id);
+      expect(cleared.quantity).toBe(0);
+    });
+
+    it('allows restocking again once the product is restored', async () => {
+      await archive();
+
+      const blocked = await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          quantity: 10,
+        });
+      expect(blocked.statusCode).toBe(400);
+
+      await Product.findByIdAndUpdate(product._id, {
+        isActive: true,
+        isDiscontinued: false,
+      });
+
+      const allowed = await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          quantity: 10,
+        });
+
+      expect(allowed.statusCode).toBe(201);
+      expect(allowed.body.data.quantity).toBe(10);
+    });
+
+    it('refuses a product that is discontinued but still marked active', async () => {
+      // The two flags are set together by the delete path, but they are
+      // independent fields and either one on its own means "stop buying this".
+      await Product.findByIdAndUpdate(product._id, { isDiscontinued: true });
+
+      const res = await request(app)
+        .post('/api/stock/restock')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          quantity: 10,
+        });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body.message).toMatch(/discontinued/i);
+    });
+  });
+
   describe('POST /api/stock/adjust - Adjust Stock', () => {
     beforeEach(async () => {
       await createTestStock({

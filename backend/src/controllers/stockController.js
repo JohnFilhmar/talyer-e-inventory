@@ -11,6 +11,34 @@ import { CACHE_TTL, USER_ROLES, PAGINATION } from '../config/constants.js';
 import { resolveBranchScope, canAccessBranch } from '../utils/branchScope.js';
 
 /**
+ * Rejects bringing more of a product into stock when the product is archived.
+ *
+ * Deleting a product is a soft delete: `isActive` goes false and
+ * `isDiscontinued` true, and the catalog stops listing it. Buying more of
+ * something the business has decided to stop carrying is almost always a
+ * mistake, and it is one that costs money and shelf space before anyone
+ * notices — the product is invisible in the catalog, so the new units are
+ * effectively lost until someone audits stock.
+ *
+ * Reducing stock stays allowed in every case. Dead stock has to be writeable
+ * down, sellable off and transferable out, or archiving a product would trap
+ * its remaining units with no way to clear them.
+ *
+ * @param {Object|null} product A Product document (or lean object).
+ * @returns {string|null} Reason to refuse, or null when the increase is fine.
+ */
+const blockedFromIncrease = (product) => {
+  if (!product) return null;
+  if (product.isActive === false) {
+    return `${product.name} is archived. Restore it before adding stock.`;
+  }
+  if (product.isDiscontinued) {
+    return `${product.name} is discontinued. Restore it before adding stock.`;
+  }
+  return null;
+};
+
+/**
  * @desc    Get all stock records with filters
  * @route   GET /api/stock
  * @access  Private (Admin, Salesperson)
@@ -61,7 +89,7 @@ export const getAllStock = asyncHandler(async (req, res) => {
     Stock.find(query)
       .populate({
         path: 'product',
-        select: 'sku name brand productModel barcode images motorcycleModels',
+        select: 'sku name brand productModel barcode images motorcycleModels isActive isDiscontinued',
         populate: { path: 'motorcycleModels', select: 'make model yearFrom yearTo code' }
       })
       .populate('branch', 'name code')
@@ -129,7 +157,7 @@ export const getBranchStock = asyncHandler(async (req, res) => {
       // just an opaque string with nothing to match against.
       .populate({
         path: 'product',
-        select: 'sku name brand productModel barcode category images motorcycleModels',
+        select: 'sku name brand productModel barcode category images motorcycleModels isActive isDiscontinued',
         populate: [
           { path: 'category', select: 'name code' },
           { path: 'motorcycleModels', select: 'make model yearFrom yearTo code' }
@@ -290,6 +318,11 @@ export const restockProduct = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 404, 'Branch not found');
   }
 
+  const refusal = blockedFromIncrease(productExists);
+  if (refusal) {
+    return ApiResponse.error(res, 400, refusal);
+  }
+
   // Find existing stock record or create new one
   let stock = await Stock.findOne({ product, branch: targetBranch });
   const isNewStock = !stock;
@@ -376,6 +409,15 @@ export const adjustStock = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 404, 'Stock record not found');
   }
 
+  // Only upward adjustments are refused. Writing dead stock down must stay
+  // possible, or archiving a product would trap its remaining units.
+  if (adjustment > 0) {
+    const refusal = blockedFromIncrease(await Product.findById(product));
+    if (refusal) {
+      return ApiResponse.error(res, 400, refusal);
+    }
+  }
+
   const oldQuantity = stock.quantity;
   stock.quantity = Math.max(0, stock.quantity + adjustment);
   await stock.save();
@@ -432,6 +474,11 @@ export const restockById = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 403, 'Access denied to this branch');
   }
 
+  const refusal = blockedFromIncrease(await Product.findById(stock.product));
+  if (refusal) {
+    return ApiResponse.error(res, 400, refusal);
+  }
+
   const oldQuantity = stock.quantity;
 
   // Simply add quantity - prices stay the same
@@ -484,6 +531,15 @@ export const adjustById = asyncHandler(async (req, res) => {
 
   if (!stock) {
     return ApiResponse.error(res, 404, 'Stock record not found');
+  }
+
+  // As in adjustStock: refuse increases on an archived product, allow the
+  // write-down that clears its remaining units.
+  if (quantity > 0) {
+    const refusal = blockedFromIncrease(await Product.findById(stock.product));
+    if (refusal) {
+      return ApiResponse.error(res, 400, refusal);
+    }
   }
 
   const oldQuantity = stock.quantity;

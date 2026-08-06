@@ -57,6 +57,27 @@ export interface StockProduct {
   motorcycleModels?: Array<ProductMotorcycleModel | string>;
   images?: Array<{ url: string; isPrimary: boolean }>;
   primaryImage?: string;
+  /**
+   * Archive state, carried on stock reads so the UI can disable restocking
+   * rather than letting the user fill in a form and collect a 400. The server
+   * refuses to increase stock for an archived or discontinued product.
+   *
+   * Optional because older mirrored records predate the projection carrying
+   * them; absent is read as "not archived", matching the server default.
+   */
+  isActive?: boolean;
+  isDiscontinued?: boolean;
+}
+
+/**
+ * Whether more of this product may be brought into stock.
+ *
+ * Mirrors `blockedFromIncrease` in the backend's stockController. The server is
+ * the authority — this only avoids offering an action that will be refused.
+ */
+export function canReceiveStock(product: StockProduct | string | undefined): boolean {
+  if (!product || typeof product === 'string') return true;
+  return product.isActive !== false && product.isDiscontinued !== true;
 }
 
 /**
