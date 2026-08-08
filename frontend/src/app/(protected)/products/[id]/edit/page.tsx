@@ -154,29 +154,35 @@ export default function EditProductPage() {
   // Handle form submission
   const onSubmit = async (data: UpdateProductFormData) => {
     try {
-      // Clean up empty optional fields
+      // An update sends what the form holds, including the empty values.
+      //
+      // This used to run every optional field through `|| undefined` to "clean
+      // up" blanks. That is create-form logic, and on an update it is a data
+      // loss bug: JSON.stringify drops undefined keys, so a field the user
+      // cleared never reached the server at all and the old value survived the
+      // save. Clearing a brand, a product model, a description, the tags or any
+      // specification silently did nothing — the form even showed the change
+      // until it was reloaded.
+      //
+      // Empty is a legitimate value for every optional field here, and the
+      // route validators only bound length, so '' and [] both pass.
       const cleanData = {
         ...data,
+        // The one field that is NOT clearable. SKU is the product's identity,
+        // it is unique, and it is auto-generated when absent — blanking it
+        // would either 400 on the pattern check or collide with every other
+        // blank SKU. Omitting it leaves the existing one alone.
         sku: data.sku || undefined,
-        description: data.description || undefined,
-        brand: data.brand || undefined,
-        productModel: data.productModel || undefined,
-        // Sent even when empty, unlike the other optional fields: [] is a
-        // meaningful value here ("fits nothing in particular"), and dropping it
-        // would make a cleared fitment list impossible to save.
+        description: data.description ?? '',
+        brand: data.brand ?? '',
+        productModel: data.productModel ?? '',
         motorcycleModels: data.motorcycleModels ?? [],
-        // '' rather than undefined: JSON.stringify drops undefined keys, so
-        // `|| undefined` made a cleared barcode unsendable and the old value
-        // survived every save. The model turns '' into an $unset.
         barcode: data.barcode ?? '',
-        tags: data.tags && data.tags.length > 0 ? data.tags : undefined,
-        specifications: data.specifications ? {
-          ...data.specifications,
-          color: data.specifications.color || undefined,
-          material: data.specifications.material || undefined,
-          warranty: data.specifications.warranty || undefined,
-          origin: data.specifications.origin || undefined,
-        } : undefined,
+        tags: data.tags ?? [],
+        // Sent whole. Mongoose replaces the subdocument rather than merging it,
+        // so a numeric field the user cleared is absent here and is cleared on
+        // the server too.
+        specifications: data.specifications ?? {},
       };
 
       await updateMutation.mutateAsync({

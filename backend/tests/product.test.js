@@ -438,6 +438,113 @@ describe('Product API Tests', () => {
     });
   });
 
+  describe('Clearing optional fields on update', () => {
+    // The edit form sends '' / [] for a field the user emptied. Previously it
+    // sent undefined, JSON.stringify dropped the key, and the old value
+    // survived the save — the change appeared to work until a reload.
+    const createFull = async () =>
+      Product.create({
+        name: 'Full Product',
+        category: testCategory._id,
+        costPrice: 100,
+        sellingPrice: 150,
+        description: 'Original description',
+        brand: 'Original Brand',
+        productModel: '45120-KVB-901',
+        tags: ['oil', 'filter'],
+        specifications: { color: 'Black', material: 'Steel', weight: 2.5 }
+      });
+
+    const update = (id, payload) =>
+      request(app)
+        .put(`/api/products/${id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(payload);
+
+    it('clears a text field when sent as an empty string', async () => {
+      const product = await createFull();
+
+      const res = await update(product._id, { brand: '', productModel: '' });
+
+      expect(res.status).toBe(200);
+
+      const stored = await Product.findById(product._id).lean();
+      expect(stored.brand ?? '').toBe('');
+      expect(stored.productModel ?? '').toBe('');
+    });
+
+    it('clears the description', async () => {
+      const product = await createFull();
+
+      const res = await update(product._id, { description: '' });
+
+      expect(res.status).toBe(200);
+      const stored = await Product.findById(product._id).lean();
+      expect(stored.description ?? '').toBe('');
+    });
+
+    it('clears every tag when sent an empty array', async () => {
+      const product = await createFull();
+      expect(product.tags).toHaveLength(2);
+
+      const res = await update(product._id, { tags: [] });
+
+      expect(res.status).toBe(200);
+      const stored = await Product.findById(product._id).lean();
+      expect(stored.tags).toEqual([]);
+    });
+
+    it('clears specifications, including numeric ones, by replacing the subdocument', async () => {
+      const product = await createFull();
+
+      // The form sends specifications whole; a numeric field the user emptied
+      // is simply absent from the object rather than sent as null.
+      const res = await update(product._id, {
+        specifications: { color: '', material: '' }
+      });
+
+      expect(res.status).toBe(200);
+      const stored = await Product.findById(product._id).lean();
+      expect(stored.specifications?.color ?? '').toBe('');
+      expect(stored.specifications?.material ?? '').toBe('');
+      expect(stored.specifications?.weight).toBeUndefined();
+    });
+
+    it('leaves a field alone when its key is absent, so a partial update is still partial', async () => {
+      const product = await createFull();
+
+      const res = await update(product._id, { name: 'Renamed Only' });
+
+      expect(res.status).toBe(200);
+      const stored = await Product.findById(product._id).lean();
+      expect(stored.name).toBe('Renamed Only');
+      // Absent is not the same as empty — untouched fields must survive.
+      expect(stored.brand).toBe('Original Brand');
+      expect(stored.tags).toEqual(['oil', 'filter']);
+    });
+
+    it('rejects a blank SKU rather than letting identity be erased', async () => {
+      const product = await createFull();
+
+      const res = await update(product._id, { sku: '' });
+
+      expect(res.status).toBe(400);
+
+      const stored = await Product.findById(product._id).lean();
+      expect(stored.sku).toBe(product.sku);
+    });
+
+    it('rejects a blank name, which is required', async () => {
+      const product = await createFull();
+
+      const res = await update(product._id, { name: '' });
+
+      expect(res.status).toBe(400);
+      const stored = await Product.findById(product._id).lean();
+      expect(stored.name).toBe('Full Product');
+    });
+  });
+
   describe('PUT /api/products/:id', () => {
     it('should update product', async () => {
       const product = await createTestProduct({
