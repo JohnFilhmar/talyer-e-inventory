@@ -6,6 +6,7 @@ import {
   createBranch,
   updateBranch,
   deleteBranch,
+  restoreBranch,
   getBranchStats,
 } from '../controllers/branchController.js';
 import { protect, authorize } from '../middleware/auth.js';
@@ -130,6 +131,17 @@ router.delete(
   authorize(USER_ROLES.ADMIN),
   branchIdValidation,
   deleteBranch
+);
+
+// Bring an archived branch back. A distinct verb rather than a PUT with
+// { isActive: true }: this is a one-field state change and should not have to
+// satisfy the full update validator or resend every field.
+router.patch(
+  '/:id/restore',
+  protect,
+  authorize(USER_ROLES.ADMIN),
+  branchIdValidation,
+  restoreBranch
 );
 
 export default router;

@@ -85,4 +85,17 @@ router.delete(
   supplierController.deleteSupplier
 );
 
+// PATCH /api/suppliers/:id/restore - Bring an archived supplier back.
+// A distinct verb rather than a PUT with { isActive: true }: this is a
+// one-field state change and should not have to satisfy the full update
+// validator or resend every field.
+router.patch(
+  '/:id/restore',
+  protect,
+  authorize(USER_ROLES.ADMIN),
+  mongoIdValidation,
+  handleValidationErrors,
+  supplierController.restoreSupplier
+);
+
 export default router;

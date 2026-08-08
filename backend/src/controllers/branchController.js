@@ -233,6 +233,40 @@ export const deleteBranch = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Restore an archived branch
+ * @route   PATCH /api/branches/:id/restore
+ * @access  Private (Admin only)
+ *
+ * Deleting is a soft delete, so the record survives — without this there was no
+ * way back. Stock, orders and movements all keep referencing an archived
+ * branch, so restoring one makes it assignable and selectable again rather than
+ * repairing anything.
+ *
+ * Idempotent: restoring an already-active branch succeeds and changes nothing.
+ */
+export const restoreBranch = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const branch = await Branch.findById(id);
+
+  if (!branch) {
+    return ApiResponse.error(res, 404, 'Branch not found');
+  }
+
+  branch.isActive = true;
+  await branch.save();
+
+  // Both cache shapes, as in the delete path: branch reads are cached by
+  // document id in the controller AND by request URL in the route middleware,
+  // so clearing only one leaves the other serving an archived branch.
+  await CacheUtil.del(CacheUtil.generateKey('branch', id));
+  await CacheUtil.del(CacheUtil.generateKey('branch', `/api/branches/${id}`));
+  await CacheUtil.delPattern('cache:branches:*');
+
+  return ApiResponse.success(res, 200, 'Branch restored successfully', branch);
+});
+
+/**
  * @desc    Get branch statistics
  * @route   GET /api/branches/:id/stats
  * @access  Private (Admin, Branch Manager)

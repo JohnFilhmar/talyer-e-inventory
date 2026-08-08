@@ -1,5 +1,6 @@
 'use client';
 
+import { RotateCcw } from 'lucide-react';
 import React from 'react';
 import Link from 'next/link';
 import type { Branch, BranchManager } from '@/types/branch';
@@ -9,6 +10,8 @@ interface BranchCardProps {
   branch: Branch;
   onEdit?: (branch: Branch) => void;
   onDeactivate?: (branch: Branch) => void;
+  /** Bring an archived branch back. Only offered on archived cards. */
+  onRestore?: (branch: Branch) => void;
 }
 
 /**
@@ -28,6 +31,7 @@ export const BranchCard: React.FC<BranchCardProps> = ({
   branch,
   onEdit,
   onDeactivate,
+  onRestore,
 }) => {
   const { isAdmin } = useAuth();
   const showAdminActions = isAdmin();
@@ -49,7 +53,7 @@ export const BranchCard: React.FC<BranchCardProps> = ({
               : 'bg-gray-100 text-gray-600'
           }`}
         >
-          {branch.isActive ? 'Active' : 'Inactive'}
+          {branch.isActive ? 'Active' : 'Archived'}
         </span>
       </div>
 
@@ -108,6 +112,8 @@ export const BranchCard: React.FC<BranchCardProps> = ({
                 </svg>
               </button>
             )}
+            {/* Archive and restore are mutually exclusive: an archived card
+                has nothing to archive, an active one nothing to restore. */}
             {onDeactivate && branch.isActive && (
               <button
                 onClick={() => onDeactivate(branch)}
@@ -117,6 +123,16 @@ export const BranchCard: React.FC<BranchCardProps> = ({
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                 </svg>
+              </button>
+            )}
+            {onRestore && !branch.isActive && (
+              <button
+                onClick={() => onRestore(branch)}
+                className="inline-flex items-center gap-1 px-2 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md"
+                title="Restore branch"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Restore
               </button>
             )}
           </div>

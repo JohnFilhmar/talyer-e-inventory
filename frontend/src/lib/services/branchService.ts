@@ -82,6 +82,24 @@ export const branchService = {
   },
 
   /**
+   * Restore an archived branch (admin only).
+   *
+   * Deactivating is a soft delete, so the record survives — this is the way
+   * back, and it makes the branch assignable to staff again.
+   */
+  async restore(id: string): Promise<Branch> {
+    const { data } = await apiClient.patch<ApiResponse<Branch>>(
+      `/branches/${id}/restore`
+    );
+
+    if (!data.success || !data.data) {
+      throw new Error(data.message ?? 'Failed to restore branch');
+    }
+
+    return data.data;
+  },
+
+  /**
    * Get branch statistics
    */
   async getStats(id: string): Promise<BranchStats> {

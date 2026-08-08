@@ -10,6 +10,7 @@ import {
   MoreVertical,
   Edit,
   Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
@@ -21,6 +22,8 @@ interface SupplierListProps {
   isLoading?: boolean;
   onEdit?: (supplier: Supplier) => void;
   onDeactivate?: (supplier: Supplier) => void;
+  /** Bring an archived supplier back. Only offered on archived rows. */
+  onRestore?: (supplier: Supplier) => void;
   showActions?: boolean;
 }
 
@@ -62,6 +65,7 @@ export const SupplierList: React.FC<SupplierListProps> = ({
   isLoading = false,
   onEdit,
   onDeactivate,
+  onRestore,
   showActions = true,
 }) => {
   const [openMenu, setOpenMenu] = React.useState<string | null>(null);
@@ -124,10 +128,10 @@ export const SupplierList: React.FC<SupplierListProps> = ({
             {/* Status & Menu */}
             <div className="flex items-center gap-2">
               <Badge variant={supplier.isActive ? 'success' : 'secondary'} size="sm">
-                {supplier.isActive ? 'Active' : 'Inactive'}
+                {supplier.isActive ? 'Active' : 'Archived'}
               </Badge>
               
-              {showActions && (onEdit || onDeactivate) && supplier._id && (
+              {showActions && (onEdit || onDeactivate || onRestore) && supplier._id && (
                 <div className="relative">
                   <button
                     onClick={() => setOpenMenu(openMenu === supplier._id ? null : (supplier._id ?? null))}
@@ -150,6 +154,9 @@ export const SupplierList: React.FC<SupplierListProps> = ({
                           Edit
                         </button>
                       )}
+                      {/* Archive and restore are mutually exclusive: an
+                          archived row has nothing to archive, an active one
+                          nothing to restore. */}
                       {onDeactivate && supplier.isActive && (
                         <button
                           onClick={() => {
@@ -160,6 +167,18 @@ export const SupplierList: React.FC<SupplierListProps> = ({
                         >
                           <Trash2 className="w-4 h-4" />
                           Deactivate
+                        </button>
+                      )}
+                      {onRestore && !supplier.isActive && (
+                        <button
+                          onClick={() => {
+                            onRestore(supplier);
+                            setOpenMenu(null);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          Restore
                         </button>
                       )}
                     </div>

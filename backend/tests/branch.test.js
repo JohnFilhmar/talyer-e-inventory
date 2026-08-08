@@ -585,3 +585,80 @@ describe('Branch API - Response Format Consistency', () => {
     expect(branch.address).toHaveProperty('province');
   });
 });
+
+describe('Branch API - Restore', () => {
+  describe('PATCH /api/branches/:id/restore', () => {
+    it('brings an archived branch back', async () => {
+      const branch = await createTestBranch({ name: 'Cebu', code: 'CEB-1' });
+      const { token } = await createTestAdmin();
+
+      await request(app)
+        .delete(`/api/branches/${branch._id}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      const archived = await Branch.findById(branch._id).lean();
+      expect(archived.isActive).toBe(false);
+
+      const res = await request(app)
+        .patch(`/api/branches/${branch._id}/restore`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.isActive).toBe(true);
+
+      const restored = await Branch.findById(branch._id).lean();
+      expect(restored.isActive).toBe(true);
+    });
+
+    it('makes it assignable again by returning it to the active listing', async () => {
+      const branch = await createTestBranch({ name: 'Davao', code: 'DVO-1', isActive: false });
+      const { token } = await createTestAdmin();
+
+      await request(app)
+        .patch(`/api/branches/${branch._id}/restore`)
+        .set('Authorization', `Bearer ${token}`);
+
+      const listed = await request(app)
+        .get('/api/branches?active=true')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(listed.body.data.map((b) => b._id)).toContain(String(branch._id));
+    });
+
+    it('is idempotent on an active branch', async () => {
+      const branch = await createTestBranch({ name: 'Makati', code: 'MKT-1' });
+      const { token } = await createTestAdmin();
+
+      const res = await request(app)
+        .patch(`/api/branches/${branch._id}/restore`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.isActive).toBe(true);
+    });
+
+    it('404s for an unknown id', async () => {
+      const { token } = await createTestAdmin();
+
+      const res = await request(app)
+        .patch('/api/branches/507f1f77bcf86cd799439011/restore')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('refuses a salesperson', async () => {
+      const branch = await createTestBranch({ name: 'Pasig', code: 'PSG-1', isActive: false });
+      const { token } = await createTestSalesperson(branch._id);
+
+      const res = await request(app)
+        .patch(`/api/branches/${branch._id}/restore`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+
+      const stored = await Branch.findById(branch._id).lean();
+      expect(stored.isActive).toBe(false);
+    });
+  });
+});

@@ -76,6 +76,22 @@ export function useCreateSupplier() {
 }
 
 /**
+ * Hook to restore an archived supplier
+ */
+export function useRestoreSupplier() {
+  const queryClient = useQueryClient();
+
+  return useMutation<Supplier, Error, string>({
+    mutationFn: (id) => supplierService.restore(id),
+    onSuccess: (restored) => {
+      queryClient.invalidateQueries({ queryKey: supplierKeys.detail(restored._id) });
+      queryClient.invalidateQueries({ queryKey: supplierKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: supplierKeys.active() });
+    },
+  });
+}
+
+/**
  * Hook to update a supplier
  */
 export function useUpdateSupplier() {

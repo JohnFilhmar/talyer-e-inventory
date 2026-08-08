@@ -150,3 +150,28 @@ export const deleteSupplier = asyncHandler(async (req, res) => {
     { id: supplier._id, name: supplier.name, isActive: false }
   );
 });
+
+/**
+ * @desc    Restore an archived supplier
+ * @route   PATCH /api/suppliers/:id/restore
+ * @access  Private (Admin only)
+ *
+ * Deleting is a soft delete, so the record survives — without this there was no
+ * way back. Stock records keep referencing an archived supplier, so restoring
+ * one simply makes it selectable again rather than repairing anything.
+ *
+ * Idempotent: restoring an already-active supplier succeeds and changes
+ * nothing.
+ */
+export const restoreSupplier = asyncHandler(async (req, res) => {
+  const supplier = await Supplier.findById(req.params.id);
+
+  if (!supplier) {
+    return ApiResponse.error(res, 404, 'Supplier not found');
+  }
+
+  supplier.isActive = true;
+  await supplier.save();
+
+  return ApiResponse.success(res, 200, 'Supplier restored successfully', supplier);
+});

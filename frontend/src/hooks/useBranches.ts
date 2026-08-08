@@ -94,6 +94,21 @@ export function useCreateBranch() {
 }
 
 /**
+ * Hook to restore an archived branch
+ */
+export function useRestoreBranch() {
+  const queryClient = useQueryClient();
+
+  return useMutation<Branch, Error, string>({
+    mutationFn: (id) => branchService.restore(id),
+    onSuccess: (restored) => {
+      queryClient.invalidateQueries({ queryKey: branchKeys.detail(restored._id) });
+      queryClient.invalidateQueries({ queryKey: branchKeys.lists() });
+    },
+  });
+}
+
+/**
  * Hook to update an existing branch
  */
 export function useUpdateBranch() {

@@ -8,6 +8,7 @@ import {
   useCreateSupplier,
   useUpdateSupplier,
   useDeactivateSupplier,
+  useRestoreSupplier,
 } from '@/hooks/useSuppliers';
 import { SupplierList, SupplierFormModal } from '@/components/suppliers';
 import { Button } from '@/components/ui/Button';
@@ -41,6 +42,20 @@ export default function SuppliersPage() {
   const createMutation = useCreateSupplier();
   const updateMutation = useUpdateSupplier();
   const deactivateMutation = useDeactivateSupplier();
+  const restoreMutation = useRestoreSupplier();
+
+  // Deactivating is a soft delete, so there has to be a way back. Archived
+  // suppliers are reachable through the "Show inactive" toggle.
+  const handleRestore = useCallback(
+    async (supplier: Supplier) => {
+      try {
+        await restoreMutation.mutateAsync(supplier._id);
+      } catch {
+        // Surfaced by the mutation's error state below.
+      }
+    },
+    [restoreMutation]
+  );
 
   // Extract suppliers array from paginated response
   const suppliers = useMemo(() => {
@@ -188,12 +203,21 @@ export default function SuppliersPage() {
         </Alert>
       )}
 
+      {/* Restore has no confirmation step, so its failures have nowhere else
+          to surface. */}
+      {restoreMutation.error && (
+        <Alert variant="error" className="mb-4">
+          {restoreMutation.error.message}
+        </Alert>
+      )}
+
       {/* Supplier List */}
       <SupplierList
         suppliers={filteredSuppliers}
         isLoading={suppliersQuery.isLoading}
         onEdit={showAdminActions ? handleEdit : undefined}
         onDeactivate={showAdminActions ? handleDeactivate : undefined}
+        onRestore={showAdminActions ? handleRestore : undefined}
         showActions={showAdminActions}
       />
 

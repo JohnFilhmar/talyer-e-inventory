@@ -102,4 +102,22 @@ export const supplierService = {
       throw new Error(data.message ?? 'Failed to deactivate supplier');
     }
   },
+
+  /**
+   * Restore an archived supplier (admin only).
+   *
+   * Deactivating is a soft delete, so the record survives — this is the way
+   * back.
+   */
+  async restore(id: string): Promise<Supplier> {
+    const { data } = await apiClient.patch<ApiResponse<Supplier>>(
+      `/suppliers/${id}/restore`
+    );
+
+    if (!data.success || !data.data) {
+      throw new Error(data.message ?? 'Failed to restore supplier');
+    }
+
+    return data.data;
+  },
 };

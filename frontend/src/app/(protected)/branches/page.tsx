@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import {
   useBranches,
   useDeactivateBranch,
+  useRestoreBranch,
 } from '@/hooks/useBranches';
 import { BranchCard, BranchFormModal, DeactivateModal } from '@/components/branches';
 import { Button } from '@/components/ui/Button';
@@ -51,6 +52,20 @@ export default function BranchesPage() {
 
   // Deactivate mutation
   const deactivateMutation = useDeactivateBranch();
+  const restoreMutation = useRestoreBranch();
+
+  // Deactivating is a soft delete, so there has to be a way back — and a
+  // restored branch becomes assignable to staff again.
+  const handleRestoreBranch = useCallback(
+    async (branch: Branch) => {
+      try {
+        await restoreMutation.mutateAsync(branch._id);
+      } catch {
+        // Surfaced by the mutation's error state below.
+      }
+    },
+    [restoreMutation]
+  );
 
   // Handlers
   const handleAddBranch = useCallback(() => {
@@ -236,6 +251,7 @@ export default function BranchesPage() {
               branch={branch}
               onEdit={showAdminActions ? handleEditBranch : undefined}
               onDeactivate={showAdminActions ? handleDeactivateBranch : undefined}
+              onRestore={showAdminActions ? handleRestoreBranch : undefined}
             />
           ))}
         </div>
