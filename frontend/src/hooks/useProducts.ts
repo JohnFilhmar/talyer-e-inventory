@@ -154,6 +154,24 @@ export function useDeleteProduct() {
 }
 
 /**
+ * Hook to restore an archived product
+ */
+export function useRestoreProduct() {
+  const queryClient = useQueryClient();
+
+  return useMutation<Product, Error, string>({
+    mutationFn: (id) => productService.restore(id),
+    onSuccess: (restored) => {
+      queryClient.invalidateQueries({ queryKey: productKeys.detail(restored._id) });
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
+      // Stock reads carry the archive flags so the restock button can be
+      // gated on them; a restore changes that answer.
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+    },
+  });
+}
+
+/**
  * Hook to upload an image to a product
  */
 export function useUploadProductImage() {

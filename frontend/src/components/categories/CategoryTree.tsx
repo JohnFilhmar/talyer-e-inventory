@@ -13,6 +13,8 @@ interface CategoryTreeProps {
   error?: Error | null;
   onEdit?: (category: Category) => void;
   onDelete?: (category: Category) => void;
+  onRestore?: (category: Category) => void;
+  restoringId?: string | null;
   onAddChild?: (parentCategory: Category) => void;
   isAdmin?: boolean;
 }
@@ -28,6 +30,8 @@ export const CategoryTree: React.FC<CategoryTreeProps> = ({
   error = null,
   onEdit,
   onDelete,
+  onRestore,
+  restoringId = null,
   onAddChild,
   isAdmin = false,
 }) => {
@@ -72,6 +76,8 @@ export const CategoryTree: React.FC<CategoryTreeProps> = ({
           category={category}
           onEdit={onEdit}
           onDelete={onDelete}
+          onRestore={onRestore}
+          restoringId={restoringId}
           onAddChild={onAddChild}
           isAdmin={isAdmin}
         />

@@ -508,4 +508,101 @@ describe('Category API Tests', () => {
       expect(res.body.data.productCount).toBe(2);
     });
   });
+
+  describe('PATCH /api/categories/:id/restore', () => {
+    it('brings an archived category back', async () => {
+      const category = await createTestCategory({ name: 'Oils' });
+
+      await request(app)
+        .delete(`/api/categories/${category._id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const deleted = await Category.findById(category._id).lean();
+      expect(deleted.isActive).toBe(false);
+
+      const res = await request(app)
+        .patch(`/api/categories/${category._id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.isActive).toBe(true);
+
+      const restored = await Category.findById(category._id).lean();
+      expect(restored.isActive).toBe(true);
+    });
+
+    it('returns it to the active listing', async () => {
+      const category = await createTestCategory({ name: 'Tyres' });
+
+      await request(app)
+        .delete(`/api/categories/${category._id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      await request(app)
+        .patch(`/api/categories/${category._id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const listed = await request(app)
+        .get('/api/categories?active=true')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(listed.body.data.map((c) => c._id)).toContain(String(category._id));
+    });
+
+    it('restores a child even while its parent is still archived', async () => {
+      // Refusing would strand the child with no way back, and cascading upward
+      // would resurrect records the user never asked for. The tree hides an
+      // archived parent's subtree anyway.
+      const parent = await createTestCategory({ name: 'Engine' });
+      const child = await createTestCategory({ name: 'Pistons', parent: parent._id });
+
+      await Category.updateMany(
+        { _id: { $in: [parent._id, child._id] } },
+        { $set: { isActive: false } }
+      );
+
+      const res = await request(app)
+        .patch(`/api/categories/${child._id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+
+      const storedChild = await Category.findById(child._id).lean();
+      const storedParent = await Category.findById(parent._id).lean();
+      expect(storedChild.isActive).toBe(true);
+      expect(storedParent.isActive).toBe(false);
+    });
+
+    it('is idempotent on an active category', async () => {
+      const category = await createTestCategory({ name: 'Brakes' });
+
+      const res = await request(app)
+        .patch(`/api/categories/${category._id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.isActive).toBe(true);
+    });
+
+    it('404s for an unknown id', async () => {
+      const res = await request(app)
+        .patch('/api/categories/507f1f77bcf86cd799439011/restore')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('refuses a non-admin', async () => {
+      const category = await createTestCategory({ name: 'Chains', isActive: false });
+
+      const res = await request(app)
+        .patch(`/api/categories/${category._id}/restore`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(res.status).toBe(403);
+
+      const stored = await Category.findById(category._id).lean();
+      expect(stored.isActive).toBe(false);
+    });
+  });
 });

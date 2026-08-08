@@ -1397,4 +1397,78 @@ describe('Product API Tests', () => {
       ).rejects.toMatchObject({ code: 11000 });
     });
   });
+
+  describe('PATCH /api/products/:id/restore', () => {
+    it('clears both flags that delete sets', async () => {
+      const product = await createTestProduct({ category: testCategory._id });
+
+      await request(app)
+        .delete(`/api/products/${product._id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const deleted = await Product.findById(product._id).lean();
+      expect(deleted.isActive).toBe(false);
+      expect(deleted.isDiscontinued).toBe(true);
+
+      const res = await request(app)
+        .patch(`/api/products/${product._id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+
+      // Clearing only isActive would leave the product hidden from the default
+      // catalog view and still refused by the stock guard, which reads either
+      // flag — a restore that does not restore.
+      const restored = await Product.findById(product._id).lean();
+      expect(restored.isActive).toBe(true);
+      expect(restored.isDiscontinued).toBe(false);
+    });
+
+    it('brings the product back into the default active listing', async () => {
+      const product = await createTestProduct({ category: testCategory._id });
+
+      await request(app)
+        .delete(`/api/products/${product._id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      await request(app)
+        .patch(`/api/products/${product._id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const listed = await request(app)
+        .get('/api/products?active=true')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(listed.body.data.map((p) => p._id)).toContain(String(product._id));
+    });
+
+    it('is idempotent on an active product', async () => {
+      const product = await createTestProduct({ category: testCategory._id });
+
+      const res = await request(app)
+        .patch(`/api/products/${product._id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.isActive).toBe(true);
+    });
+
+    it('refuses a non-admin', async () => {
+      const product = await createTestProduct({ category: testCategory._id, isActive: false });
+
+      const res = await request(app)
+        .patch(`/api/products/${product._id}/restore`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('404s for an unknown id', async () => {
+      const res = await request(app)
+        .patch('/api/products/507f1f77bcf86cd799439011/restore')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(404);
+    });
+  });
 });

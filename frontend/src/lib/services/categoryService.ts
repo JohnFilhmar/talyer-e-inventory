@@ -126,6 +126,23 @@ export const categoryService = {
   },
 
   /**
+   * Restore an archived category (admin only).
+   *
+   * Deleting is a soft delete, so the record survives — this is the way back.
+   */
+  async restore(id: string): Promise<Category> {
+    const { data } = await apiClient.patch<ApiResponse<Category>>(
+      `/categories/${id}/restore`
+    );
+
+    if (!data.success || !data.data) {
+      throw new Error(data.message ?? 'Failed to restore category');
+    }
+
+    return data.data;
+  },
+
+  /**
    * Build a flat list from hierarchical category tree
    * Useful for dropdowns with indentation
    * @param categories - Category tree

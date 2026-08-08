@@ -465,6 +465,41 @@ export const deleteProduct = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * @desc    Restore an archived product
+ * @route   PATCH /api/products/:id/restore
+ * @access  Private (Admin only)
+ *
+ * Clears both flags that `deleteProduct` sets. Clearing only `isActive` would
+ * leave the product invisible in the catalog's default view and still refused
+ * by the stock guard, which reads either flag — a restore that does not
+ * actually restore.
+ *
+ * Idempotent: restoring an already-active product succeeds and changes nothing.
+ */
+export const restoreProduct = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const product = await Product.findById(id);
+
+  if (!product) {
+    return ApiResponse.error(res, 404, 'Product not found');
+  }
+
+  product.isActive = true;
+  product.isDiscontinued = false;
+  await product.save();
+
+  await CacheUtil.del(CacheUtil.generateKey('product', id));
+  await CacheUtil.delPattern('cache:products:*');
+
+  const populated = await Product.findById(id)
+    .populate('category', 'name code color')
+    .populate('motorcycleModels', MOTORCYCLE_MODEL_SELECT);
+
+  return ApiResponse.success(res, 200, 'Product restored successfully', populated);
+});
+
 import { deleteImageFile, getFilenameFromUrl } from '../middleware/imageUpload.js';
 
 /**

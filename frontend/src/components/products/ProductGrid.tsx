@@ -13,6 +13,8 @@ interface ProductGridProps {
   error?: Error | null;
   onEdit?: (product: Product) => void;
   onDelete?: (product: Product) => void;
+  onRestore?: (product: Product) => void;
+  restoringId?: string | null;
   isAdmin?: boolean;
   emptyMessage?: string;
 }
@@ -28,6 +30,8 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   error = null,
   onEdit,
   onDelete,
+  onRestore,
+  restoringId = null,
   isAdmin = false,
   emptyMessage = 'No products found',
 }) => {
@@ -72,6 +76,8 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
           product={product}
           onEdit={onEdit}
           onDelete={onDelete}
+          onRestore={onRestore}
+          restoringId={restoringId}
           isAdmin={isAdmin}
         />
       ))}

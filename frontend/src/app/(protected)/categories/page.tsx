@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import {
   useRootCategories,
   useDeleteCategory,
+  useRestoreCategory,
 } from '@/hooks/useCategories';
 import {
   CategoryTree,
@@ -62,6 +63,18 @@ export default function CategoriesPage() {
 
   // Delete mutation
   const deleteMutation = useDeleteCategory();
+  const restoreMutation = useRestoreCategory();
+
+  const handleRestoreCategory = useCallback(
+    async (category: Category) => {
+      try {
+        await restoreMutation.mutateAsync(category._id);
+      } catch {
+        // Surfaced by the mutation's error state below.
+      }
+    },
+    [restoreMutation]
+  );
 
   // Handlers
   const handleAddCategory = useCallback(() => {
@@ -202,6 +215,14 @@ export default function CategoriesPage() {
         </div>
       )}
 
+      {/* Restore has no confirmation step, so its failures have nowhere else
+          to surface. */}
+      {restoreMutation.error && (
+        <Alert variant="error" className="mb-4">
+          {restoreMutation.error.message}
+        </Alert>
+      )}
+
       {/* Category Tree */}
       <CategoryTree
         categories={visibleCategories}
@@ -209,6 +230,8 @@ export default function CategoriesPage() {
         error={error}
         onEdit={showAdminActions ? handleEditCategory : undefined}
         onDelete={showAdminActions ? handleDeleteCategory : undefined}
+        onRestore={showAdminActions ? handleRestoreCategory : undefined}
+        restoringId={restoreMutation.isPending ? restoreMutation.variables : null}
         onAddChild={showAdminActions ? handleAddSubcategory : undefined}
         isAdmin={showAdminActions}
       />

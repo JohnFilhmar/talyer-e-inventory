@@ -253,3 +253,36 @@ export const deleteMotorcycleModel = asyncHandler(async (req, res) => {
     isActive: false
   });
 });
+
+/**
+ * @desc    Restore an archived motorcycle model
+ * @route   PATCH /api/motorcycle-models/:id/restore
+ * @access  Private (Admin only)
+ *
+ * Deleting is a soft delete, so the record is still there — but without this
+ * there was no way back. An archived model could not be picked as fitment and
+ * could not be reactivated, which made a mis-click permanent for a row that
+ * still exists in the database.
+ *
+ * Idempotent: restoring an already-active model succeeds and changes nothing,
+ * so a double-tap or a replayed request is harmless.
+ */
+export const restoreMotorcycleModel = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const motorcycleModel = await MotorcycleModel.findById(id);
+
+  if (!motorcycleModel) {
+    return ApiResponse.error(res, 404, 'Motorcycle model not found');
+  }
+
+  // `set` + `save` rather than findByIdAndUpdate, for the same reason as the
+  // update path: `code` is derived in a pre-save hook that query middleware
+  // would never run.
+  motorcycleModel.isActive = true;
+  await motorcycleModel.save();
+
+  await invalidateMotorcycleModelCaches(id);
+
+  return ApiResponse.success(res, 200, 'Motorcycle model restored successfully', motorcycleModel);
+});

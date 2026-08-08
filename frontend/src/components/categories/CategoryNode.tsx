@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, Folder, FolderOpen, Plus, Edit, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FolderOpen, Plus, Edit, Trash2, RotateCcw } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import type { Category } from '@/types/category';
 
@@ -10,6 +10,10 @@ interface CategoryNodeProps {
   level?: number;
   onEdit?: (category: Category) => void;
   onDelete?: (category: Category) => void;
+  /** Bring an archived category back. Only offered on archived rows. */
+  onRestore?: (category: Category) => void;
+  /** Id currently being restored, so the row can show progress. */
+  restoringId?: string | null;
   onAddChild?: (parentCategory: Category) => void;
   isAdmin?: boolean;
 }
@@ -24,6 +28,8 @@ export const CategoryNode: React.FC<CategoryNodeProps> = ({
   level = 0,
   onEdit,
   onDelete,
+  onRestore,
+  restoringId = null,
   onAddChild,
   isAdmin = false,
 }) => {
@@ -35,6 +41,8 @@ export const CategoryNode: React.FC<CategoryNodeProps> = ({
       setIsExpanded(!isExpanded);
     }
   };
+
+  const isRestoring = restoringId === category._id;
 
   return (
     <div className="select-none">
@@ -129,16 +137,33 @@ export const CategoryNode: React.FC<CategoryNodeProps> = ({
             >
               <Edit className="w-4 h-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => onDelete?.(category)}
-              title={category.isActive ? 'Archive category' : 'Archive category (already archived)'}
-              aria-label={`Archive ${category.name}`}
-              className="h-9 w-9 flex items-center justify-center rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
-              disabled={!category.isActive}
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {/* Archive and restore are mutually exclusive — an archived row
+                has nothing to archive, an active one nothing to restore. */}
+            {category.isActive ? (
+              <button
+                type="button"
+                onClick={() => onDelete?.(category)}
+                title="Archive category"
+                aria-label={`Archive ${category.name}`}
+                className="h-9 w-9 flex items-center justify-center rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            ) : (
+              onRestore && (
+                <button
+                  type="button"
+                  onClick={() => onRestore(category)}
+                  disabled={isRestoring}
+                  title="Restore category"
+                  aria-label={`Restore ${category.name}`}
+                  className="inline-flex items-center gap-1 h-9 px-2 rounded text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Restore
+                </button>
+              )
+            )}
           </div>
         )}
       </div>
@@ -158,6 +183,8 @@ export const CategoryNode: React.FC<CategoryNodeProps> = ({
               level={level + 1}
               onEdit={onEdit}
               onDelete={onDelete}
+              onRestore={onRestore}
+              restoringId={restoringId}
               onAddChild={onAddChild}
               isAdmin={isAdmin}
             />

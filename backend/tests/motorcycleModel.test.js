@@ -400,4 +400,92 @@ describe('Motorcycle Model API Tests', () => {
       expect(res.status).toBe(403);
     });
   });
+
+  describe('PATCH /api/motorcycle-models/:id/restore', () => {
+    const archived = async () => {
+      const created = await MotorcycleModel.create({
+        make: 'Honda',
+        model: 'Beat',
+        yearFrom: 2015,
+        isActive: false
+      });
+      return created;
+    };
+
+    it('brings an archived model back', async () => {
+      const motorcycleModel = await archived();
+
+      const res = await request(app)
+        .patch(`/api/motorcycle-models/${motorcycleModel._id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.isActive).toBe(true);
+
+      const stored = await MotorcycleModel.findById(motorcycleModel._id).lean();
+      expect(stored.isActive).toBe(true);
+    });
+
+    it('makes the model selectable again as active', async () => {
+      const motorcycleModel = await archived();
+
+      const before = await request(app)
+        .get('/api/motorcycle-models?active=true')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(before.body.data.map((m) => m._id)).not.toContain(String(motorcycleModel._id));
+
+      await request(app)
+        .patch(`/api/motorcycle-models/${motorcycleModel._id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      const after = await request(app)
+        .get('/api/motorcycle-models?active=true')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(after.body.data.map((m) => m._id)).toContain(String(motorcycleModel._id));
+    });
+
+    it('preserves the derived code, which a query-middleware update would skip', async () => {
+      const motorcycleModel = await archived();
+      const codeBefore = motorcycleModel.code;
+
+      const res = await request(app)
+        .patch(`/api/motorcycle-models/${motorcycleModel._id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.code).toBe(codeBefore);
+    });
+
+    it('is idempotent on an already-active model', async () => {
+      const motorcycleModel = await MotorcycleModel.create({ make: 'Honda', model: 'Click' });
+
+      const res = await request(app)
+        .patch(`/api/motorcycle-models/${motorcycleModel._id}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.isActive).toBe(true);
+    });
+
+    it('404s for an unknown id', async () => {
+      const res = await request(app)
+        .patch('/api/motorcycle-models/507f1f77bcf86cd799439011/restore')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('refuses a non-admin', async () => {
+      const motorcycleModel = await archived();
+
+      const res = await request(app)
+        .patch(`/api/motorcycle-models/${motorcycleModel._id}/restore`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(res.status).toBe(403);
+
+      const stored = await MotorcycleModel.findById(motorcycleModel._id).lean();
+      expect(stored.isActive).toBe(false);
+    });
+  });
 });

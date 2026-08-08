@@ -236,3 +236,37 @@ export const deleteCategory = asyncHandler(async (req, res) => {
     { id: category._id, name: category.name, isActive: false }
   );
 });
+
+/**
+ * @desc    Restore an archived category
+ * @route   PATCH /api/categories/:id/restore
+ * @access  Private (Admin only)
+ *
+ * Idempotent: restoring an already-active category succeeds and changes
+ * nothing.
+ *
+ * Restoring a child whose parent is still archived is allowed. The alternative
+ * — refusing, or cascading up — either strands the child with no way back or
+ * silently resurrects records the user did not ask for. The tree hides an
+ * archived parent's subtree anyway, so the restored child simply reappears once
+ * its parent does.
+ */
+export const restoreCategory = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const category = await Category.findById(id);
+
+  if (!category) {
+    return ApiResponse.error(res, 404, 'Category not found');
+  }
+
+  category.isActive = true;
+  await category.save();
+
+  await CacheUtil.del(CacheUtil.generateKey('category', id));
+  await CacheUtil.delPattern('cache:categories:*');
+
+  const populated = await Category.findById(id).populate('parent', 'name code');
+
+  return ApiResponse.success(res, 200, 'Category restored successfully', populated);
+});

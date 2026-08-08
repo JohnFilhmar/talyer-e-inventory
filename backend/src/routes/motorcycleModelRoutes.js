@@ -7,7 +7,8 @@ import {
   getMotorcycleModel,
   createMotorcycleModel,
   updateMotorcycleModel,
-  deleteMotorcycleModel
+  deleteMotorcycleModel,
+  restoreMotorcycleModel
 } from '../controllers/motorcycleModelController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import validate from '../middleware/validate.js';
@@ -161,6 +162,19 @@ router
     motorcycleModelIdValidation,
     validate,
     deleteMotorcycleModel
+  );
+
+// Restore is its own verb rather than a PUT with { isActive: true }. The update
+// route runs the full field validator and re-derives `code`; bringing a record
+// back is a one-field state change and should not require resending the model.
+router
+  .route('/:id/restore')
+  .patch(
+    protect,
+    authorize(USER_ROLES.ADMIN),
+    motorcycleModelIdValidation,
+    validate,
+    restoreMotorcycleModel
   );
 
 export default router;

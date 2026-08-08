@@ -160,6 +160,20 @@ export function useDeleteCategory() {
 }
 
 /**
+ * Hook to restore an archived category
+ */
+export function useRestoreCategory() {
+  const queryClient = useQueryClient();
+
+  return useMutation<Category, Error, string>({
+    mutationFn: (id) => categoryService.restore(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: categoryKeys.all });
+    },
+  });
+}
+
+/**
  * Hook to get flattened category tree (for select dropdowns with indentation)
  */
 export function useFlattenedCategories() {

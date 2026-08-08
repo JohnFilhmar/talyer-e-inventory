@@ -7,7 +7,8 @@ import {
   getCategoryChildren,
   createCategory,
   updateCategory,
-  deleteCategory
+  deleteCategory,
+  restoreCategory
 } from '../controllers/categoryController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import validate from '../middleware/validate.js';
@@ -174,6 +175,19 @@ router
     categoryIdValidation,
     validate,
     deleteCategory
+  );
+
+// Restore is a distinct verb, not a PUT with { isActive: true }: bringing a
+// record back is a one-field state change and should not have to satisfy the
+// full update validator or resend every field.
+router
+  .route('/:id/restore')
+  .patch(
+    protect,
+    authorize(USER_ROLES.ADMIN),
+    categoryIdValidation,
+    validate,
+    restoreCategory
   );
 
 router

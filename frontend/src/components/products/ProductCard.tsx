@@ -3,7 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Package, Tag, Edit, Trash2, Archive } from 'lucide-react';
+import { Package, Tag, Edit, Archive, RotateCcw } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { calculateProfitMargin, isPopulatedCategory } from '@/types/product';
@@ -14,6 +14,10 @@ interface ProductCardProps {
   product: Product;
   onEdit?: (product: Product) => void;
   onDelete?: (product: Product) => void;
+  /** Bring an archived product back. Only offered on archived cards. */
+  onRestore?: (product: Product) => void;
+  /** Id currently being restored, so the card can show progress. */
+  restoringId?: string | null;
   isAdmin?: boolean;
 }
 
@@ -52,6 +56,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onEdit,
   onDelete,
+  onRestore,
+  restoringId = null,
   isAdmin = false,
 }) => {
   const profitMargin = calculateProfitMargin(product.costPrice, product.sellingPrice);
@@ -61,6 +67,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const categoryColor = isPopulatedCategory(product.category) 
     ? product.category.color 
     : undefined;
+  const isRestoring = restoringId === product._id;
+
 
   return (
     <div className="bg-white dark:bg-gray-900 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-shadow group">
@@ -182,24 +190,33 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <Edit className="w-4 h-4 mr-1" />
               Edit
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onDelete?.(product)}
-              className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50"
-            >
-              {product.isActive ? (
-                <>
-                  <Archive className="w-4 h-4 mr-1" />
-                  Archive
-                </>
-              ) : (
-                <>
-                  <Trash2 className="w-4 h-4 mr-1" />
-                  Delete
-                </>
-              )}
-            </Button>
+            {/* An archived product used to offer "Delete", but deleting only
+                sets the same two flags again — the button did nothing. What an
+                archived product actually needs is the way back. */}
+            {product.isActive ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDelete?.(product)}
+                className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Archive className="w-4 h-4 mr-1" />
+                Archive
+              </Button>
+            ) : (
+              onRestore && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onRestore(product)}
+                  disabled={isRestoring}
+                  className="flex-1"
+                >
+                  <RotateCcw className="w-4 h-4 mr-1" />
+                  {isRestoring ? 'Restoring...' : 'Restore'}
+                </Button>
+              )
+            )}
           </div>
         )}
       </div>

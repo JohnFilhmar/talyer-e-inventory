@@ -4,7 +4,7 @@ import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { useProducts, useDeleteProduct } from '@/hooks/useProducts';
+import { useProducts, useDeleteProduct, useRestoreProduct } from '@/hooks/useProducts';
 import { ProductGrid, ProductFilters, DeleteProductModal } from '@/components/products';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
@@ -49,6 +49,20 @@ export default function ProductsPage() {
 
   // Delete mutation
   const deleteMutation = useDeleteProduct();
+  const restoreMutation = useRestoreProduct();
+
+  // Deleting a product only archives it, so there has to be a way back. The
+  // archived rows are reachable through the Status filter.
+  const handleRestoreProduct = useCallback(
+    async (product: Product) => {
+      try {
+        await restoreMutation.mutateAsync(product._id);
+      } catch {
+        // Surfaced by the mutation's error state below.
+      }
+    },
+    [restoreMutation]
+  );
 
   // Handlers
   const handleAddProduct = useCallback(() => {
@@ -146,6 +160,12 @@ export default function ProductsPage() {
         onReset={handleFilterReset}
       />
 
+      {restoreMutation.error && (
+        <Alert variant="error" className="mb-4">
+          {restoreMutation.error.message}
+        </Alert>
+      )}
+
       {/* Product Grid */}
       <ProductGrid
         products={products}
@@ -153,6 +173,8 @@ export default function ProductsPage() {
         error={error}
         onEdit={showAdminActions ? handleEditProduct : undefined}
         onDelete={showAdminActions ? handleDeleteProduct : undefined}
+        onRestore={showAdminActions ? handleRestoreProduct : undefined}
+        restoringId={restoreMutation.isPending ? restoreMutation.variables : null}
         isAdmin={showAdminActions}
         emptyMessage={
           Object.keys(filters).some(

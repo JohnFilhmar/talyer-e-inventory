@@ -122,6 +122,20 @@ export function useDeleteMotorcycleModel() {
 }
 
 /**
+ * Hook to restore an archived motorcycle model
+ */
+export function useRestoreMotorcycleModel() {
+  const queryClient = useQueryClient();
+
+  return useMutation<MotorcycleModel, Error, string>({
+    mutationFn: (id) => motorcycleModelService.restore(id),
+    // Products embed populated fitment, so a restored model changes what a
+    // product read renders — invalidateAll covers both domains.
+    onSuccess: () => invalidateAll(queryClient),
+  });
+}
+
+/**
  * Motorcycle models grouped by make, each group's models sorted for display.
  *
  * Both the picker and the filter render an `<optgroup>` per make — a shop with

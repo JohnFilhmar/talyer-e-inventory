@@ -1,9 +1,13 @@
 'use client';
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { Plus, Bike, Search } from 'lucide-react';
+import { Plus, Bike, Search, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { useMotorcycleModels, useDeleteMotorcycleModel } from '@/hooks/useMotorcycleModels';
+import {
+  useMotorcycleModels,
+  useDeleteMotorcycleModel,
+  useRestoreMotorcycleModel,
+} from '@/hooks/useMotorcycleModels';
 import {
   MotorcycleModelList,
   MotorcycleModelFormModal,
@@ -41,9 +45,17 @@ export default function MotorcycleModelsPage() {
   // offline.
   const [search, setSearch] = useState('');
 
-  const { data: motorcycleModels, isLoading, error, refetch } = useMotorcycleModels();
+  // Archived models are hidden by default. Deleting is a soft delete, so
+  // without this an archived model stayed in the list looking exactly like a
+  // live one, with no way to tell them apart and no way back.
+  const [showArchived, setShowArchived] = useState(false);
+
+  const { data: motorcycleModels, isLoading, error, refetch } = useMotorcycleModels(
+    showArchived ? {} : { active: 'true' }
+  );
 
   const deleteMutation = useDeleteMotorcycleModel();
+  const restoreMutation = useRestoreMotorcycleModel();
 
   const filtered = useMemo(() => {
     const all = motorcycleModels ?? [];
@@ -97,6 +109,17 @@ export default function MotorcycleModelsPage() {
     }
   }, [deletingModel, deleteMutation]);
 
+  const handleRestore = useCallback(
+    async (motorcycleModel: MotorcycleModel) => {
+      try {
+        await restoreMutation.mutateAsync(motorcycleModel._id);
+      } catch {
+        // Surfaced by the mutation's error state below.
+      }
+    },
+    [restoreMutation]
+  );
+
   const handleDeleteClose = useCallback(() => {
     setDeletingModel(null);
     deleteMutation.reset();
@@ -128,12 +151,27 @@ export default function MotorcycleModelsPage() {
           </div>
         </div>
 
-        {showAdminActions && (
-          <Button variant="primary" onClick={handleAdd}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Motorcycle Model
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setShowArchived((shown) => !shown)}
+            aria-pressed={showArchived}
+          >
+            {showArchived ? (
+              <EyeOff className="w-4 h-4 mr-2" />
+            ) : (
+              <Eye className="w-4 h-4 mr-2" />
+            )}
+            {showArchived ? 'Hide archived' : 'Show archived'}
           </Button>
-        )}
+
+          {showAdminActions && (
+            <Button variant="primary" onClick={handleAdd}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Motorcycle Model
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Stats Summary */}
@@ -148,9 +186,17 @@ export default function MotorcycleModelsPage() {
             <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.total}</p>
           </div>
           <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Active</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-              {stats.active}
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {showArchived ? 'Archived' : 'Active'}
+            </p>
+            <p
+              className={`text-2xl font-bold ${
+                showArchived
+                  ? 'text-gray-600 dark:text-gray-400'
+                  : 'text-green-600 dark:text-green-400'
+              }`}
+            >
+              {showArchived ? stats.total - stats.active : stats.active}
             </p>
           </div>
           <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
@@ -175,6 +221,14 @@ export default function MotorcycleModelsPage() {
         </div>
       )}
 
+      {/* Restore has no confirmation step, so its failures have nowhere else
+          to surface. */}
+      {restoreMutation.error && (
+        <Alert variant="error" className="mb-4">
+          {restoreMutation.error.message}
+        </Alert>
+      )}
+
       {/* List */}
       <MotorcycleModelList
         motorcycleModels={filtered}
@@ -183,6 +237,8 @@ export default function MotorcycleModelsPage() {
         isAdmin={showAdminActions}
         onEdit={showAdminActions ? handleEdit : undefined}
         onDelete={showAdminActions ? setDeletingModel : undefined}
+        onRestore={showAdminActions ? handleRestore : undefined}
+        restoringId={restoreMutation.isPending ? restoreMutation.variables : null}
       />
 
       {/* Form Modal */}

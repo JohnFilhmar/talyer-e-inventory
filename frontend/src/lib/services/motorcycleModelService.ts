@@ -120,4 +120,21 @@ export const motorcycleModelService = {
       throw new Error(data.message ?? 'Failed to delete motorcycle model');
     }
   },
+
+  /**
+   * Restore an archived motorcycle model (admin only).
+   *
+   * Deleting is a soft delete, so the record survives — this is the way back.
+   */
+  async restore(id: string): Promise<MotorcycleModel> {
+    const { data } = await apiClient.patch<ApiResponse<MotorcycleModel>>(
+      `/motorcycle-models/${id}/restore`
+    );
+
+    if (!data.success || !data.data) {
+      throw new Error(data.message ?? 'Failed to restore motorcycle model');
+    }
+
+    return data.data;
+  },
 };

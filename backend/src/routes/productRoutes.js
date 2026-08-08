@@ -8,6 +8,7 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
+  restoreProduct,
   addProductImage,
   addProductImageUrl,
   deleteProductImage
@@ -324,6 +325,19 @@ router
     productIdValidation,
     validate,
     deleteProduct
+  );
+
+// Restore is a distinct verb, not a PUT with { isActive: true }: bringing a
+// record back is a one-field state change and should not have to satisfy the
+// full update validator or resend every field.
+router
+  .route('/:id/restore')
+  .patch(
+    protect,
+    authorize(USER_ROLES.ADMIN),
+    productIdValidation,
+    validate,
+    restoreProduct
   );
 
 // Image upload route (FormData with file)

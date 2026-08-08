@@ -117,6 +117,24 @@ export const productService = {
   },
 
   /**
+   * Restore an archived product (admin only).
+   *
+   * Clears both flags that delete sets — isActive and isDiscontinued — so the
+   * product returns to the catalog and can be stocked again.
+   */
+  async restore(id: string): Promise<Product> {
+    const { data } = await apiClient.patch<ApiResponse<Product>>(
+      `/products/${id}/restore`
+    );
+
+    if (!data.success || !data.data) {
+      throw new Error(data.message ?? 'Failed to restore product');
+    }
+
+    return data.data;
+  },
+
+  /**
    * Upload an image to a product (admin only)
    * Uses FormData for file upload with server-side compression
    * @param productId - Product ID

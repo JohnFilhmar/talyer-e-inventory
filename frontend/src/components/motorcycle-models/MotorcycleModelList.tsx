@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Bike, Pencil, Trash2 } from 'lucide-react';
+import { Bike, Pencil, Trash2, RotateCcw } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import {
@@ -17,6 +17,10 @@ interface MotorcycleModelListProps {
   isAdmin?: boolean;
   onEdit?: (motorcycleModel: MotorcycleModel) => void;
   onDelete?: (motorcycleModel: MotorcycleModel) => void;
+  /** Bring an archived model back. Only offered on archived rows. */
+  onRestore?: (motorcycleModel: MotorcycleModel) => void;
+  /** Id currently being restored, so its button can show progress. */
+  restoringId?: string | null;
 }
 
 /**
@@ -33,6 +37,8 @@ export const MotorcycleModelList: React.FC<MotorcycleModelListProps> = ({
   isAdmin = false,
   onEdit,
   onDelete,
+  onRestore,
+  restoringId = null,
 }) => {
   if (isLoading) {
     return (
@@ -90,8 +96,8 @@ export const MotorcycleModelList: React.FC<MotorcycleModelListProps> = ({
                       {motorcycleModelLabel(motorcycleModel)}
                     </span>
                     {!motorcycleModel.isActive && (
-                      <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-full">
-                        Inactive
+                      <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full">
+                        Archived
                       </span>
                     )}
                     {motorcycleModel.productCount !== undefined &&
@@ -121,16 +127,35 @@ export const MotorcycleModelList: React.FC<MotorcycleModelListProps> = ({
                         <Pencil className="w-4 h-4" />
                       </button>
                     )}
-                    {onDelete && (
-                      <button
-                        type="button"
-                        onClick={() => onDelete(motorcycleModel)}
-                        className="p-2 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                        aria-label={`Delete ${motorcycleModelLabel(motorcycleModel)}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    {/* Archive and restore are mutually exclusive: an
+                        already-archived row has nothing to archive, and an
+                        active one has nothing to restore. Showing both would
+                        leave one of them permanently inert. */}
+                    {motorcycleModel.isActive
+                      ? onDelete && (
+                          <button
+                            type="button"
+                            onClick={() => onDelete(motorcycleModel)}
+                            className="p-2 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                            aria-label={`Archive ${motorcycleModelLabel(motorcycleModel)}`}
+                            title="Archive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )
+                      : onRestore && (
+                          <button
+                            type="button"
+                            onClick={() => onRestore(motorcycleModel)}
+                            disabled={restoringId === motorcycleModel._id}
+                            className="inline-flex items-center gap-1 px-2 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+                            aria-label={`Restore ${motorcycleModelLabel(motorcycleModel)}`}
+                            title="Restore"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            Restore
+                          </button>
+                        )}
                   </div>
                 )}
               </li>
