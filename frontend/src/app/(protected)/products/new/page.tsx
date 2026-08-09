@@ -300,7 +300,7 @@ function ProductForm({ mode, productId }: ProductFormProps) {
   // Loading state for edit
   if (isEditing && productLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-100">
         <Spinner size="lg" />
       </div>
     );

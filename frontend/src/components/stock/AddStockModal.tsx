@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Package, X, Search } from 'lucide-react';
+import { Package, X, Search, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui';
 import { Alert } from '@/components/ui/Alert';
@@ -13,6 +13,7 @@ import { useProductSearch } from '@/hooks/useProducts';
 import type { Branch } from '@/types/branch';
 import type { Supplier } from '@/types/supplier';
 import type { ProductSearchResult } from '@/types/product';
+import { BarcodeScanner } from '../scanner/BarcodeScanner';
 
 interface AddStockModalProps {
   isOpen: boolean;
@@ -53,6 +54,8 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
   const [productSearch, setProductSearch] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<ProductSearchResult | null>(null);
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanFeedback, setScanFeedback] = useState<string | null>(null);
 
   // Use debounced product search
   const { data: searchResults, isLoading: searchLoading } = useProductSearch(
@@ -83,6 +86,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
   });
 
   // Watch form values for calculations
+  // eslint-disable-next-line react-hooks/incompatible-library
   const quantity = watch('quantity');
   const costPrice = watch('costPrice');
   const sellingPrice = watch('sellingPrice');
@@ -175,71 +179,113 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Product <span className="text-red-500">*</span>
             </label>
-            {selectedProduct ? (
-              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {selectedProduct.name}
-                  </p>
-                  <p className="text-sm text-gray-500">SKU: {selectedProduct.sku}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedProduct(null);
-                    setValue('product', '');
-                  }}
-                  className="text-sm text-red-600 hover:text-red-700"
-                >
-                  Change
-                </button>
-              </div>
-            ) : (
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={productSearch}
-                  onChange={(e) => {
-                    setProductSearch(e.target.value);
-                    setShowProductDropdown(true);
-                  }}
-                  onFocus={() => setShowProductDropdown(true)}
-                  placeholder="Search by product name or SKU..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                />
-                
-                {/* Search Results Dropdown */}
-                {showProductDropdown && productSearch.length >= 2 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 max-h-60 overflow-auto">
-                    {searchLoading ? (
-                      <div className="p-4 text-center">
-                        <Spinner size="sm" />
-                        <span className="ml-2 text-gray-500">Searching...</span>
-                      </div>
-                    ) : searchResults && searchResults.length > 0 ? (
-                      searchResults.map((product) => (
-                        <button
-                          key={product._id}
-                          type="button"
-                          onClick={() => handleSelectProduct(product)}
-                          className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 border-b border-gray-100 dark:border-gray-800 last:border-0"
-                        >
-                          <p className="font-medium text-gray-900 dark:text-gray-100">
-                            {product.name}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            SKU: {product.sku}
-                            {product.sellingPrice && ` • Price: ${formatPrice(product.sellingPrice)}`}
-                          </p>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="p-4 text-center text-gray-500">
-                        No products found
-                      </div>
-                    )}
+            <div className="flex items-center justify-between gap-2 mb-2">
+
+              {selectedProduct ? (
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">
+                      {selectedProduct.name}
+                    </p>
+                    <p className="text-sm text-gray-500">SKU: {selectedProduct.sku}</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProduct(null);
+                      setValue('product', '');
+                    }}
+                    className="text-sm text-red-600 hover:text-red-700"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={productSearch}
+                    onChange={(e) => {
+                      setProductSearch(e.target.value);
+                      setShowProductDropdown(true);
+                    }}
+                    onFocus={() => setShowProductDropdown(true)}
+                    placeholder="Search by product name or SKU..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                  />
+                  
+                  {/* Search Results Dropdown */}
+                  {showProductDropdown && productSearch.length >= 2 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 max-h-60 overflow-auto">
+                      {searchLoading ? (
+                        <div className="p-4 text-center">
+                          <Spinner size="sm" />
+                          <span className="ml-2 text-gray-500">Searching...</span>
+                        </div>
+                      ) : searchResults && searchResults.length > 0 ? (
+                        searchResults.map((product) => (
+                          <button
+                            key={product._id}
+                            type="button"
+                            onClick={() => handleSelectProduct(product)}
+                            className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 border-b border-gray-100 dark:border-gray-800 last:border-0"
+                          >
+                            <p className="font-medium text-gray-900 dark:text-gray-100">
+                              {product.name}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              SKU: {product.sku}
+                              {product.sellingPrice && ` • Price: ${formatPrice(product.sellingPrice)}`}
+                            </p>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="p-4 text-center text-gray-500">
+                          No products found
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setScannerOpen((open) => !open);
+                  setScanFeedback(null);
+                }}
+                disabled={searchLoading}
+              >
+                <Camera className="w-4 h-4 mr-1" />
+                {scannerOpen ? 'Close scanner' : 'Scan barcode'}
+              </Button>
+
+            </div>
+
+            {scannerOpen && (
+              <div className="mb-4">
+                <BarcodeScanner
+                  onScan={(value) => {
+                    // Handle scanned value
+                    const matchedProduct = searchResults?.find((product) => product.sku === value);
+                    if (matchedProduct) {
+                      handleSelectProduct(matchedProduct);
+                      setScanFeedback(`Scanned: ${matchedProduct.name}`);
+                    } else {
+                      setScanFeedback(`No product found for barcode: ${value}`);
+                    }
+                  }}
+                  onClose={() => setScannerOpen(false)}
+                  hint="Hold a barcode inside the frame. Items are added as they are scanned; scanning the same product again increases its quantity."
+                />
+                {scanFeedback && (
+                  <p className="mt-2 text-sm text-black" role="status" aria-live="polite">
+                    {scanFeedback}
+                  </p>
                 )}
               </div>
             )}

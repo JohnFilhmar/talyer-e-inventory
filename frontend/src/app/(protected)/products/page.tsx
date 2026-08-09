@@ -159,6 +159,69 @@ export default function ProductsPage() {
         onFilterChange={handleFilterChange}
         onReset={handleFilterReset}
       />
+      
+      {/* Pagination */}
+      {pagination && pagination.pages > 1 && (
+        <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
+            {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
+            {pagination.total} results
+          </p>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handlePageChange(pagination.page - 1)}
+              disabled={pagination.page <= 1}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Previous
+            </Button>
+
+            {/* Page numbers */}
+            <div className="hidden sm:flex items-center gap-1">
+              {getPageNumbers(pagination.page, pagination.pages).map((page, index) => (
+                page === '...' ? (
+                  <span key={`ellipsis-${index}`} className="px-2 text-gray-400">
+                    ...
+                  </span>
+                ) : (
+                  <button
+                    key={page}
+                    onClick={() => handlePageChange(page as number)}
+                    className={`
+                      w-8 h-8 rounded-md text-sm font-medium transition-colors
+                      ${pagination.page === page
+                        ? 'bg-yellow-500 text-white'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }
+                    `}
+                  >
+                    {page}
+                  </button>
+                )
+              ))}
+            </div>
+
+            {/* Mobile page indicator */}
+            <span className="sm:hidden text-sm text-gray-600 dark:text-gray-300">
+              Page {pagination.page} of {pagination.pages}
+            </span>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handlePageChange(pagination.page + 1)}
+              disabled={pagination.page >= pagination.pages}
+            >
+              Next
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {restoreMutation.error && (
         <Alert variant="error" className="mb-4">
