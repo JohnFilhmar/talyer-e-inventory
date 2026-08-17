@@ -17,6 +17,13 @@ interface ProductGridProps {
   restoringId?: string | null;
   isAdmin?: boolean;
   emptyMessage?: string;
+  /** Id of a just-created product to ring and scroll to. From `useHighlightNew`. */
+  highlightedId?: string | null;
+  /** From `useHighlightNew` — spread onto each card wrapper below. */
+  getHighlightProps?: (id: string) => {
+    ref?: (node: HTMLElement | null) => void;
+    className: string;
+  };
 }
 
 /**
@@ -34,6 +41,8 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   restoringId = null,
   isAdmin = false,
   emptyMessage = 'No products found',
+  highlightedId = null,
+  getHighlightProps,
 }) => {
   if (isLoading) {
     return (
@@ -70,17 +79,32 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      {products.map((product) => (
-        <ProductCard
-          key={product._id}
-          product={product}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onRestore={onRestore}
-          restoringId={restoringId}
-          isAdmin={isAdmin}
-        />
-      ))}
+      {products.map((product) => {
+        const highlightProps = getHighlightProps?.(product._id) ?? { className: '' };
+        const isNew = highlightedId === product._id;
+
+        return (
+          <div
+            key={product._id}
+            ref={highlightProps.ref}
+            className={`relative rounded-lg ${highlightProps.className}`}
+          >
+            {isNew && (
+              <span className="absolute -top-2 -right-2 z-10 px-2 py-0.5 text-xs font-medium bg-yellow-400 text-black rounded-full">
+                New
+              </span>
+            )}
+            <ProductCard
+              product={product}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onRestore={onRestore}
+              restoringId={restoringId}
+              isAdmin={isAdmin}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 };

@@ -1,50 +1,114 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useProducts, useDeleteProduct, useRestoreProduct } from '@/hooks/useProducts';
+import { useUrlFilters } from '@/hooks/useUrlFilters';
+import { useHighlightNew } from '@/hooks/useHighlightNew';
 import { ProductGrid, ProductFilters, DeleteProductModal } from '@/components/products';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { Spinner } from '@/components/ui/Spinner';
 import type { Product, ProductListParams } from '@/types/product';
+
+// Module scope, not an inline literal: useUrlFilters memoises on this object's
+// identity, and a fresh literal each render would rebuild `filters` each render
+// — which resets ProductFilters' local input state on every keystroke.
+const PRODUCT_FILTER_DEFAULTS: Record<string, string | number> = {
+  page: 1,
+  limit: 12,
+  sortBy: 'createdAt',
+  sortOrder: 'desc',
+  // Deleting a product is a soft delete — it stays in the collection with
+  // isActive false and isDiscontinued true. Without this the catalog kept
+  // listing everything ever deleted, and a deleted product stayed on screen
+  // after the delete succeeded. Archived rows are reachable through the
+  // Status filter.
+  active: 'true',
+  search: '',
+  category: '',
+  brand: '',
+  motorcycleModel: '',
+  minPrice: '',
+  maxPrice: '',
+  new: '',
+};
 
 /**
  * Products list page
- * 
+ *
  * Features:
  * - Product grid with responsive layout
  * - Advanced filters (category, brand, price range, status)
  * - Debounced search (600ms)
  * - Pagination
  * - Admin can add, edit, and delete products
+ *
+ * Filter/pagination state lives in the URL (`useUrlFilters`), not component
+ * state, so opening a product from a filtered, paginated grid and pressing
+ * Back restores that same view instead of an unfiltered page 1.
  */
 export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-24">
+          <Spinner size="lg" />
+        </div>
+      }
+    >
+      <ProductsPageContent />
+    </Suspense>
+  );
+}
+
+function ProductsPageContent() {
   const router = useRouter();
   const { user, isAdmin } = useAuth();
   const showAdminActions = isAdmin();
 
-  // Filter state
-  const [filters, setFilters] = useState<ProductListParams>({
-    page: 1,
-    limit: 12,
-    sortBy: 'createdAt',
-    sortOrder: 'desc',
-    // Deleting a product is a soft delete — it stays in the collection with
-    // isActive false and isDiscontinued true. Without this the catalog kept
-    // listing everything ever deleted, and a deleted product stayed on screen
-    // after the delete succeeded. Archived rows are reachable through the
-    // Status filter.
-    active: 'true',
-  });
+  // Filter state, backed by the URL.
+  const { filters: urlFilters, setFilters, resetFilters } = useUrlFilters(PRODUCT_FILTER_DEFAULTS);
+
+  // `ProductListParams` expects numbers for `minPrice` / `maxPrice` and omits
+  // empties, so build the query params separately from the URL state.
+  const filters: ProductListParams = useMemo(() => ({
+    page: Number(urlFilters.page),
+    limit: Number(urlFilters.limit),
+    sortBy: urlFilters.sortBy as ProductListParams['sortBy'],
+    sortOrder: urlFilters.sortOrder as 'asc' | 'desc',
+    ...(urlFilters.active ? { active: String(urlFilters.active) } : {}),
+    ...(urlFilters.search ? { search: String(urlFilters.search) } : {}),
+    ...(urlFilters.category ? { category: String(urlFilters.category) } : {}),
+    ...(urlFilters.brand ? { brand: String(urlFilters.brand) } : {}),
+    ...(urlFilters.motorcycleModel ? { motorcycleModel: String(urlFilters.motorcycleModel) } : {}),
+    ...(urlFilters.minPrice ? { minPrice: Number(urlFilters.minPrice) } : {}),
+    ...(urlFilters.maxPrice ? { maxPrice: Number(urlFilters.maxPrice) } : {}),
+  }), [urlFilters]);
+  // `new` is carried in the URL but deliberately excluded here — it is a UI
+  // concern, not a query parameter, and sending it would bust the React
+  // Query cache key for no reason.
+
+  // Highlight a product just created elsewhere and redirected back here via
+  // /products?new=<id>.
+  const { highlightedId, highlight, getHighlightProps } = useHighlightNew();
+  const newId = String(urlFilters.new ?? '');
+
+  // Derive-during-render rather than useEffect — the React Compiler lint
+  // rejects setState in an effect body. Mirrors ProductFilters.tsx:82-96.
+  const [seenNewId, setSeenNewId] = useState('');
+  if (newId && newId !== seenNewId) {
+    setSeenNewId(newId);
+    highlight(newId);
+  }
 
   // Modal state
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
 
   // Fetch products
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { data, isLoading, error, refetch } = useProducts(filters);
+  const { data, isLoading, error } = useProducts(filters);
   const products = data?.data ?? [];
   const pagination = data?.pagination;
 
@@ -94,26 +158,26 @@ export default function ProductsPage() {
     deleteMutation.reset();
   }, [deleteMutation]);
 
-  const handleFilterChange = useCallback((newFilters: ProductListParams) => {
-    setFilters(newFilters);
-  }, []);
-
-  const handleFilterReset = useCallback(() => {
+  const handleFilterChange = useCallback((next: ProductListParams) => {
     setFilters({
-      page: 1,
-      limit: 12,
-      sortBy: 'createdAt',
-      sortOrder: 'desc',
-      // Clearing filters returns to the default view, which excludes archived
-      // products. Dropping this would make 'Clear all' quietly reveal them.
-      active: 'true',
-    });
-  }, []);
+      search: next.search ?? '',
+      category: next.category ?? '',
+      brand: next.brand ?? '',
+      motorcycleModel: next.motorcycleModel ?? '',
+      active: next.active ?? '',
+      minPrice: next.minPrice?.toString() ?? '',
+      maxPrice: next.maxPrice?.toString() ?? '',
+      sortBy: next.sortBy ?? 'createdAt',
+      sortOrder: next.sortOrder ?? 'desc',
+      // Already debounced by 800ms inside ProductFilters, so this is a commit,
+      // not a keystroke — push, so Back undoes an applied filter.
+    }, 'push');
+  }, [setFilters]);
 
   const handlePageChange = useCallback((newPage: number) => {
-    setFilters(prev => ({ ...prev, page: newPage }));
+    setFilters({ page: newPage }, 'push');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  }, [setFilters]);
 
   // Check if user has access
   if (!user) {
@@ -139,7 +203,7 @@ export default function ProductsPage() {
               Products
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {pagination?.total !== undefined 
+              {pagination?.total !== undefined
                 ? `${pagination.total} product${pagination.total === 1 ? '' : 's'} found`
                 : 'Manage your product catalog'}
             </p>
@@ -158,9 +222,9 @@ export default function ProductsPage() {
       <ProductFilters
         filters={filters}
         onFilterChange={handleFilterChange}
-        onReset={handleFilterReset}
+        onReset={resetFilters}
       />
-      
+
       {/* Pagination */}
       {pagination && pagination.pages > 1 && (
         <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
@@ -240,6 +304,8 @@ export default function ProductsPage() {
         onRestore={showAdminActions ? handleRestoreProduct : undefined}
         restoringId={restoreMutation.isPending ? restoreMutation.variables : null}
         isAdmin={showAdminActions}
+        highlightedId={highlightedId}
+        getHighlightProps={getHighlightProps}
         emptyMessage={
           Object.keys(filters).some(
             (k) =>
