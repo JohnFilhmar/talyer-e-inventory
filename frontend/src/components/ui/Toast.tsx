@@ -66,9 +66,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       {/* Full width at the bottom on a phone, a stack in the corner from sm up.
-          A tablet on the shop counter is the primary device. */}
+          A tablet on the shop counter is the primary device.
+
+          `pointer-events-none` on the container, `pointer-events-auto` on each
+          toast: the container is always mounted (an aria-live region has to be
+          in the DOM before the message arrives to be announced), and its `p-4`
+          boxes out ~32px at the bottom of every page even with zero toasts.
+          Without this it is a transparent strip that swallows clicks on
+          whatever sits under it — at the end of a document there is nothing to
+          scroll the target out from under it. */}
       <div
-        className="fixed inset-x-0 bottom-0 z-50 flex flex-col gap-2 p-4 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-96"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col gap-2 p-4 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-96"
         role="status"
         aria-live="polite"
       >
@@ -77,8 +85,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             key={toast.id}
             className={
               toast.variant === 'error'
-                ? 'flex items-start gap-3 rounded-lg border-2 border-black bg-black px-4 py-3 shadow-lg'
-                : 'flex items-start gap-3 rounded-lg border-2 border-yellow-400 bg-white dark:bg-gray-900 px-4 py-3 shadow-lg'
+                ? 'pointer-events-auto flex items-start gap-3 rounded-lg border-2 border-black bg-black px-4 py-3 shadow-lg'
+                : 'pointer-events-auto flex items-start gap-3 rounded-lg border-2 border-yellow-400 bg-white dark:bg-gray-900 px-4 py-3 shadow-lg'
             }
           >
             <p
