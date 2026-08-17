@@ -64,6 +64,12 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
   // Without this, one physical scan fires several lookups and the feedback line
   // flickers between them.
   const lastScanRef = React.useRef<string | null>(null);
+  // AddStockModal is rendered unconditionally by its parent — closing it or
+  // toggling the scanner never unmounts this component, so an in-flight
+  // fetchQuery from a previous scan can still resolve afterward. Bumping this
+  // on every toggle/close lets onScan recognise its own response as stale and
+  // refuse to write state on top of whatever the user did next.
+  const scanGenerationRef = React.useRef(0);
 
   // Use debounced product search
   const { data: searchResults, isLoading: searchLoading } = useProductSearch(
@@ -113,6 +119,8 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
       setShowProductDropdown(false);
       setScanFeedback(null);
       lastScanRef.current = null;
+      scanGenerationRef.current += 1;
+      setScanLookupPending(false);
     }
   }, [isOpen, reset]);
 
@@ -267,6 +275,8 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
                   setScannerOpen((open) => !open);
                   setScanFeedback(null);
                   lastScanRef.current = null;
+                  scanGenerationRef.current += 1;
+                  setScanLookupPending(false);
                 }}
                 disabled={searchLoading}
               >
@@ -285,6 +295,10 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
                     lastScanRef.current = value;
                     setScanLookupPending(true);
                     setScanFeedback('Looking up barcode...');
+                    // Captured before awaiting anything. If a toggle or close bumps
+                    // scanGenerationRef while this lookup is in flight, the comparisons
+                    // below recognise this response as stale and skip every state write.
+                    const generation = scanGenerationRef.current;
 
                     try {
                       // Imperative on purpose. Routing this back through useProductSearch would
@@ -294,6 +308,8 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
                         queryKey: productKeys.search({ q: value, limit: 1 }),
                         queryFn: () => productService.search({ q: value, limit: 1 }),
                       });
+
+                      if (generation !== scanGenerationRef.current) return;
 
                       const match = results?.[0];
                       if (match) {
@@ -307,13 +323,16 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
                         setScanFeedback(`No product found for barcode ${value}`);
                       }
                     } catch (cause) {
+                      if (generation !== scanGenerationRef.current) return;
                       // "Could not look up" is a different problem from "not found": stock
                       // operations are online-only, so this is most often a dropped connection.
                       lastScanRef.current = null;
                       const reason = cause instanceof Error ? cause.message : 'the lookup failed';
                       setScanFeedback(`Could not look up barcode ${value} (${reason}). Check your connection and scan again.`);
                     } finally {
-                      setScanLookupPending(false);
+                      if (generation === scanGenerationRef.current) {
+                        setScanLookupPending(false);
+                      }
                     }
                   }}
                   onClose={() => setScannerOpen(false)}
