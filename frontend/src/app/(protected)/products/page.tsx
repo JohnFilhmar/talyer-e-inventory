@@ -36,6 +36,23 @@ const PRODUCT_FILTER_DEFAULTS: Record<string, string | number> = {
   new: '',
 };
 
+// A hand-edited or shared link can carry a non-numeric minPrice/maxPrice
+// (`?minPrice=abc`). `page`/`limit` get free protection from useUrlFilters's
+// `coerce`, because their defaults are typed as numbers; minPrice/maxPrice
+// default to '' so that inference never fires, and a garbage value would
+// otherwise pass straight through to `Number(...)` as the API param, sending
+// `minPrice=NaN`. Validate explicitly instead, falling back to ''.
+function parseNumericOrEmpty(raw: string): string {
+  return raw !== '' && Number.isFinite(Number(raw)) ? raw : '';
+}
+
+// Module scope for the same reason as PRODUCT_FILTER_DEFAULTS: useUrlFilters
+// memoises on this object's identity too.
+const PRODUCT_FILTER_PARSERS = {
+  minPrice: parseNumericOrEmpty,
+  maxPrice: parseNumericOrEmpty,
+};
+
 /**
  * Products list page
  *
@@ -70,7 +87,10 @@ function ProductsPageContent() {
   const showAdminActions = isAdmin();
 
   // Filter state, backed by the URL.
-  const { filters: urlFilters, setFilters, resetFilters } = useUrlFilters(PRODUCT_FILTER_DEFAULTS);
+  const { filters: urlFilters, setFilters, resetFilters } = useUrlFilters(
+    PRODUCT_FILTER_DEFAULTS,
+    PRODUCT_FILTER_PARSERS
+  );
 
   // `ProductListParams` expects numbers for `minPrice` / `maxPrice` and omits
   // empties, so build the query params separately from the URL state.
@@ -79,7 +99,18 @@ function ProductsPageContent() {
     limit: Number(urlFilters.limit),
     sortBy: urlFilters.sortBy as ProductListParams['sortBy'],
     sortOrder: urlFilters.sortOrder as 'asc' | 'desc',
-    ...(urlFilters.active ? { active: String(urlFilters.active) } : {}),
+    // `'all'` is the URL's sentinel for "Active + archived" — see
+    // `handleFilterChange` below for why a plain '' can't round-trip through
+    // the URL. The backend has no notion of `'all'`, so it is translated to
+    // "omit the key" here rather than forwarded as a literal string. Omitting
+    // the key also means `filters.active` reads as `undefined` wherever this
+    // same object is passed down to `ProductFilters`, which already treats
+    // that the same as '' (its `active: filters.active ?? ''` seed below),
+    // so the "Active + archived" option is shown correctly with no separate
+    // translation needed for the UI side.
+    ...(urlFilters.active && urlFilters.active !== 'all'
+      ? { active: String(urlFilters.active) }
+      : {}),
     ...(urlFilters.search ? { search: String(urlFilters.search) } : {}),
     ...(urlFilters.category ? { category: String(urlFilters.category) } : {}),
     ...(urlFilters.brand ? { brand: String(urlFilters.brand) } : {}),
@@ -164,7 +195,12 @@ function ProductsPageContent() {
       category: next.category ?? '',
       brand: next.brand ?? '',
       motorcycleModel: next.motorcycleModel ?? '',
-      active: next.active ?? '',
+      // ProductFilters' applyFilters only sets `active` when it's truthy, so
+      // "Active + archived" arrives here as `undefined`. Write the `'all'`
+      // sentinel for it: useUrlFilters drops a plain '' from the URL as "no
+      // value" and would silently re-derive the default `'true'` on the next
+      // read, which is the bug this sentinel exists to avoid.
+      active: next.active ?? 'all',
       minPrice: next.minPrice?.toString() ?? '',
       maxPrice: next.maxPrice?.toString() ?? '',
       sortBy: next.sortBy ?? 'createdAt',
