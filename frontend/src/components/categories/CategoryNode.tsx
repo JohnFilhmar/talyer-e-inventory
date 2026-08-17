@@ -128,12 +128,12 @@ export const CategoryNode: React.FC<CategoryNodeProps> = ({
           </Badge>
         )}
 
-        {/* `primary` (yellow), not `warning` (orange): orange is outside the
-            project's palette, and it would be byte-identical to the Archived
-            badge that can sit on this same row. Yellow also matches the
-            ring-yellow-400 highlight this badge accompanies. */}
+        {/* `highlight` — yellow-400 on black, the wording of the UX spec, and
+            the same yellow-400 as the ring this badge accompanies. Distinct at
+            a glance from the Archived badge that can sit on this same row: that
+            one is a pale tint, this one is the solid brand yellow. */}
         {isNew && (
-          <Badge variant="primary" size="sm">
+          <Badge variant="highlight" size="sm">
             New
           </Badge>
         )}

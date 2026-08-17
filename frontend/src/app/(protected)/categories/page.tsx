@@ -184,7 +184,10 @@ function CategoriesPageContent() {
         highlight(saved._id);
       }
 
-      show(`Saved "${saved.name}"`);
+      // Same vocabulary as the product form's toast: `Created` for a create,
+      // `Updated` for an edit. One gesture, one contract, across surfaces.
+      // No `View` action here — categories have no detail page to link to.
+      show(isCreate ? `Created "${saved.name}"` : `Updated "${saved.name}"`);
     },
     [refetch, highlight, show, handleFormClose]
   );
