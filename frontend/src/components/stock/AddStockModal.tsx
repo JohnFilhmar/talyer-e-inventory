@@ -124,6 +124,20 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
     setScannerOpen(false);
   }, []);
 
+  // Mirrors closeScanner. A successful scan closes via a direct
+  // setScannerOpen(false) rather than closeScanner, so it leaves
+  // lastScanRef holding the matched barcode on purpose (only the miss and
+  // error branches clear it). Without resetting it here too, reopening the
+  // scanner and presenting that same barcode again would silently hit the
+  // repeat guard in onScan and produce no lookup and no feedback at all.
+  const openScanner = React.useCallback(() => {
+    scanGenerationRef.current += 1;
+    setScanLookupPending(false);
+    lastScanRef.current = null;
+    setScanFeedback(null);
+    setScannerOpen(true);
+  }, []);
+
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -286,7 +300,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
                   if (scannerOpen) {
                     closeScanner();
                   } else {
-                    setScannerOpen(true);
+                    openScanner();
                   }
                 }}
                 disabled={searchLoading}
