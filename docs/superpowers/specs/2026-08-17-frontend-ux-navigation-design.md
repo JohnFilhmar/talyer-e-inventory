@@ -208,8 +208,9 @@ File: `app/(protected)/products/page.tsx` (and `components/products/ProductFilte
 only where it needs to become controlled).
 
 - Every member of `ProductListParams` currently in `useState` moves into
-  `useUrlFilters`: `page`, `limit`, `sortBy`, `sortOrder`, `active`, plus whatever
-  `ProductFilters` emits (`q`, `category`, `brand`, `minPrice`, `maxPrice`).
+  `useUrlFilters`: `page`, `limit`, `sortBy`, `sortOrder`, `active`, plus what
+  `ProductFilters` emits — `search` (not `q`), `category`, `brand`,
+  `motorcycleModel` (comma-joined ids), `minPrice`, `maxPrice`.
 - `active: 'true'` stays the default and therefore stays out of the URL until the
   user changes the Status filter. Its existing comment about soft deletes must be
   preserved — it explains why the default is not "all".
@@ -222,8 +223,15 @@ only where it needs to become controlled).
 
 ### C3 — Product form
 
-File: `app/(protected)/products/new/page.tsx` (the shared `ProductForm` used by
-both create and edit).
+Files: `app/(protected)/products/new/page.tsx` and
+`app/(protected)/products/[id]/edit/page.tsx`.
+
+These are **not** a shared component. `products/new/page.tsx` declares a local
+`ProductForm` with a `mode: 'create' | 'edit'` prop, but the edit route never
+uses it — `products/[id]/edit/page.tsx` is an independent ~700-line copy of the
+same markup, so its `'edit'` branch is dead code. Both files must be edited.
+Deduplicating them is real debt but is **out of scope here**; do not attempt it
+as part of this work.
 
 - Wrap **Pricing**, **Tags**, **Specifications** in `CollapsibleSection`.
   - Create mode: all three collapsed.
@@ -240,7 +248,9 @@ both create and edit).
     record they just made.
   - Also fire a toast, for the case where the user has scrolled away from the
     banner.
-- Edit mode keeps the existing `router.push('/products/' + targetId)`.
+- The edit page keeps its existing `router.push('/products/' + productId)` and
+  gains only the collapsible sections. Its `Status` and `Product Images` blocks
+  stay always-expanded.
 - The existing image-upload-failure path (`uploadPendingImages` returning `false`
   stops the flow and keeps the message on screen) must survive unchanged: on
   failure, do not reset the form and do not show the success banner.
