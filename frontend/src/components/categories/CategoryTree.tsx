@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FolderTree } from 'lucide-react';
 import { CategoryNode } from './CategoryNode';
 import { Spinner } from '@/components/ui/Spinner';
@@ -17,6 +17,10 @@ interface CategoryTreeProps {
   restoringId?: string | null;
   onAddChild?: (parentCategory: Category) => void;
   isAdmin?: boolean;
+  /** Ancestor chain to force open, e.g. after creating a subcategory. */
+  expandPath?: string[];
+  highlightedId?: string | null;
+  getHighlightProps?: (id: string) => { ref?: (node: HTMLElement | null) => void; className: string };
 }
 
 /**
@@ -34,7 +38,46 @@ export const CategoryTree: React.FC<CategoryTreeProps> = ({
   restoringId = null,
   onAddChild,
   isAdmin = false,
+  expandPath,
+  highlightedId = null,
+  getHighlightProps,
 }) => {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  // Roots default to expanded, matching the behaviour CategoryNode used to
+  // implement locally with useState(level === 0).
+  const rootIds = useMemo(() => categories.map((c) => c._id).join(','), [categories]);
+  const [seededRoots, setSeededRoots] = useState('');
+  if (rootIds !== seededRoots) {
+    setSeededRoots(rootIds);
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      for (const category of categories) next.add(category._id);
+      return next;
+    });
+  }
+
+  // A newly created subcategory can sit under a collapsed parent, where it is
+  // not rendered at all. Opening its whole ancestor chain is what makes the
+  // highlight reachable.
+  const pathKey = (expandPath ?? []).join(',');
+  const [seededPath, setSeededPath] = useState('');
+  if (pathKey !== seededPath) {
+    setSeededPath(pathKey);
+    if (expandPath?.length) {
+      setExpandedIds((current) => new Set([...current, ...expandPath]));
+    }
+  }
+
+  const handleToggleExpand = useCallback((categoryId: string) => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(categoryId)) next.delete(categoryId);
+      else next.add(categoryId);
+      return next;
+    });
+  }, []);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -80,6 +123,10 @@ export const CategoryTree: React.FC<CategoryTreeProps> = ({
           restoringId={restoringId}
           onAddChild={onAddChild}
           isAdmin={isAdmin}
+          expandedIds={expandedIds}
+          onToggleExpand={handleToggleExpand}
+          highlightedId={highlightedId}
+          getHighlightProps={getHighlightProps}
         />
       ))}
     </div>

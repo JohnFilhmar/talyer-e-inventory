@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { Suspense, useState, useCallback, useMemo } from 'react';
 import { Plus, FolderTree, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -8,6 +8,8 @@ import {
   useDeleteCategory,
   useRestoreCategory,
 } from '@/hooks/useCategories';
+import { useUrlFilters } from '@/hooks/useUrlFilters';
+import { useHighlightNew } from '@/hooks/useHighlightNew';
 import {
   CategoryTree,
   CategoryFormModal,
@@ -15,18 +17,47 @@ import {
 } from '@/components/categories';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { Spinner } from '@/components/ui/Spinner';
+import { useToast } from '@/components/ui/Toast';
 import type { Category } from '@/types/category';
 
 /**
+ * Module-level so `useUrlFilters` can memoise on its identity — a fresh literal
+ * per render would rebuild `filters` every render.
+ */
+const CATEGORY_FILTER_DEFAULTS = { archived: false };
+
+/**
+ * Ids from the root down to (but not including) `targetId`.
+ *
+ * Module scope rather than a `useCallback`: it recurses, and the project's
+ * React Compiler lint rejects a hook-declared value referring to itself.
+ */
+function findAncestorPath(
+  nodes: Category[],
+  targetId: string,
+  trail: string[] = []
+): string[] | null {
+  for (const node of nodes) {
+    if (node._id === targetId) return trail;
+    const found = node.children
+      ? findAncestorPath(node.children, targetId, [...trail, node._id])
+      : null;
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
  * Categories management page
- * 
+ *
  * Features:
  * - Hierarchical tree view of all categories
  * - Admin can create, edit, and delete categories
  * - Color-coded categories with pre-defined palette
  * - Add subcategories directly from parent
  */
-export default function CategoriesPage() {
+function CategoriesPageContent() {
   const { user, isAdmin } = useAuth();
   const showAdminActions = isAdmin();
 
@@ -36,8 +67,15 @@ export default function CategoriesPage() {
   const [parentCategory, setParentCategory] = useState<Category | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
 
-  // Archived categories are hidden by default and revealed on request.
-  const [showArchived, setShowArchived] = useState(false);
+  // Archived categories are hidden by default and revealed on request. The
+  // toggle lives in the URL so a refresh, a shared link and the Back button all
+  // restore the same view.
+  const { filters, setFilters } = useUrlFilters(CATEGORY_FILTER_DEFAULTS);
+  const showArchived = filters.archived;
+
+  const { highlightedId, highlight, getHighlightProps } = useHighlightNew();
+  const { show } = useToast();
+  const [expandPath, setExpandPath] = useState<string[]>([]);
 
   // Fetch root categories with children populated
   const { data: categories, isLoading, error, refetch } = useRootCategories(showArchived);
@@ -123,10 +161,20 @@ export default function CategoriesPage() {
     setParentCategory(null);
   }, []);
 
-  const handleFormSuccess = useCallback(() => {
-    refetch();
-    handleFormClose();
-  }, [refetch, handleFormClose]);
+  const handleFormSuccess = useCallback(
+    async (saved: Category) => {
+      handleFormClose();
+      // The tree must hold the new node before its ancestors can be located or
+      // its row scrolled to, so wait for the refetch rather than firing and
+      // hoping.
+      const { data: fresh } = await refetch();
+      const path = findAncestorPath(fresh ?? [], saved._id) ?? [];
+      setExpandPath(path);
+      highlight(saved._id);
+      show(`Saved "${saved.name}"`);
+    },
+    [refetch, highlight, show, handleFormClose]
+  );
 
   const handleDeleteClose = useCallback(() => {
     setDeletingCategory(null);
@@ -165,7 +213,7 @@ export default function CategoriesPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="secondary"
-            onClick={() => setShowArchived((shown) => !shown)}
+            onClick={() => setFilters({ archived: !showArchived }, 'push')}
             aria-pressed={showArchived}
           >
             {showArchived ? (
@@ -234,6 +282,9 @@ export default function CategoriesPage() {
         restoringId={restoreMutation.isPending ? restoreMutation.variables : null}
         onAddChild={showAdminActions ? handleAddSubcategory : undefined}
         isAdmin={showAdminActions}
+        expandPath={expandPath}
+        highlightedId={highlightedId}
+        getHighlightProps={getHighlightProps}
       />
 
       {/* Form Modal */}
@@ -255,6 +306,18 @@ export default function CategoriesPage() {
         onConfirm={handleConfirmDelete}
       />
     </div>
+  );
+}
+
+/**
+ * `useUrlFilters` reads `useSearchParams()`, which opts the route into client
+ * rendering; without a boundary the build fails on the prerender pass.
+ */
+export default function CategoriesPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-12"><Spinner size="lg" /></div>}>
+      <CategoriesPageContent />
+    </Suspense>
   );
 }
 

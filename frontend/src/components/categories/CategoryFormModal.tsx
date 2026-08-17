@@ -31,7 +31,7 @@ interface CategoryFormModalProps {
   category?: Category | null;
   parentCategory?: Category | null;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (created: Category) => void;
 }
 
 /**
@@ -87,13 +87,26 @@ export const CategoryFormModal: React.FC<CategoryFormModalProps> = ({
     setValue('code', uppercased);
   };
 
-  // Populate form when editing
+  // The two mutations' `reset` are stable prototype methods on the underlying
+  // observer, unlike the result objects themselves, which `useMutation` rebuilds
+  // as a fresh literal on every render. Depending on the objects would re-run the
+  // effect each render, and `reset()` notifies its observer, so that render would
+  // schedule the next one — an unbounded loop. Depend on the methods instead.
+  const resetCreateMutation = createMutation.reset;
+  const resetUpdateMutation = updateMutation.reset;
+
+  // Populate form when editing. `isOpen` is in the deps on purpose: without it
+  // a second create in a row never re-runs (both `category` and
+  // `parentCategory` stay null), and the form opens holding the last one's
+  // values.
   useEffect(() => {
+    if (!isOpen) return;
+
     if (category) {
-      const parentId = typeof category.parent === 'object' 
-        ? category.parent?._id 
+      const parentId = typeof category.parent === 'object'
+        ? category.parent?._id
         : category.parent;
-      
+
       reset({
         name: category.name,
         code: category.code,
@@ -114,7 +127,12 @@ export const CategoryFormModal: React.FC<CategoryFormModalProps> = ({
         sortOrder: 0,
       });
     }
-  }, [category, parentCategory, reset]);
+
+    // A failed save leaves its error behind; without this the next open shows
+    // that Alert above a blank form.
+    resetCreateMutation();
+    resetUpdateMutation();
+  }, [isOpen, category, parentCategory, reset, resetCreateMutation, resetUpdateMutation]);
 
   // Handle form submission
   const onSubmit = async (data: CategoryFormData) => {
@@ -130,16 +148,14 @@ export const CategoryFormModal: React.FC<CategoryFormModalProps> = ({
         ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
       };
 
+      let saved: Category;
       if (isEditing && category) {
-        await updateMutation.mutateAsync({
-          id: category._id,
-          payload,
-        });
+        saved = await updateMutation.mutateAsync({ id: category._id, payload });
       } else {
-        await createMutation.mutateAsync(payload);
+        saved = await createMutation.mutateAsync(payload);
       }
 
-      onSuccess?.();
+      onSuccess?.(saved);
       onClose();
     } catch {
       // Error is handled by mutation error state

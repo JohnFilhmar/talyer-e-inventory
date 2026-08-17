@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { ChevronRight, ChevronDown, Folder, FolderOpen, Plus, Edit, Trash2, RotateCcw } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import type { Category } from '@/types/category';
@@ -16,6 +16,13 @@ interface CategoryNodeProps {
   restoringId?: string | null;
   onAddChild?: (parentCategory: Category) => void;
   isAdmin?: boolean;
+  /** Ids of every currently expanded node. Owned by CategoryTree. */
+  expandedIds: Set<string>;
+  onToggleExpand: (categoryId: string) => void;
+  /** Id to mark as newly created, if any. */
+  highlightedId?: string | null;
+  /** Ring + scroll props from useHighlightNew, keyed by category id. */
+  getHighlightProps?: (id: string) => { ref?: (node: HTMLElement | null) => void; className: string };
 }
 
 /**
@@ -32,27 +39,35 @@ export const CategoryNode: React.FC<CategoryNodeProps> = ({
   restoringId = null,
   onAddChild,
   isAdmin = false,
+  expandedIds,
+  onToggleExpand,
+  highlightedId = null,
+  getHighlightProps,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(level === 0);
+  const isExpanded = expandedIds.has(category._id);
   const hasChildren = category.children && category.children.length > 0;
 
   const toggleExpand = () => {
-    if (hasChildren) {
-      setIsExpanded(!isExpanded);
-    }
+    if (hasChildren) onToggleExpand(category._id);
   };
 
   const isRestoring = restoringId === category._id;
+
+  const { ref: attachHighlight, className: highlightClass } =
+    getHighlightProps?.(category._id) ?? { className: '' };
+  const isNew = highlightedId === category._id;
 
   return (
     <div className="select-none">
       {/* Category row */}
       <div
+        ref={attachHighlight}
         className={`
           flex items-center gap-2 py-2 px-3 rounded-lg
           hover:bg-gray-50 dark:hover:bg-gray-800
           transition-colors duration-150
           group
+          ${highlightClass}
         `}
         style={{ paddingLeft: `${level * 24 + 12}px` }}
       >
@@ -110,6 +125,12 @@ export const CategoryNode: React.FC<CategoryNodeProps> = ({
         {!category.isActive && (
           <Badge variant="warning" size="sm">
             Archived
+          </Badge>
+        )}
+
+        {isNew && (
+          <Badge variant="warning" size="sm">
+            New
           </Badge>
         )}
 
@@ -187,6 +208,10 @@ export const CategoryNode: React.FC<CategoryNodeProps> = ({
               restoringId={restoringId}
               onAddChild={onAddChild}
               isAdmin={isAdmin}
+              expandedIds={expandedIds}
+              onToggleExpand={onToggleExpand}
+              highlightedId={highlightedId}
+              getHighlightProps={getHighlightProps}
             />
           ))}
         </div>
