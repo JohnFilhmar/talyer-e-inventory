@@ -84,6 +84,13 @@ function ProductForm({ mode, productId }: ProductFormProps) {
   // The user's only handle on the record they just made, since the form does
   // not navigate to it any more. Persists until the next submit or dismissal.
   const [lastCreated, setLastCreated] = React.useState<{ id: string; name: string } | null>(null);
+  // Bumped only on a successful create, and used as part of each optional
+  // section's `key` below. `CollapsibleSection` keeps its open/closed state in
+  // local `useState(defaultOpen)`, which a later `defaultOpen` change cannot
+  // affect — reset() clears field values but not that state, so without a key
+  // change a section the user opened by hand (to enter a real price, say)
+  // would stay open for every product created after it in the same session.
+  const [createCount, setCreateCount] = React.useState(0);
 
   const isSubmitting =
     createMutation.isPending || updateMutation.isPending || uploadImageMutation.isPending;
@@ -248,6 +255,7 @@ function ProductForm({ mode, productId }: ProductFormProps) {
       setPendingImages([]);
       setImageError(null);
       setLastCreated({ id: targetId, name: createdName });
+      setCreateCount((n) => n + 1);
       show(`Created "${createdName}"`, {
         action: { label: 'View', href: `/products/${targetId}` },
       });
@@ -575,6 +583,7 @@ function ProductForm({ mode, productId }: ProductFormProps) {
 
         {/* Pricing */}
         <CollapsibleSection
+          key={`pricing-${createCount}`}
           title="Pricing"
           defaultOpen={false}
           error={!!errors.costPrice || !!errors.sellingPrice}
@@ -663,7 +672,13 @@ function ProductForm({ mode, productId }: ProductFormProps) {
         </CollapsibleSection>
 
         {/* Tags */}
-        <CollapsibleSection title="Tags" defaultOpen={false} badge={tags.length} error={!!errors.tags}>
+        <CollapsibleSection
+          key={`tags-${createCount}`}
+          title="Tags"
+          defaultOpen={false}
+          badge={tags.length}
+          error={!!errors.tags}
+        >
           <div className="space-y-3">
             {/* Tag input */}
             <div className="flex gap-2">
@@ -707,6 +722,7 @@ function ProductForm({ mode, productId }: ProductFormProps) {
 
         {/* Specifications */}
         <CollapsibleSection
+          key={`specifications-${createCount}`}
           title="Specifications"
           defaultOpen={false}
           badge={filledSpecCount}
