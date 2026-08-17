@@ -1,6 +1,19 @@
 import React from 'react';
 
-export type BadgeVariant = 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info';
+export type BadgeVariant =
+  | 'primary'
+  | 'secondary'
+  | 'success'
+  | 'warning'
+  | 'error'
+  | 'info'
+  /**
+   * The brand yellow at full strength, for the "just created" marker that
+   * accompanies a `ring-yellow-400` highlight. Fixed by the UX spec as
+   * "yellow-400 background with black text", and readable on either theme, so
+   * unlike the tinted variants above it carries no `dark:` override.
+   */
+  | 'highlight';
 export type BadgeSize = 'sm' | 'md' | 'lg';
 
 interface BadgeProps {
@@ -17,6 +30,7 @@ const variantStyles: Record<BadgeVariant, string> = {
   warning: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
   error: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
   info: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  highlight: 'bg-yellow-400 text-black',
 };
 
 const sizeStyles: Record<BadgeSize, string> = {

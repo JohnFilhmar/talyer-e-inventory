@@ -70,6 +70,9 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      {/* No "new product" highlight here: creating a product stays on the form
+          and hands the user a banner plus a toast with a View link, so nothing
+          ever redirects back to this list pointing at a specific row. */}
       {products.map((product) => (
         <ProductCard
           key={product._id}

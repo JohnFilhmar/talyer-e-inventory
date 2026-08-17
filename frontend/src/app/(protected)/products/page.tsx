@@ -1,49 +1,143 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useProducts, useDeleteProduct, useRestoreProduct } from '@/hooks/useProducts';
+import { useUrlFilters } from '@/hooks/useUrlFilters';
 import { ProductGrid, ProductFilters, DeleteProductModal } from '@/components/products';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { Spinner } from '@/components/ui/Spinner';
 import type { Product, ProductListParams } from '@/types/product';
+
+// Module scope, not an inline literal: useUrlFilters memoises on this object's
+// identity, and a fresh literal each render would rebuild `filters` each render
+// — which resets ProductFilters' local input state on every keystroke.
+const PRODUCT_FILTER_DEFAULTS: Record<string, string | number> = {
+  page: 1,
+  limit: 12,
+  sortBy: 'createdAt',
+  sortOrder: 'desc',
+  // Deleting a product is a soft delete — it stays in the collection with
+  // isActive false and isDiscontinued true. Without this the catalog kept
+  // listing everything ever deleted, and a deleted product stayed on screen
+  // after the delete succeeded. Archived rows are reachable through the
+  // Status filter.
+  active: 'true',
+  search: '',
+  category: '',
+  brand: '',
+  motorcycleModel: '',
+  minPrice: '',
+  maxPrice: '',
+};
+
+// A hand-edited or shared link can carry a non-numeric minPrice/maxPrice
+// (`?minPrice=abc`). `page`/`limit` get free protection from useUrlFilters's
+// `coerce`, because their defaults are typed as numbers; minPrice/maxPrice
+// default to '' so that inference never fires, and a garbage value would
+// otherwise pass straight through to `Number(...)` as the API param, sending
+// `minPrice=NaN`. Validate explicitly instead, falling back to ''.
+function parseNumericOrEmpty(raw: string): string {
+  return raw !== '' && Number.isFinite(Number(raw)) ? raw : '';
+}
+
+/** Columns the API can sort by. Anything else is a hand-edited URL. */
+const SORT_FIELDS = ['name', 'sellingPrice', 'costPrice', 'createdAt', 'updatedAt'];
+
+/**
+ * Builds a parser that clamps an unrecognised value back to the default, so
+ * `?sortBy=<garbage>` reads as the default sort rather than reaching the API.
+ */
+function oneOf<T extends string>(allowed: readonly T[], fallback: T) {
+  return (raw: string): T => (allowed.includes(raw as T) ? (raw as T) : fallback);
+}
+
+// Module scope for the same reason as PRODUCT_FILTER_DEFAULTS: useUrlFilters
+// memoises on this object's identity too.
+const PRODUCT_FILTER_PARSERS = {
+  minPrice: parseNumericOrEmpty,
+  maxPrice: parseNumericOrEmpty,
+  sortBy: oneOf(SORT_FIELDS, 'createdAt'),
+  sortOrder: oneOf(['asc', 'desc'], 'desc'),
+  // `'all'` is this page's sentinel for "Active + archived" — see
+  // `handleFilterChange`. Anything else falls back to the default.
+  active: oneOf(['true', 'false', 'all'], 'true'),
+};
 
 /**
  * Products list page
- * 
+ *
  * Features:
  * - Product grid with responsive layout
  * - Advanced filters (category, brand, price range, status)
  * - Debounced search (600ms)
  * - Pagination
  * - Admin can add, edit, and delete products
+ *
+ * Filter/pagination state lives in the URL (`useUrlFilters`), not component
+ * state, so opening a product from a filtered, paginated grid and pressing
+ * Back restores that same view instead of an unfiltered page 1.
  */
 export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-24">
+          <Spinner size="lg" />
+        </div>
+      }
+    >
+      <ProductsPageContent />
+    </Suspense>
+  );
+}
+
+function ProductsPageContent() {
   const router = useRouter();
   const { user, isAdmin } = useAuth();
   const showAdminActions = isAdmin();
 
-  // Filter state
-  const [filters, setFilters] = useState<ProductListParams>({
-    page: 1,
-    limit: 12,
-    sortBy: 'createdAt',
-    sortOrder: 'desc',
-    // Deleting a product is a soft delete — it stays in the collection with
-    // isActive false and isDiscontinued true. Without this the catalog kept
-    // listing everything ever deleted, and a deleted product stayed on screen
-    // after the delete succeeded. Archived rows are reachable through the
-    // Status filter.
-    active: 'true',
-  });
+  // Filter state, backed by the URL.
+  const { filters: urlFilters, setFilters, resetFilters } = useUrlFilters(
+    PRODUCT_FILTER_DEFAULTS,
+    PRODUCT_FILTER_PARSERS
+  );
+
+  // `ProductListParams` expects numbers for `minPrice` / `maxPrice` and omits
+  // empties, so build the query params separately from the URL state.
+  const filters: ProductListParams = useMemo(() => ({
+    page: Number(urlFilters.page),
+    limit: Number(urlFilters.limit),
+    sortBy: urlFilters.sortBy as ProductListParams['sortBy'],
+    sortOrder: urlFilters.sortOrder as 'asc' | 'desc',
+    // `'all'` is the URL's sentinel for "Active + archived" — see
+    // `handleFilterChange` below for why a plain '' can't round-trip through
+    // the URL. The backend has no notion of `'all'`, so it is translated to
+    // "omit the key" here rather than forwarded as a literal string. Omitting
+    // the key also means `filters.active` reads as `undefined` wherever this
+    // same object is passed down to `ProductFilters`, which already treats
+    // that the same as '' (its `active: filters.active ?? ''` seed below),
+    // so the "Active + archived" option is shown correctly with no separate
+    // translation needed for the UI side.
+    ...(urlFilters.active && urlFilters.active !== 'all'
+      ? { active: String(urlFilters.active) }
+      : {}),
+    ...(urlFilters.search ? { search: String(urlFilters.search) } : {}),
+    ...(urlFilters.category ? { category: String(urlFilters.category) } : {}),
+    ...(urlFilters.brand ? { brand: String(urlFilters.brand) } : {}),
+    ...(urlFilters.motorcycleModel ? { motorcycleModel: String(urlFilters.motorcycleModel) } : {}),
+    ...(urlFilters.minPrice ? { minPrice: Number(urlFilters.minPrice) } : {}),
+    ...(urlFilters.maxPrice ? { maxPrice: Number(urlFilters.maxPrice) } : {}),
+  }), [urlFilters]);
 
   // Modal state
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
 
   // Fetch products
-  const { data, isLoading, error, refetch } = useProducts(filters);
+  const { data, isLoading, error } = useProducts(filters);
   const products = data?.data ?? [];
   const pagination = data?.pagination;
 
@@ -93,26 +187,41 @@ export default function ProductsPage() {
     deleteMutation.reset();
   }, [deleteMutation]);
 
-  const handleFilterChange = useCallback((newFilters: ProductListParams) => {
-    setFilters(newFilters);
-  }, []);
+  const handleFilterChange = useCallback((next: ProductListParams) => {
+    const nextValues: Record<string, string> = {
+      search: next.search ?? '',
+      category: next.category ?? '',
+      brand: next.brand ?? '',
+      motorcycleModel: next.motorcycleModel ?? '',
+      // ProductFilters' applyFilters only sets `active` when it's truthy, so
+      // "Active + archived" arrives here as `undefined`. Write the `'all'`
+      // sentinel for it: useUrlFilters drops a plain '' from the URL as "no
+      // value" and would silently re-derive the default `'true'` on the next
+      // read, which is the bug this sentinel exists to avoid.
+      active: next.active ?? 'all',
+      minPrice: next.minPrice?.toString() ?? '',
+      maxPrice: next.maxPrice?.toString() ?? '',
+      sortBy: next.sortBy ?? 'createdAt',
+      sortOrder: next.sortOrder ?? 'desc',
+    };
 
-  const handleFilterReset = useCallback(() => {
-    setFilters({
-      page: 1,
-      limit: 12,
-      sortBy: 'createdAt',
-      sortOrder: 'desc',
-      // Clearing filters returns to the default view, which excludes archived
-      // products. Dropping this would make 'Clear all' quietly reveal them.
-      active: 'true',
-    });
-  }, []);
+    // Every input in ProductFilters commits through this one callback after the
+    // same 800ms debounce, so "a commit" is not the same thing as "a gesture
+    // worth a history entry": typing a word produces one commit per pause, and
+    // pushing each of them buries the previous page under a pile of Back steps.
+    // Search alone therefore replaces; picking a category, a price bound or a
+    // sort is a deliberate choice and pushes, so Back undoes it.
+    const onlySearchChanged = Object.entries(nextValues).every(
+      ([key, value]) => key === 'search' || value === String(urlFilters[key] ?? '')
+    );
+
+    setFilters(nextValues, onlySearchChanged ? 'replace' : 'push');
+  }, [setFilters, urlFilters]);
 
   const handlePageChange = useCallback((newPage: number) => {
-    setFilters(prev => ({ ...prev, page: newPage }));
+    setFilters({ page: newPage }, 'push');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  }, [setFilters]);
 
   // Check if user has access
   if (!user) {
@@ -138,7 +247,7 @@ export default function ProductsPage() {
               Products
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {pagination?.total !== undefined 
+              {pagination?.total !== undefined
                 ? `${pagination.total} product${pagination.total === 1 ? '' : 's'} found`
                 : 'Manage your product catalog'}
             </p>
@@ -157,9 +266,9 @@ export default function ProductsPage() {
       <ProductFilters
         filters={filters}
         onFilterChange={handleFilterChange}
-        onReset={handleFilterReset}
+        onReset={resetFilters}
       />
-      
+
       {/* Pagination */}
       {pagination && pagination.pages > 1 && (
         <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">

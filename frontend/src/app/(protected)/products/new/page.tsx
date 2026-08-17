@@ -22,6 +22,8 @@ import { Combobox, type ComboboxOption } from '@/components/ui/Combobox';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
+import { CollapsibleSection } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
 import { createProductSchema, updateProductSchema, type CreateProductFormData, type UpdateProductFormData } from '@/utils/validators/product';
 import { calculateProfitMargin } from '@/types/product';
 import {
@@ -78,6 +80,18 @@ function ProductForm({ mode, productId }: ProductFormProps) {
   const [pendingImages, setPendingImages] = React.useState<File[]>([]);
   const [imageError, setImageError] = React.useState<string | null>(null);
 
+  const { show } = useToast();
+  // The user's only handle on the record they just made, since the form does
+  // not navigate to it any more. Persists until the next submit or dismissal.
+  const [lastCreated, setLastCreated] = React.useState<{ id: string; name: string } | null>(null);
+  // Bumped only on a successful create, and used as part of each optional
+  // section's `key` below. `CollapsibleSection` keeps its open/closed state in
+  // local `useState(defaultOpen)`, which a later `defaultOpen` change cannot
+  // affect — reset() clears field values but not that state, so without a key
+  // change a section the user opened by hand (to enter a real price, say)
+  // would stay open for every product created after it in the same session.
+  const [createCount, setCreateCount] = React.useState(0);
+
   const isSubmitting =
     createMutation.isPending || updateMutation.isPending || uploadImageMutation.isPending;
   const error = createMutation.error || updateMutation.error;
@@ -90,6 +104,7 @@ function ProductForm({ mode, productId }: ProductFormProps) {
     control,
     reset,
     setValue,
+    setFocus,
     formState: { errors },
   } = useForm<CreateProductFormData | UpdateProductFormData>({
     resolver: zodResolver(schema),
@@ -121,11 +136,23 @@ function ProductForm({ mode, productId }: ProductFormProps) {
   const sellingPrice = useWatch({ control, name: 'sellingPrice' }) ?? 0;
   const tags = useWatch({ control, name: 'tags' }) ?? [];
   const motorcycleModels = useWatch({ control, name: 'motorcycleModels' }) ?? [];
+  const specifications = useWatch({ control, name: 'specifications' });
 
   // Calculate profit margin in real-time
   const profitMargin = useMemo(() => {
     return calculateProfitMargin(costPrice, sellingPrice);
   }, [costPrice, sellingPrice]);
+
+  // Badge count for the collapsed Specifications section — every filled
+  // scalar plus every filled dimension, so the badge still reflects a value
+  // buried inside the nested `dimensions` object.
+  const filledSpecCount = useMemo(() => {
+    if (!specifications) return 0;
+    const { dimensions, ...rest } = specifications;
+    const scalars = Object.values(rest).filter((v) => v !== undefined && v !== '' && v !== null).length;
+    const dims = Object.values(dimensions ?? {}).filter((v) => v !== undefined && v !== null).length;
+    return scalars + dims;
+  }, [specifications]);
 
   // Labels for motorcycles this product is already tagged with but that are no
   // longer active, so their chips read as names rather than raw ids. Without
@@ -214,9 +241,25 @@ function ProductForm({ mode, productId }: ProductFormProps) {
       // good product behind — say so and stay put rather than navigating away
       // and losing the message.
       const uploaded = await uploadPendingImages(targetId);
+      // A failed upload leaves a perfectly good product behind. Keep the
+      // message on screen, keep the form as it is, and show no success banner.
       if (!uploaded) return;
 
-      router.push(`/products/${targetId}`);
+      if (isEditing) {
+        router.push(`/products/${targetId}`);
+        return;
+      }
+
+      const createdName = cleanData.name ?? 'product';
+      reset();
+      setPendingImages([]);
+      setImageError(null);
+      setLastCreated({ id: targetId, name: createdName });
+      setCreateCount((n) => n + 1);
+      show(`Created "${createdName}"`, {
+        action: { label: 'View', href: `/products/${targetId}` },
+      });
+      setFocus('name');
     } catch {
       // Error handled by mutation state
     }
@@ -363,6 +406,33 @@ function ProductForm({ mode, productId }: ProductFormProps) {
 
       {/* Form */}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+        {/* Created banner — the only handle the user has on the record just
+            made, since a create no longer navigates to the detail page. */}
+        {lastCreated && (
+          <div className="flex items-center gap-3 rounded-lg border-2 border-yellow-400 bg-white dark:bg-gray-900 px-4 py-3">
+            <p className="flex-1 text-sm font-medium text-black dark:text-gray-100">
+              Created &ldquo;{lastCreated.name}&rdquo;
+            </p>
+            {/* `shrink-0` on both, matching the near-identical toast row: at
+                375px a long product name would otherwise wrap the link and
+                squeeze the dismiss button. */}
+            <Link
+              href={`/products/${lastCreated.id}`}
+              className="shrink-0 text-sm font-semibold text-black dark:text-gray-100 underline"
+            >
+              View product
+            </Link>
+            <button
+              type="button"
+              onClick={() => setLastCreated(null)}
+              aria-label="Dismiss"
+              className="shrink-0 text-gray-400 hover:text-black dark:hover:text-gray-100"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {/* Error Alert */}
         {error && (
           <Alert variant="error">
@@ -515,11 +585,12 @@ function ProductForm({ mode, productId }: ProductFormProps) {
         </div>
 
         {/* Pricing */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-            Pricing
-          </h2>
-
+        <CollapsibleSection
+          key={`pricing-${createCount}`}
+          title="Pricing"
+          defaultOpen={false}
+          error={!!errors.costPrice || !!errors.sellingPrice}
+        >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Controller
               name="costPrice"
@@ -601,14 +672,16 @@ function ProductForm({ mode, productId }: ProductFormProps) {
               </p>
             </div>
           </div>
-        </div>
+        </CollapsibleSection>
 
         {/* Tags */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-            Tags (Optional)
-          </h2>
-
+        <CollapsibleSection
+          key={`tags-${createCount}`}
+          title="Tags"
+          defaultOpen={false}
+          badge={tags.length}
+          error={!!errors.tags}
+        >
           <div className="space-y-3">
             {/* Tag input */}
             <div className="flex gap-2">
@@ -648,14 +721,16 @@ function ProductForm({ mode, productId }: ProductFormProps) {
               {tags.length}/20 tags
             </p>
           </div>
-        </div>
+        </CollapsibleSection>
 
         {/* Specifications */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-            Specifications (Optional)
-          </h2>
-
+        <CollapsibleSection
+          key={`specifications-${createCount}`}
+          title="Specifications"
+          defaultOpen={false}
+          badge={filledSpecCount}
+          error={!!errors.specifications}
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Controller
               name="specifications.weight"
@@ -748,7 +823,7 @@ function ProductForm({ mode, productId }: ProductFormProps) {
               />
             </div>
           </div>
-        </div>
+        </CollapsibleSection>
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

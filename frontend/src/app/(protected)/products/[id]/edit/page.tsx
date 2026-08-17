@@ -14,6 +14,7 @@ import { Combobox, type ComboboxOption } from '@/components/ui/Combobox';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
+import { CollapsibleSection } from '@/components/ui';
 import { ProductImageEditor } from '@/components/products';
 import { MotorcycleModelPicker } from '@/components/motorcycle-models';
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
@@ -99,11 +100,36 @@ export default function EditProductPage() {
   const sellingPrice = useWatch({ control, name: 'sellingPrice' }) ?? 0;
   const tags = useWatch({ control, name: 'tags' }) ?? [];
   const motorcycleModels = useWatch({ control, name: 'motorcycleModels' }) ?? [];
+  const specifications = useWatch({ control, name: 'specifications' });
 
   // Calculate profit margin in real-time
   const profitMargin = useMemo(() => {
     return calculateProfitMargin(costPrice, sellingPrice);
   }, [costPrice, sellingPrice]);
+
+  // Badge count for the collapsed Specifications section — every filled
+  // scalar plus every filled dimension, so the badge still reflects a value
+  // buried inside the nested `dimensions` object.
+  const filledSpecCount = useMemo(() => {
+    if (!specifications) return 0;
+    const { dimensions, ...rest } = specifications;
+    const scalars = Object.values(rest).filter((v) => v !== undefined && v !== '' && v !== null).length;
+    const dims = Object.values(dimensions ?? {}).filter((v) => v !== undefined && v !== null).length;
+    return scalars + dims;
+  }, [specifications]);
+
+  // Whether the loaded product already holds data in each optional section —
+  // used only as `defaultOpen`, below, so an existing value is never hidden
+  // behind a collapsed chevron on load.
+  const hasPricing = !!product && (product.costPrice > 0 || product.sellingPrice > 0);
+  const hasTags = (product?.tags?.length ?? 0) > 0;
+  const hasSpecs = !!product?.specifications && Object.values(product.specifications).some(
+    (value) =>
+      value !== undefined &&
+      value !== null &&
+      value !== '' &&
+      !(typeof value === 'object' && Object.values(value).every((v) => v === undefined || v === null))
+  );
 
   // Labels for motorcycles this product carries that are no longer active, so
   // their chips read as names rather than raw ids. Without this, deactivating a
@@ -484,11 +510,12 @@ export default function EditProductPage() {
         </div>
 
         {/* Pricing */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-            Pricing
-          </h2>
-
+        <CollapsibleSection
+          key={`pricing-${productId}`}
+          title="Pricing"
+          defaultOpen={hasPricing}
+          error={!!errors.costPrice || !!errors.sellingPrice}
+        >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Controller
               name="costPrice"
@@ -570,14 +597,16 @@ export default function EditProductPage() {
               </p>
             </div>
           </div>
-        </div>
+        </CollapsibleSection>
 
         {/* Tags */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-            Tags
-          </h2>
-
+        <CollapsibleSection
+          key={`tags-${productId}`}
+          title="Tags"
+          defaultOpen={hasTags}
+          badge={tags.length}
+          error={!!errors.tags}
+        >
           <div className="space-y-3">
             <div className="flex gap-2">
               <Input
@@ -615,14 +644,16 @@ export default function EditProductPage() {
               {tags.length}/20 tags
             </p>
           </div>
-        </div>
+        </CollapsibleSection>
 
         {/* Specifications */}
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-            Specifications
-          </h2>
-
+        <CollapsibleSection
+          key={`specifications-${productId}`}
+          title="Specifications"
+          defaultOpen={hasSpecs}
+          badge={filledSpecCount}
+          error={!!errors.specifications}
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Controller
               name="specifications.weight"
@@ -714,7 +745,7 @@ export default function EditProductPage() {
               />
             </div>
           </div>
-        </div>
+        </CollapsibleSection>
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

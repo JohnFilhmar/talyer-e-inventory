@@ -3,13 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { Package, X, Search, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { createStockSchema, type CreateStockFormData } from '@/utils/validators/stock';
-import { useProductSearch } from '@/hooks/useProducts';
+import { useProductSearch, productKeys } from '@/hooks/useProducts';
+import { productService } from '@/lib/services/productService';
 import type { Branch } from '@/types/branch';
 import type { Supplier } from '@/types/supplier';
 import type { ProductSearchResult } from '@/types/product';
@@ -24,6 +26,14 @@ interface AddStockModalProps {
   isLoading?: boolean;
   error?: Error | null;
 }
+
+/**
+ * More than one row is fetched for a scan on purpose: at `limit: 1` the client
+ * cannot tell an exact hit from the first of several substring matches, and
+ * auto-selecting that row commits the wrong product to the form. A handful is
+ * enough to answer "is this ambiguous?" without paging the catalog.
+ */
+const SCAN_LOOKUP_LIMIT = 5;
 
 /**
  * Format price in Philippine Peso
@@ -56,6 +66,18 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanFeedback, setScanFeedback] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const [scanLookupPending, setScanLookupPending] = React.useState(false);
+  // A BarcodeScanner can emit the same code several times as the frame settles.
+  // Without this, one physical scan fires several lookups and the feedback line
+  // flickers between them.
+  const lastScanRef = React.useRef<string | null>(null);
+  // AddStockModal is rendered unconditionally by its parent — closing it or
+  // toggling the scanner never unmounts this component, so an in-flight
+  // fetchQuery from a previous scan can still resolve afterward. Bumping this
+  // on every toggle/close lets onScan recognise its own response as stale and
+  // refuse to write state on top of whatever the user did next.
+  const scanGenerationRef = React.useRef(0);
 
   // Use debounced product search
   const { data: searchResults, isLoading: searchLoading } = useProductSearch(
@@ -86,7 +108,6 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
   });
 
   // Watch form values for calculations
-  // eslint-disable-next-line react-hooks/incompatible-library
   const quantity = watch('quantity');
   const costPrice = watch('costPrice');
   const sellingPrice = watch('sellingPrice');
@@ -97,6 +118,34 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
     ? ((sellingPrice - costPrice) / costPrice * 100).toFixed(1)
     : '0';
 
+  // Centralised, user-initiated scanner close. Every path that dismisses the
+  // scanner other than a successful match — the toggle button, the
+  // BarcodeScanner's own close/error-close controls, and the modal-close
+  // reset — routes through this so none of them can forget to neutralise an
+  // in-flight lookup. The success path in onScan deliberately does NOT call
+  // this: it would null out the success feedback this function also clears.
+  const closeScanner = React.useCallback(() => {
+    scanGenerationRef.current += 1;
+    setScanLookupPending(false);
+    lastScanRef.current = null;
+    setScanFeedback(null);
+    setScannerOpen(false);
+  }, []);
+
+  // Mirrors closeScanner. A successful scan closes via a direct
+  // setScannerOpen(false) rather than closeScanner, so it leaves
+  // lastScanRef holding the matched barcode on purpose (only the miss and
+  // error branches clear it). Without resetting it here too, reopening the
+  // scanner and presenting that same barcode again would silently hit the
+  // repeat guard in onScan and produce no lookup and no feedback at all.
+  const openScanner = React.useCallback(() => {
+    scanGenerationRef.current += 1;
+    setScanLookupPending(false);
+    lastScanRef.current = null;
+    setScanFeedback(null);
+    setScannerOpen(true);
+  }, []);
+
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -104,8 +153,9 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
       setProductSearch('');
       setSelectedProduct(null);
       setShowProductDropdown(false);
+      closeScanner();
     }
-  }, [isOpen, reset]);
+  }, [isOpen, reset, closeScanner]);
 
   // Handle product selection
   const handleSelectProduct = (product: ProductSearchResult) => {
@@ -255,8 +305,11 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
                 variant="secondary"
                 size="sm"
                 onClick={() => {
-                  setScannerOpen((open) => !open);
-                  setScanFeedback(null);
+                  if (scannerOpen) {
+                    closeScanner();
+                  } else {
+                    openScanner();
+                  }
                 }}
                 disabled={searchLoading}
               >
@@ -269,21 +322,77 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
             {scannerOpen && (
               <div className="mb-4">
                 <BarcodeScanner
-                  onScan={(value) => {
-                    // Handle scanned value
-                    const matchedProduct = searchResults?.find((product) => product.sku === value);
-                    if (matchedProduct) {
-                      handleSelectProduct(matchedProduct);
-                      setScanFeedback(`Scanned: ${matchedProduct.name}`);
-                    } else {
-                      setScanFeedback(`No product found for barcode: ${value}`);
+                  onScan={async (value) => {
+                    if (scanLookupPending) return;
+                    if (lastScanRef.current === value) return;
+                    lastScanRef.current = value;
+                    setScanLookupPending(true);
+                    setScanFeedback('Looking up barcode...');
+                    // Captured before awaiting anything. If a toggle or close bumps
+                    // scanGenerationRef while this lookup is in flight, the comparisons
+                    // below recognise this response as stale and skip every state write.
+                    const generation = scanGenerationRef.current;
+
+                    try {
+                      // Imperative on purpose. Routing this back through useProductSearch would
+                      // reimpose its 600ms debounce and its >= 2 character gate on an event that
+                      // already has the exact value to look up.
+                      const results = await queryClient.fetchQuery({
+                        queryKey: productKeys.search({ q: value, limit: SCAN_LOOKUP_LIMIT }),
+                        queryFn: () => productService.search({ q: value, limit: SCAN_LOOKUP_LIMIT }),
+                      });
+
+                      if (generation !== scanGenerationRef.current) return;
+
+                      const matches = results ?? [];
+                      if (matches.length === 1) {
+                        const match = matches[0];
+                        handleSelectProduct(match);
+                        setScannerOpen(false);
+                        setScanFeedback(`Scanned ${match.name} (${match.sku})`);
+                      } else if (matches.length > 1) {
+                        // Ambiguous, so select nothing. The backend matches the scanned string
+                        // as a substring across name/sku/brand/productModel/barcode, and
+                        // ProductSearchResult carries no `barcode` field for the client to
+                        // verify against — so a short or partial read really can match two
+                        // products, and committing the first would silently write stock against
+                        // the wrong one. Stay open and hand it back to the user.
+                        //
+                        // lastScanRef deliberately keeps the value here, as on the success path:
+                        // the camera re-decodes the same code many times a second, and releasing
+                        // it would re-run this lookup on every frame. The message stays on screen
+                        // until a different code is presented or the scanner is toggled.
+                        setScanFeedback(
+                          `Barcode ${value} matched ${matches.length} products — search for the right one above.`
+                        );
+                      } else {
+                        // Stay open — the usual cause is a misread, and reopening the camera to
+                        // try again is the slow path.
+                        lastScanRef.current = null;
+                        setScanFeedback(`No product found for barcode ${value}`);
+                      }
+                    } catch (cause) {
+                      if (generation !== scanGenerationRef.current) return;
+                      // "Could not look up" is a different problem from "not found": stock
+                      // operations are online-only, so this is most often a dropped connection.
+                      lastScanRef.current = null;
+                      const reason = cause instanceof Error ? cause.message : 'the lookup failed';
+                      setScanFeedback(`Could not look up barcode ${value} (${reason}). Check your connection and scan again.`);
+                    } finally {
+                      if (generation === scanGenerationRef.current) {
+                        setScanLookupPending(false);
+                      }
                     }
                   }}
-                  onClose={() => setScannerOpen(false)}
-                  hint="Hold a barcode inside the frame. Items are added as they are scanned; scanning the same product again increases its quantity."
+                  onClose={closeScanner}
+                  hint="Hold the product barcode inside the frame. The matching product is selected and the scanner closes."
                 />
                 {scanFeedback && (
-                  <p className="mt-2 text-sm text-black" role="status" aria-live="polite">
+                  <p
+                    className="mt-2 text-sm text-black dark:text-gray-100"
+                    role="status"
+                    aria-live="polite"
+                  >
                     {scanFeedback}
                   </p>
                 )}
