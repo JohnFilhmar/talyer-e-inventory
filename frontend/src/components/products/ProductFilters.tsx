@@ -79,20 +79,30 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
   // ("Adjusting some state when a prop changes"). The `prevFilters !== filters`
   // check mirrors the effect's old `[filters]` dependency: it only re-syncs
   // when the prop is a new reference, not on every render.
+  //
+  // The resync is skipped while a debounce is pending. `filters` is now backed
+  // by the URL, so it arrives one asynchronous router transition *after* the
+  // debounce commits — and by then the user may have typed more. Adopting that
+  // stale value would wipe those characters and hand them back ~800ms later,
+  // when the pending commit finally lands. Reachable by typing, pausing about a
+  // second, and typing again. `prevFilters` is updated either way, so a skipped
+  // resync does not fire spuriously on some later, unrelated render.
   const [prevFilters, setPrevFilters] = useState(filters);
   if (filters !== prevFilters) {
     setPrevFilters(filters);
-    setLocalFilters({
-      search: filters.search ?? '',
-      category: filters.category ?? '',
-      brand: filters.brand ?? '',
-      motorcycleModel: filters.motorcycleModel ?? '',
-      active: filters.active ?? '',
-      minPrice: filters.minPrice?.toString() ?? '',
-      maxPrice: filters.maxPrice?.toString() ?? '',
-      sortBy: filters.sortBy ?? 'createdAt',
-      sortOrder: filters.sortOrder ?? 'desc',
-    });
+    if (debounceTimerRef.current === null) {
+      setLocalFilters({
+        search: filters.search ?? '',
+        category: filters.category ?? '',
+        brand: filters.brand ?? '',
+        motorcycleModel: filters.motorcycleModel ?? '',
+        active: filters.active ?? '',
+        minPrice: filters.minPrice?.toString() ?? '',
+        maxPrice: filters.maxPrice?.toString() ?? '',
+        sortBy: filters.sortBy ?? 'createdAt',
+        sortOrder: filters.sortOrder ?? 'desc',
+      });
+    }
   }
 
   // Apply filters to parent (called after debounce)
@@ -126,11 +136,24 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
       clearTimeout(debounceTimerRef.current);
     }
     
-    // Set new debounce timer (800ms)
+    // Set new debounce timer (800ms). The ref is nulled *before* committing so
+    // the prop-to-state resync above knows nothing is pending any more — leave
+    // it holding a spent timer id and that resync never runs again.
     debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
       applyFilters(newLocalFilters);
     }, 800);
   }, [localFilters, applyFilters]);
+
+  const handleReset = useCallback(() => {
+    // A pending timer would otherwise fire after the reset and put the filters
+    // the user just cleared straight back into the URL.
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    onReset?.();
+  }, [onReset]);
 
   // Adding and removing a motorcycle both go through the same debounced path
   // as every other filter, so a burst of picks results in one refetch rather
@@ -194,7 +217,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({
         </div>
         
         {activeFilterCount > 0 && onReset && (
-          <Button variant="ghost" size="sm" onClick={onReset}>
+          <Button variant="ghost" size="sm" onClick={handleReset}>
             <X className="w-4 h-4 mr-1" />
             Clear all
           </Button>
