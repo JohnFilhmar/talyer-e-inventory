@@ -1,12 +1,17 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Search, Filter, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import type { Branch } from '@/types';
 
+/** Same 800ms as ProductFilters — one search idiom across the two list pages. */
+const SEARCH_DEBOUNCE_MS = 800;
+
 interface StockFiltersProps {
+  /** Committed search term, read back from the URL. */
   search: string;
+  /** Called on a debounce, not per keystroke — see `handleSearchChange`. */
   onSearchChange: (value: string) => void;
   branchId: string;
   onBranchChange: (value: string) => void;
@@ -38,7 +43,66 @@ export const StockFilters: React.FC<StockFiltersProps> = ({
   onShowOutOfStockChange,
   onReset,
 }) => {
-  const hasActiveFilters = search || branchId || showLowStock || showOutOfStock;
+  // The typed value renders from here, never from the URL. `onSearchChange`
+  // ends in a `router.replace`, and Next's navigation is a transition: the
+  // render right after `onChange` still carries the old committed term, so a
+  // directly-controlled input has its character wiped by React's controlled-
+  // input restoration until the transition commits. Mirror locally and push to
+  // the URL on a debounce, exactly as ProductFilters does.
+  const [localSearch, setLocalSearch] = useState(search);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Prop-to-state resync, derived during render rather than in an effect (the
+  // project's React Compiler lint rejects setState in an effect body, and an
+  // effect would cost a second render pass). Skipped while a debounce is
+  // pending: the URL then still holds the pre-debounce term, and adopting it
+  // would wipe whatever has been typed since. `prevSearch` is updated either
+  // way, so a skipped resync does not fire spuriously on a later render.
+  const [prevSearch, setPrevSearch] = useState(search);
+  if (search !== prevSearch) {
+    setPrevSearch(search);
+    if (debounceTimerRef.current === null) {
+      setLocalSearch(search);
+    }
+  }
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setLocalSearch(value);
+
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        // Nulled before the commit so the resync above knows nothing is
+        // pending any more — leave it set and the resync never runs again.
+        debounceTimerRef.current = null;
+        onSearchChange(value);
+      }, SEARCH_DEBOUNCE_MS);
+    },
+    [onSearchChange]
+  );
+
+  const handleReset = useCallback(() => {
+    // A pending timer would otherwise fire after the reset and put the search
+    // term straight back into the URL.
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    setLocalSearch('');
+    onReset();
+  }, [onReset]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  const hasActiveFilters = localSearch || branchId || showLowStock || showOutOfStock;
 
   return (
     <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
@@ -49,8 +113,8 @@ export const StockFilters: React.FC<StockFiltersProps> = ({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
+              value={localSearch}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Search by product name, SKU, or barcode..."
               className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
             />
@@ -122,7 +186,7 @@ export const StockFilters: React.FC<StockFiltersProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            onClick={onReset}
+            onClick={handleReset}
             className="text-gray-500 hover:text-gray-700"
           >
             <X className="w-4 h-4 mr-1" />

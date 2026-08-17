@@ -30,6 +30,9 @@ import { Spinner } from '@/components/ui';
 import { Stock } from '@/types/stock';
 import type { RestockFormData, AdjustStockFormData, CreateStockFormData } from '@/utils/validators/stock';
 
+// Module scope, not an inline literal: useUrlFilters memoises `filters` on the
+// identity of both `defaults` and `parse`, so a fresh object per render would
+// rebuild `filters` every render.
 const STOCK_FILTER_DEFAULTS = {
   search: '',
   branch: '',
@@ -37,6 +40,33 @@ const STOCK_FILTER_DEFAULTS = {
   outOfStock: false,
   sortField: 'product.name',
   sortOrder: 'asc',
+};
+
+/** Columns the table can actually sort by — see `filteredStock`'s switch. */
+const SORT_FIELDS = ['product.name', 'branch.name', 'quantity', 'available', 'sellingPrice'];
+
+/**
+ * Builds a parser that clamps a hand-edited or shared URL back to the default.
+ * `?sortOrder=xyz` must read as "asc", not reach the sort comparator as a value
+ * that matches neither branch.
+ */
+function oneOf<T extends string>(allowed: readonly T[], fallback: T) {
+  return (raw: string): T => (allowed.includes(raw as T) ? (raw as T) : fallback);
+}
+
+/**
+ * `branch` is the live one: an admin pasting a malformed branch id would send
+ * it straight to the API and get a raw error back, where the spec's intent is a
+ * silent clamp. Shape is enough — whether the id exists is the server's call,
+ * and a valid-looking id the user cannot see is already handled by
+ * `effectiveBranch` below.
+ */
+const OBJECT_ID_PATTERN = /^[0-9a-fA-F]{24}$/;
+
+const STOCK_FILTER_PARSERS = {
+  branch: (raw: string) => (OBJECT_ID_PATTERN.test(raw) ? raw : ''),
+  sortField: oneOf(SORT_FIELDS, 'product.name'),
+  sortOrder: oneOf(['asc', 'desc'], 'asc'),
 };
 
 /**
@@ -51,12 +81,17 @@ function StockPageContent() {
   const { branchId: userBranchId } = useBranchContext();
 
   // Filter state — lives in the URL so it survives navigation and refresh.
-  const { filters, setFilters, resetFilters } = useUrlFilters(STOCK_FILTER_DEFAULTS);
+  const { filters, setFilters, resetFilters } = useUrlFilters(
+    STOCK_FILTER_DEFAULTS,
+    STOCK_FILTER_PARSERS
+  );
   const search = String(filters.search);
   const selectedBranch = String(filters.branch);
   const showLowStock = Boolean(filters.lowStock);
   const showOutOfStock = Boolean(filters.outOfStock);
   const sortField = String(filters.sortField);
+  // Safe cast: STOCK_FILTER_PARSERS allow-lists both of these, so a garbage
+  // URL value has already been clamped back to its default by now.
   const sortOrder = filters.sortOrder as 'asc' | 'desc';
 
   // A hand-edited or shared URL can name a branch this user cannot see. The
@@ -311,7 +346,9 @@ function StockPageContent() {
       {/* Filters */}
       <StockFilters
         search={search}
-        onSearchChange={(v) => setFilters({ search: v })}
+        // Debounced inside StockFilters. 'replace' (the default) on purpose —
+        // a typing pause must not become a history entry.
+        onSearchChange={(v) => setFilters({ search: v }, 'replace')}
         branchId={effectiveBranch}
         onBranchChange={(v) => setFilters({ branch: v }, 'push')}
         branches={branches}
