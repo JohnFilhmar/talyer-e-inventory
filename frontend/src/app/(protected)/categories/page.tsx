@@ -75,7 +75,13 @@ function CategoriesPageContent() {
 
   const { highlightedId, highlight, getHighlightProps } = useHighlightNew();
   const { show } = useToast();
-  const [expandPath, setExpandPath] = useState<string[]>([]);
+  // The nonce is what makes a repeat create work: two subcategories created
+  // under the same parent yield the same `path`, so the tree would see no
+  // change and skip the expansion the second time round.
+  const [expandRequest, setExpandRequest] = useState<{ nonce: number; path: string[] }>({
+    nonce: 0,
+    path: [],
+  });
 
   // Fetch root categories with children populated
   const { data: categories, isLoading, error, refetch } = useRootCategories(showArchived);
@@ -162,15 +168,22 @@ function CategoriesPageContent() {
   }, []);
 
   const handleFormSuccess = useCallback(
-    async (saved: Category) => {
+    async (saved: Category, isCreate: boolean) => {
       handleFormClose();
       // The tree must hold the new node before its ancestors can be located or
       // its row scrolled to, so wait for the refetch rather than firing and
       // hoping.
       const { data: fresh } = await refetch();
-      const path = findAncestorPath(fresh ?? [], saved._id) ?? [];
-      setExpandPath(path);
-      highlight(saved._id);
+
+      // Only a create is "new". An edit gets the toast and nothing else —
+      // painting a New badge on a record the user just changed would be a lie,
+      // and the scroll-to comes from the same highlight ref, so it goes too.
+      if (isCreate) {
+        const path = findAncestorPath(fresh ?? [], saved._id) ?? [];
+        setExpandRequest((current) => ({ nonce: current.nonce + 1, path }));
+        highlight(saved._id);
+      }
+
       show(`Saved "${saved.name}"`);
     },
     [refetch, highlight, show, handleFormClose]
@@ -282,7 +295,7 @@ function CategoriesPageContent() {
         restoringId={restoreMutation.isPending ? restoreMutation.variables : null}
         onAddChild={showAdminActions ? handleAddSubcategory : undefined}
         isAdmin={showAdminActions}
-        expandPath={expandPath}
+        expandRequest={expandRequest}
         highlightedId={highlightedId}
         getHighlightProps={getHighlightProps}
       />

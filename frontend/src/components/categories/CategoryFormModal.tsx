@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useLayoutEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Input } from '@/components/ui/Input';
@@ -31,7 +31,11 @@ interface CategoryFormModalProps {
   category?: Category | null;
   parentCategory?: Category | null;
   onClose: () => void;
-  onSuccess?: (created: Category) => void;
+  /**
+   * `isCreate` distinguishes the two paths: only a create is "new", so only a
+   * create earns the highlight ring and the New badge on the tree.
+   */
+  onSuccess?: (saved: Category, isCreate: boolean) => void;
 }
 
 /**
@@ -87,11 +91,17 @@ export const CategoryFormModal: React.FC<CategoryFormModalProps> = ({
     setValue('code', uppercased);
   };
 
-  // The two mutations' `reset` are stable prototype methods on the underlying
-  // observer, unlike the result objects themselves, which `useMutation` rebuilds
-  // as a fresh literal on every render. Depending on the objects would re-run the
-  // effect each render, and `reset()` notifies its observer, so that render would
-  // schedule the next one — an unbounded loop. Depend on the methods instead.
+  // The two mutations' `reset` are bound to the underlying observer once, in
+  // its constructor, and the observer outlives every render — so these two
+  // references are stable, unlike the result objects themselves, which
+  // `useMutation` rebuilds as a fresh literal on every render. Depending on the
+  // objects would re-run the effect each render, and `reset()` notifies its
+  // observer, so that render would schedule the next one — an unbounded loop.
+  // Depend on the bound methods instead.
+  //
+  // Verified against the installed @tanstack/query-core 5.101.4: the result's
+  // `reset` is `observer.reset`, an own property whose `name` is "bound reset",
+  // and calling it detached from the result object works.
   const resetCreateMutation = createMutation.reset;
   const resetUpdateMutation = updateMutation.reset;
 
@@ -99,7 +109,11 @@ export const CategoryFormModal: React.FC<CategoryFormModalProps> = ({
   // a second create in a row never re-runs (both `category` and
   // `parentCategory` stay null), and the form opens holding the last one's
   // values.
-  useEffect(() => {
+  //
+  // useLayoutEffect, not useEffect: a passive effect runs after paint, so a
+  // reopened modal would commit one frame still showing the previous record's
+  // values — a flash of the exact bug this is here to fix.
+  useLayoutEffect(() => {
     if (!isOpen) return;
 
     if (category) {
@@ -148,14 +162,16 @@ export const CategoryFormModal: React.FC<CategoryFormModalProps> = ({
         ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
       };
 
+      const editing = isEditing && category ? category : null;
+
       let saved: Category;
-      if (isEditing && category) {
-        saved = await updateMutation.mutateAsync({ id: category._id, payload });
+      if (editing) {
+        saved = await updateMutation.mutateAsync({ id: editing._id, payload });
       } else {
         saved = await createMutation.mutateAsync(payload);
       }
 
-      onSuccess?.(saved);
+      onSuccess?.(saved, !editing);
       onClose();
     } catch {
       // Error is handled by mutation error state

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { FolderTree } from 'lucide-react';
 import { CategoryNode } from './CategoryNode';
 import { Spinner } from '@/components/ui/Spinner';
@@ -17,8 +17,15 @@ interface CategoryTreeProps {
   restoringId?: string | null;
   onAddChild?: (parentCategory: Category) => void;
   isAdmin?: boolean;
-  /** Ancestor chain to force open, e.g. after creating a subcategory. */
-  expandPath?: string[];
+  /**
+   * Ancestor chain to force open, e.g. after creating a subcategory.
+   *
+   * Carries a `nonce` because the path alone is not a usable trigger: two
+   * creates under the same parent produce the same `path`, so keying on its
+   * contents would skip the second expansion entirely and the new row would
+   * never mount. The page bumps `nonce` per request.
+   */
+  expandRequest?: { nonce: number; path: string[] };
   highlightedId?: string | null;
   getHighlightProps?: (id: string) => { ref?: (node: HTMLElement | null) => void; className: string };
 }
@@ -38,7 +45,7 @@ export const CategoryTree: React.FC<CategoryTreeProps> = ({
   restoringId = null,
   onAddChild,
   isAdmin = false,
-  expandPath,
+  expandRequest,
   highlightedId = null,
   getHighlightProps,
 }) => {
@@ -46,26 +53,31 @@ export const CategoryTree: React.FC<CategoryTreeProps> = ({
 
   // Roots default to expanded, matching the behaviour CategoryNode used to
   // implement locally with useState(level === 0).
-  const rootIds = useMemo(() => categories.map((c) => c._id).join(','), [categories]);
-  const [seededRoots, setSeededRoots] = useState('');
-  if (rootIds !== seededRoots) {
-    setSeededRoots(rootIds);
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      for (const category of categories) next.add(category._id);
-      return next;
-    });
+  //
+  // Each id is seeded exactly ONCE. Re-seeding whenever the root list changes
+  // would spring a deliberately collapsed root back open every time a category
+  // is created or archived, or the archived filter is toggled — the old
+  // per-node state never did that, because nodes are keyed by `_id` and are
+  // not remounted by a sibling appearing.
+  const [seededRootIds, setSeededRootIds] = useState<Set<string>>(new Set());
+  const unseededRootIds = categories
+    .map((category) => category._id)
+    .filter((id) => !seededRootIds.has(id));
+  if (unseededRootIds.length > 0) {
+    setSeededRootIds((current) => new Set([...current, ...unseededRootIds]));
+    setExpandedIds((current) => new Set([...current, ...unseededRootIds]));
   }
 
   // A newly created subcategory can sit under a collapsed parent, where it is
   // not rendered at all. Opening its whole ancestor chain is what makes the
-  // highlight reachable.
-  const pathKey = (expandPath ?? []).join(',');
-  const [seededPath, setSeededPath] = useState('');
-  if (pathKey !== seededPath) {
-    setSeededPath(pathKey);
-    if (expandPath?.length) {
-      setExpandedIds((current) => new Set([...current, ...expandPath]));
+  // highlight reachable. Keyed on the request's nonce, not on the path's
+  // contents, so a repeat create under the same parent expands again.
+  const requestNonce = expandRequest?.nonce ?? 0;
+  const [seededNonce, setSeededNonce] = useState(0);
+  if (requestNonce !== seededNonce) {
+    setSeededNonce(requestNonce);
+    if (expandRequest?.path.length) {
+      setExpandedIds((current) => new Set([...current, ...expandRequest.path]));
     }
   }
 
