@@ -7,6 +7,7 @@ import { OfflineBanner } from '@/components/offline/OfflineBanner';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuthStore } from '@/stores/authStore';
 import { BranchProvider } from '@/providers/BranchProvider';
+import { ToastProvider } from '@/components/ui/Toast';
 
 /**
  * Protected layout component
@@ -59,15 +60,17 @@ export default function ProtectedLayout({
 
   return (
     <BranchProvider>
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <OfflineBanner />
-        <main className="py-6">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            {children}
-          </div>
-        </main>
-      </div>
+      <ToastProvider>
+        <div className="min-h-screen bg-gray-50">
+          <Navbar />
+          <OfflineBanner />
+          <main className="py-6">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              {children}
+            </div>
+          </main>
+        </div>
+      </ToastProvider>
     </BranchProvider>
   );
 }
