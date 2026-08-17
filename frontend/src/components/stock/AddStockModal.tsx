@@ -388,7 +388,11 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
                   hint="Hold the product barcode inside the frame. The matching product is selected and the scanner closes."
                 />
                 {scanFeedback && (
-                  <p className="mt-2 text-sm text-black" role="status" aria-live="polite">
+                  <p
+                    className="mt-2 text-sm text-black dark:text-gray-100"
+                    role="status"
+                    aria-live="polite"
+                  >
                     {scanFeedback}
                   </p>
                 )}

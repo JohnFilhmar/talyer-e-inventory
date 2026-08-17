@@ -52,6 +52,23 @@ export const StockFilters: React.FC<StockFiltersProps> = ({
   const [localSearch, setLocalSearch] = useState(search);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // The pending commit must run against the *current* callback, not the one
+  // captured when the key was pressed. `onSearchChange` closes over the page's
+  // `setFilters`, which in turn closes over the filter snapshot of its own
+  // render — so firing the 800ms-old prop would write the URL from an 800ms-old
+  // snapshot. Ticking Low Stock, switching branch or clicking a sort header
+  // within that window would then be silently reverted by the debounce, looking
+  // for all the world like the UI ignored the click.
+  //
+  // Kept current from an effect, not from the render body: the React Compiler
+  // lint rejects writing a ref during render. That is late enough — the timer
+  // is scheduled from an event handler and fires 800ms later, long after any
+  // re-render has committed and run this.
+  const onSearchChangeRef = useRef(onSearchChange);
+  useEffect(() => {
+    onSearchChangeRef.current = onSearchChange;
+  }, [onSearchChange]);
+
   // Prop-to-state resync, derived during render rather than in an effect (the
   // project's React Compiler lint rejects setState in an effect body, and an
   // effect would cost a second render pass). Skipped while a debounce is
@@ -77,10 +94,11 @@ export const StockFilters: React.FC<StockFiltersProps> = ({
         // Nulled before the commit so the resync above knows nothing is
         // pending any more — leave it set and the resync never runs again.
         debounceTimerRef.current = null;
-        onSearchChange(value);
+        // Through the ref, never the captured prop — see `onSearchChangeRef`.
+        onSearchChangeRef.current(value);
       }, SEARCH_DEBOUNCE_MS);
     },
-    [onSearchChange]
+    []
   );
 
   const handleReset = useCallback(() => {
