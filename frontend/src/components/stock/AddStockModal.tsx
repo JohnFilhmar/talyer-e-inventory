@@ -3,13 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { Package, X, Search, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { createStockSchema, type CreateStockFormData } from '@/utils/validators/stock';
-import { useProductSearch } from '@/hooks/useProducts';
+import { useProductSearch, productKeys } from '@/hooks/useProducts';
+import { productService } from '@/lib/services/productService';
 import type { Branch } from '@/types/branch';
 import type { Supplier } from '@/types/supplier';
 import type { ProductSearchResult } from '@/types/product';
@@ -56,6 +58,12 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanFeedback, setScanFeedback] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const [scanLookupPending, setScanLookupPending] = React.useState(false);
+  // A BarcodeScanner can emit the same code several times as the frame settles.
+  // Without this, one physical scan fires several lookups and the feedback line
+  // flickers between them.
+  const lastScanRef = React.useRef<string | null>(null);
 
   // Use debounced product search
   const { data: searchResults, isLoading: searchLoading } = useProductSearch(
@@ -86,7 +94,6 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
   });
 
   // Watch form values for calculations
-  // eslint-disable-next-line react-hooks/incompatible-library
   const quantity = watch('quantity');
   const costPrice = watch('costPrice');
   const sellingPrice = watch('sellingPrice');
@@ -104,6 +111,8 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
       setProductSearch('');
       setSelectedProduct(null);
       setShowProductDropdown(false);
+      setScanFeedback(null);
+      lastScanRef.current = null;
     }
   }, [isOpen, reset]);
 
@@ -257,6 +266,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
                 onClick={() => {
                   setScannerOpen((open) => !open);
                   setScanFeedback(null);
+                  lastScanRef.current = null;
                 }}
                 disabled={searchLoading}
               >
@@ -269,18 +279,45 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
             {scannerOpen && (
               <div className="mb-4">
                 <BarcodeScanner
-                  onScan={(value) => {
-                    // Handle scanned value
-                    const matchedProduct = searchResults?.find((product) => product.sku === value);
-                    if (matchedProduct) {
-                      handleSelectProduct(matchedProduct);
-                      setScanFeedback(`Scanned: ${matchedProduct.name}`);
-                    } else {
-                      setScanFeedback(`No product found for barcode: ${value}`);
+                  onScan={async (value) => {
+                    if (scanLookupPending) return;
+                    if (lastScanRef.current === value) return;
+                    lastScanRef.current = value;
+                    setScanLookupPending(true);
+                    setScanFeedback('Looking up barcode...');
+
+                    try {
+                      // Imperative on purpose. Routing this back through useProductSearch would
+                      // reimpose its 600ms debounce and its >= 2 character gate on an event that
+                      // already has the exact value to look up.
+                      const results = await queryClient.fetchQuery({
+                        queryKey: productKeys.search({ q: value, limit: 1 }),
+                        queryFn: () => productService.search({ q: value, limit: 1 }),
+                      });
+
+                      const match = results?.[0];
+                      if (match) {
+                        handleSelectProduct(match);
+                        setScannerOpen(false);
+                        setScanFeedback(`Scanned ${match.name} (${match.sku})`);
+                      } else {
+                        // Stay open — the usual cause is a misread, and reopening the camera to
+                        // try again is the slow path.
+                        lastScanRef.current = null;
+                        setScanFeedback(`No product found for barcode ${value}`);
+                      }
+                    } catch (cause) {
+                      // "Could not look up" is a different problem from "not found": stock
+                      // operations are online-only, so this is most often a dropped connection.
+                      lastScanRef.current = null;
+                      const reason = cause instanceof Error ? cause.message : 'the lookup failed';
+                      setScanFeedback(`Could not look up barcode ${value} (${reason}). Check your connection and scan again.`);
+                    } finally {
+                      setScanLookupPending(false);
                     }
                   }}
                   onClose={() => setScannerOpen(false)}
-                  hint="Hold a barcode inside the frame. Items are added as they are scanned; scanning the same product again increases its quantity."
+                  hint="Hold the product barcode inside the frame. The matching product is selected and the scanner closes."
                 />
                 {scanFeedback && (
                   <p className="mt-2 text-sm text-black" role="status" aria-live="polite">
