@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, Suspense } from 'react';
 import { Package, RefreshCw, Plus } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useBranches } from '@/hooks/useBranches';
 import { useActiveSuppliers } from '@/hooks/useSuppliers';
+import { useUrlFilters } from '@/hooks/useUrlFilters';
+import { useBranchContext } from '@/providers/BranchProvider';
 import {
   useStock,
   useStockByBranch,
@@ -24,28 +26,43 @@ import {
 } from '@/components/stock';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { Spinner } from '@/components/ui';
 import { Stock } from '@/types/stock';
 import type { RestockFormData, AdjustStockFormData, CreateStockFormData } from '@/utils/validators/stock';
 
+const STOCK_FILTER_DEFAULTS = {
+  search: '',
+  branch: '',
+  lowStock: false,
+  outOfStock: false,
+  sortField: 'product.name',
+  sortOrder: 'asc',
+};
+
 /**
  * Stock Overview Page
- * 
+ *
  * Main stock management page showing all stock across branches
  * with filtering, sorting, and restock/adjust capabilities.
  */
-export default function StockPage() {
+function StockPageContent() {
   const { user, isAdmin } = useAuth();
   const showAdminActions = isAdmin();
+  const { branchId: userBranchId } = useBranchContext();
 
-  // Filter state
-  const [search, setSearch] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState('');
-  const [showLowStock, setShowLowStock] = useState(false);
-  const [showOutOfStock, setShowOutOfStock] = useState(false);
+  // Filter state — lives in the URL so it survives navigation and refresh.
+  const { filters, setFilters, resetFilters } = useUrlFilters(STOCK_FILTER_DEFAULTS);
+  const search = String(filters.search);
+  const selectedBranch = String(filters.branch);
+  const showLowStock = Boolean(filters.lowStock);
+  const showOutOfStock = Boolean(filters.outOfStock);
+  const sortField = String(filters.sortField);
+  const sortOrder = filters.sortOrder as 'asc' | 'desc';
 
-  // Sort state
-  const [sortField, setSortField] = useState('product.name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  // A hand-edited or shared URL can name a branch this user cannot see. The
+  // backend rejects it (utils/branchScope.js), but a 403 on page load is a
+  // worse experience than silently showing the branch they do have.
+  const effectiveBranch = showAdminActions ? selectedBranch : (userBranchId ?? '');
 
   // Modal state
   const [restockStock, setRestockStock] = useState<Stock | null>(null);
@@ -66,12 +83,12 @@ export default function StockPage() {
   // Use branch-specific query if a branch is selected, otherwise get all stock
   const allStockQuery = useStock(
     {},
-    { enabled: !selectedBranch }
+    { enabled: !effectiveBranch }
   );
 
   const branchStockQuery = useStockByBranch(
-    selectedBranch || undefined,
-    { enabled: !!selectedBranch }
+    effectiveBranch || undefined,
+    { enabled: !!effectiveBranch }
   );
 
   const lowStockQuery = useLowStock();
@@ -82,7 +99,7 @@ export default function StockPage() {
   const addStockMutation = useRestock();
 
   // Determine which data to use and extract array
-  const stockQuery = selectedBranch ? branchStockQuery : allStockQuery;
+  const stockQuery = effectiveBranch ? branchStockQuery : allStockQuery;
   
   // Extract stock array from query data
   const stockData = useMemo(() => {
@@ -187,19 +204,11 @@ export default function StockPage() {
   // Handlers
   const handleSortChange = useCallback((field: string) => {
     if (sortField === field) {
-      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      setFilters({ sortOrder: sortOrder === 'asc' ? 'desc' : 'asc' }, 'push');
     } else {
-      setSortField(field);
-      setSortOrder('asc');
+      setFilters({ sortField: field, sortOrder: 'asc' }, 'push');
     }
-  }, [sortField]);
-
-  const handleResetFilters = useCallback(() => {
-    setSearch('');
-    setSelectedBranch('');
-    setShowLowStock(false);
-    setShowOutOfStock(false);
-  }, []);
+  }, [sortField, sortOrder, setFilters]);
 
   const handleRestock = useCallback(async (stockId: string, data: RestockFormData) => {
     await restockMutation.mutateAsync({
@@ -302,16 +311,16 @@ export default function StockPage() {
       {/* Filters */}
       <StockFilters
         search={search}
-        onSearchChange={setSearch}
-        branchId={selectedBranch}
-        onBranchChange={setSelectedBranch}
+        onSearchChange={(v) => setFilters({ search: v })}
+        branchId={effectiveBranch}
+        onBranchChange={(v) => setFilters({ branch: v }, 'push')}
         branches={branches}
         branchesLoading={branchesLoading}
         showLowStock={showLowStock}
-        onShowLowStockChange={setShowLowStock}
+        onShowLowStockChange={(v) => setFilters({ lowStock: v }, 'push')}
         showOutOfStock={showOutOfStock}
-        onShowOutOfStockChange={setShowOutOfStock}
-        onReset={handleResetFilters}
+        onShowOutOfStockChange={(v) => setFilters({ outOfStock: v }, 'push')}
+        onReset={resetFilters}
       />
 
       {/* Stock Table */}
@@ -376,5 +385,24 @@ export default function StockPage() {
         onClose={() => setHistoryStock(null)}
       />
     </div>
+  );
+}
+
+/**
+ * `StockPageContent` reads filters from the URL via `useUrlFilters`, which
+ * calls `useSearchParams()` — that opts this route into client rendering, so
+ * it must be wrapped in Suspense or the static build fails.
+ */
+export default function StockPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container mx-auto px-4 py-6 flex items-center justify-center">
+          <Spinner size="lg" />
+        </div>
+      }
+    >
+      <StockPageContent />
+    </Suspense>
   );
 }
