@@ -22,12 +22,16 @@ export interface CollapsibleSectionProps {
  * input inside stays registered with react-hook-form and a collapsed section
  * still submits its values. Unmounting would silently drop them.
  *
- * `error` forces the section open. `expanded` is computed from `isOpen || error`
- * during render rather than synced via an effect + setState — the React
- * Compiler lint in this project rejects setState-in-an-effect, and there is
- * nothing here an effect would do that the pure derivation doesn't already
- * cover. Without it, a validation failure inside a collapsed section would
- * block the submit with nothing visible to explain why.
+ * `error` forces the section open, and `expanded` stays `isOpen || error` so a
+ * click on the header can never close it while an error stands. But `isOpen`
+ * itself has to be persisted to `true` the moment `error` turns on, not just
+ * derived for display: if it were derived only, the section would snap shut
+ * the instant the error cleared (e.g. the user fixes the field and
+ * react-hook-form re-validates) even though the user never touched the
+ * header and is still looking at it. This uses the same derive-during-render
+ * pattern as `ProductFilters` — comparing `error` to its previous value
+ * during render — rather than a `useEffect` + `setIsOpen`, which the React
+ * Compiler lint here rejects.
  */
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   title,
@@ -38,6 +42,14 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   className = '',
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  // Persist isOpen to true when error turns on, so clearing the error later
+  // leaves the section open instead of folding it away under the user.
+  const [prevError, setPrevError] = useState(error);
+  if (error !== prevError) {
+    setPrevError(error);
+    if (error) setIsOpen(true);
+  }
 
   const contentId = `collapsible-${title.replace(/\s+/g, '-').toLowerCase()}`;
   const expanded = isOpen || error;
