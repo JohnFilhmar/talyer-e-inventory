@@ -6,7 +6,6 @@ import { Plus, Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useProducts, useDeleteProduct, useRestoreProduct } from '@/hooks/useProducts';
 import { useUrlFilters } from '@/hooks/useUrlFilters';
-import { useHighlightNew } from '@/hooks/useHighlightNew';
 import { ProductGrid, ProductFilters, DeleteProductModal } from '@/components/products';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
@@ -33,7 +32,6 @@ const PRODUCT_FILTER_DEFAULTS: Record<string, string | number> = {
   motorcycleModel: '',
   minPrice: '',
   maxPrice: '',
-  new: '',
 };
 
 // A hand-edited or shared link can carry a non-numeric minPrice/maxPrice
@@ -46,11 +44,27 @@ function parseNumericOrEmpty(raw: string): string {
   return raw !== '' && Number.isFinite(Number(raw)) ? raw : '';
 }
 
+/** Columns the API can sort by. Anything else is a hand-edited URL. */
+const SORT_FIELDS = ['name', 'sellingPrice', 'costPrice', 'createdAt', 'updatedAt'];
+
+/**
+ * Builds a parser that clamps an unrecognised value back to the default, so
+ * `?sortBy=<garbage>` reads as the default sort rather than reaching the API.
+ */
+function oneOf<T extends string>(allowed: readonly T[], fallback: T) {
+  return (raw: string): T => (allowed.includes(raw as T) ? (raw as T) : fallback);
+}
+
 // Module scope for the same reason as PRODUCT_FILTER_DEFAULTS: useUrlFilters
 // memoises on this object's identity too.
 const PRODUCT_FILTER_PARSERS = {
   minPrice: parseNumericOrEmpty,
   maxPrice: parseNumericOrEmpty,
+  sortBy: oneOf(SORT_FIELDS, 'createdAt'),
+  sortOrder: oneOf(['asc', 'desc'], 'desc'),
+  // `'all'` is this page's sentinel for "Active + archived" — see
+  // `handleFilterChange`. Anything else falls back to the default.
+  active: oneOf(['true', 'false', 'all'], 'true'),
 };
 
 /**
@@ -118,22 +132,6 @@ function ProductsPageContent() {
     ...(urlFilters.minPrice ? { minPrice: Number(urlFilters.minPrice) } : {}),
     ...(urlFilters.maxPrice ? { maxPrice: Number(urlFilters.maxPrice) } : {}),
   }), [urlFilters]);
-  // `new` is carried in the URL but deliberately excluded here — it is a UI
-  // concern, not a query parameter, and sending it would bust the React
-  // Query cache key for no reason.
-
-  // Highlight a product just created elsewhere and redirected back here via
-  // /products?new=<id>.
-  const { highlightedId, highlight, getHighlightProps } = useHighlightNew();
-  const newId = String(urlFilters.new ?? '');
-
-  // Derive-during-render rather than useEffect — the React Compiler lint
-  // rejects setState in an effect body. Mirrors ProductFilters.tsx:82-96.
-  const [seenNewId, setSeenNewId] = useState('');
-  if (newId && newId !== seenNewId) {
-    setSeenNewId(newId);
-    highlight(newId);
-  }
 
   // Modal state
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
@@ -190,7 +188,7 @@ function ProductsPageContent() {
   }, [deleteMutation]);
 
   const handleFilterChange = useCallback((next: ProductListParams) => {
-    setFilters({
+    const nextValues: Record<string, string> = {
       search: next.search ?? '',
       category: next.category ?? '',
       brand: next.brand ?? '',
@@ -205,10 +203,20 @@ function ProductsPageContent() {
       maxPrice: next.maxPrice?.toString() ?? '',
       sortBy: next.sortBy ?? 'createdAt',
       sortOrder: next.sortOrder ?? 'desc',
-      // Already debounced by 800ms inside ProductFilters, so this is a commit,
-      // not a keystroke — push, so Back undoes an applied filter.
-    }, 'push');
-  }, [setFilters]);
+    };
+
+    // Every input in ProductFilters commits through this one callback after the
+    // same 800ms debounce, so "a commit" is not the same thing as "a gesture
+    // worth a history entry": typing a word produces one commit per pause, and
+    // pushing each of them buries the previous page under a pile of Back steps.
+    // Search alone therefore replaces; picking a category, a price bound or a
+    // sort is a deliberate choice and pushes, so Back undoes it.
+    const onlySearchChanged = Object.entries(nextValues).every(
+      ([key, value]) => key === 'search' || value === String(urlFilters[key] ?? '')
+    );
+
+    setFilters(nextValues, onlySearchChanged ? 'replace' : 'push');
+  }, [setFilters, urlFilters]);
 
   const handlePageChange = useCallback((newPage: number) => {
     setFilters({ page: newPage }, 'push');
@@ -340,8 +348,6 @@ function ProductsPageContent() {
         onRestore={showAdminActions ? handleRestoreProduct : undefined}
         restoringId={restoreMutation.isPending ? restoreMutation.variables : null}
         isAdmin={showAdminActions}
-        highlightedId={highlightedId}
-        getHighlightProps={getHighlightProps}
         emptyMessage={
           Object.keys(filters).some(
             (k) =>
