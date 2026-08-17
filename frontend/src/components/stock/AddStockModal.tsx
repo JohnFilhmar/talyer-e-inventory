@@ -110,6 +110,20 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
     ? ((sellingPrice - costPrice) / costPrice * 100).toFixed(1)
     : '0';
 
+  // Centralised, user-initiated scanner close. Every path that dismisses the
+  // scanner other than a successful match — the toggle button, the
+  // BarcodeScanner's own close/error-close controls, and the modal-close
+  // reset — routes through this so none of them can forget to neutralise an
+  // in-flight lookup. The success path in onScan deliberately does NOT call
+  // this: it would null out the success feedback this function also clears.
+  const closeScanner = React.useCallback(() => {
+    scanGenerationRef.current += 1;
+    setScanLookupPending(false);
+    lastScanRef.current = null;
+    setScanFeedback(null);
+    setScannerOpen(false);
+  }, []);
+
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -117,12 +131,9 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
       setProductSearch('');
       setSelectedProduct(null);
       setShowProductDropdown(false);
-      setScanFeedback(null);
-      lastScanRef.current = null;
-      scanGenerationRef.current += 1;
-      setScanLookupPending(false);
+      closeScanner();
     }
-  }, [isOpen, reset]);
+  }, [isOpen, reset, closeScanner]);
 
   // Handle product selection
   const handleSelectProduct = (product: ProductSearchResult) => {
@@ -272,11 +283,11 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
                 variant="secondary"
                 size="sm"
                 onClick={() => {
-                  setScannerOpen((open) => !open);
-                  setScanFeedback(null);
-                  lastScanRef.current = null;
-                  scanGenerationRef.current += 1;
-                  setScanLookupPending(false);
+                  if (scannerOpen) {
+                    closeScanner();
+                  } else {
+                    setScannerOpen(true);
+                  }
                 }}
                 disabled={searchLoading}
               >
@@ -335,7 +346,7 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
                       }
                     }
                   }}
-                  onClose={() => setScannerOpen(false)}
+                  onClose={closeScanner}
                   hint="Hold the product barcode inside the frame. The matching product is selected and the scanner closes."
                 />
                 {scanFeedback && (
