@@ -28,6 +28,14 @@ interface AddStockModalProps {
 }
 
 /**
+ * More than one row is fetched for a scan on purpose: at `limit: 1` the client
+ * cannot tell an exact hit from the first of several substring matches, and
+ * auto-selecting that row commits the wrong product to the form. A handful is
+ * enough to answer "is this ambiguous?" without paging the catalog.
+ */
+const SCAN_LOOKUP_LIMIT = 5;
+
+/**
  * Format price in Philippine Peso
  */
 function formatPrice(amount: number): string {
@@ -330,17 +338,33 @@ export const AddStockModal: React.FC<AddStockModalProps> = ({
                       // reimpose its 600ms debounce and its >= 2 character gate on an event that
                       // already has the exact value to look up.
                       const results = await queryClient.fetchQuery({
-                        queryKey: productKeys.search({ q: value, limit: 1 }),
-                        queryFn: () => productService.search({ q: value, limit: 1 }),
+                        queryKey: productKeys.search({ q: value, limit: SCAN_LOOKUP_LIMIT }),
+                        queryFn: () => productService.search({ q: value, limit: SCAN_LOOKUP_LIMIT }),
                       });
 
                       if (generation !== scanGenerationRef.current) return;
 
-                      const match = results?.[0];
-                      if (match) {
+                      const matches = results ?? [];
+                      if (matches.length === 1) {
+                        const match = matches[0];
                         handleSelectProduct(match);
                         setScannerOpen(false);
                         setScanFeedback(`Scanned ${match.name} (${match.sku})`);
+                      } else if (matches.length > 1) {
+                        // Ambiguous, so select nothing. The backend matches the scanned string
+                        // as a substring across name/sku/brand/productModel/barcode, and
+                        // ProductSearchResult carries no `barcode` field for the client to
+                        // verify against — so a short or partial read really can match two
+                        // products, and committing the first would silently write stock against
+                        // the wrong one. Stay open and hand it back to the user.
+                        //
+                        // lastScanRef deliberately keeps the value here, as on the success path:
+                        // the camera re-decodes the same code many times a second, and releasing
+                        // it would re-run this lookup on every frame. The message stays on screen
+                        // until a different code is presented or the scanner is toggled.
+                        setScanFeedback(
+                          `Barcode ${value} matched ${matches.length} products — search for the right one above.`
+                        );
                       } else {
                         // Stay open — the usual cause is a misread, and reopening the camera to
                         // try again is the slow path.
