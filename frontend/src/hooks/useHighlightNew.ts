@@ -55,10 +55,17 @@ export function useHighlightNew(durationMs = DEFAULT_DURATION_MS) {
     [highlightedId]
   );
 
+  // The offset colour is explicit in both themes. Tailwind's default
+  // `--tw-ring-offset-color` is white, so on a dark surface the gap between the
+  // ring and the row rendered as a white halo.
   const getHighlightProps = useCallback(
     (id: string) =>
       id === highlightedId
-        ? { ref: attachRef, className: 'ring-2 ring-yellow-400 ring-offset-2' }
+        ? {
+            ref: attachRef,
+            className:
+              'ring-2 ring-yellow-400 ring-offset-2 ring-offset-white dark:ring-offset-gray-900',
+          }
         : { className: '' },
     [highlightedId, attachRef]
   );

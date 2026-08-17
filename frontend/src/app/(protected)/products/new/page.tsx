@@ -413,9 +413,12 @@ function ProductForm({ mode, productId }: ProductFormProps) {
             <p className="flex-1 text-sm font-medium text-black dark:text-gray-100">
               Created &ldquo;{lastCreated.name}&rdquo;
             </p>
+            {/* `shrink-0` on both, matching the near-identical toast row: at
+                375px a long product name would otherwise wrap the link and
+                squeeze the dismiss button. */}
             <Link
               href={`/products/${lastCreated.id}`}
-              className="text-sm font-semibold text-black dark:text-gray-100 underline"
+              className="shrink-0 text-sm font-semibold text-black dark:text-gray-100 underline"
             >
               View product
             </Link>
@@ -423,7 +426,7 @@ function ProductForm({ mode, productId }: ProductFormProps) {
               type="button"
               onClick={() => setLastCreated(null)}
               aria-label="Dismiss"
-              className="text-gray-400 hover:text-black dark:hover:text-gray-100"
+              className="shrink-0 text-gray-400 hover:text-black dark:hover:text-gray-100"
             >
               <X className="h-4 w-4" />
             </button>
