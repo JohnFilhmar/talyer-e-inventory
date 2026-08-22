@@ -1,0 +1,1 @@
+# One domain per file (api.ts, auth.ts, …), request and response types kept separate.
