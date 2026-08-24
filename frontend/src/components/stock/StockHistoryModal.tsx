@@ -28,18 +28,24 @@ export const StockHistoryModal: React.FC<StockHistoryModalProps> = ({
 }) => {
   const [page, setPage] = useState(1);
 
+  // Reset paging when the modal opens. Adjusted during render rather than in an
+  // effect so the query below is never issued for a stale page — React re-runs
+  // this component before committing, so no fetch is subscribed for the old
+  // value. The React Compiler lint also rejects a synchronous setState in an
+  // effect body.
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) {
+      setPage(1);
+    }
+  }
+
   const { data, isLoading, error } = useStockMovementsByStock(
     stock?._id,
     { page, limit: ITEMS_PER_PAGE },
     { enabled: isOpen && !!stock }
   );
-
-  // Reset page when modal opens
-  React.useEffect(() => {
-    if (isOpen) {
-      setPage(1);
-    }
-  }, [isOpen]);
 
   if (!stock) return null;
 
