@@ -159,7 +159,7 @@ const isBlankBarcode = (value) =>
   value === null || value === undefined || String(value).trim() === '';
 
 // Auto-generate SKU if not provided
-productSchema.pre('save', async function(next) {
+productSchema.pre('save', async function () {
   if (this.isModified('barcode') && isBlankBarcode(this.barcode)) {
     this.barcode = undefined;
   }
@@ -200,20 +200,18 @@ productSchema.pre('save', async function(next) {
       });
     }
   }
-  
-  next();
 });
 
 // The same normalisation for the update path — `updateProduct` goes through
 // findByIdAndUpdate, which never runs the save hook. Clearing a barcode has to
 // $unset it rather than write an empty string, so the cleared product drops out
 // of the partial index and frees that barcode for another product.
-productSchema.pre(['findOneAndUpdate', 'updateOne', 'updateMany'], function(next) {
+productSchema.pre(['findOneAndUpdate', 'updateOne', 'updateMany'], function () {
   const update = this.getUpdate();
-  if (!update) return next();
+  if (!update) return;
 
   const target = update.$set && 'barcode' in update.$set ? update.$set : update;
-  if (!('barcode' in target)) return next();
+  if (!('barcode' in target)) return;
 
   if (isBlankBarcode(target.barcode)) {
     delete target.barcode;
@@ -222,8 +220,6 @@ productSchema.pre(['findOneAndUpdate', 'updateOne', 'updateMany'], function(next
   } else {
     target.barcode = String(target.barcode).trim();
   }
-
-  next();
 });
 
 const Product = mongoose.model('Product', productSchema);

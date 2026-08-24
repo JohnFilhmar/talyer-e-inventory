@@ -122,7 +122,7 @@ stockMovementSchema.index({ createdAt: -1 });
 stockMovementSchema.index({ movementId: 1 });
 
 // Auto-generate movementId before saving
-stockMovementSchema.pre('save', async function (next) {
+stockMovementSchema.pre('save', async function () {
   if (!this.movementId) {
     const year = new Date().getFullYear();
     const prefix = `SM-${year}-`;
@@ -141,7 +141,6 @@ stockMovementSchema.pre('save', async function (next) {
 
     this.movementId = `${prefix}${String(nextNumber).padStart(6, '0')}`;
   }
-  next();
 });
 
 // Virtual for formatted quantity display

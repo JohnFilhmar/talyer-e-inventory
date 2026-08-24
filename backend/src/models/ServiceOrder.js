@@ -195,17 +195,16 @@ serviceOrderSchema.index({ 'customer.phone': 1 });
 serviceOrderSchema.index({ 'vehicle.plateNumber': 1 });
 
 // Auto-generate job number
-serviceOrderSchema.pre('save', async function(next) {
+serviceOrderSchema.pre('save', async function () {
   if (this.isNew && !this.jobNumber) {
     const year = new Date().getFullYear();
     const count = await this.constructor.countDocuments();
     this.jobNumber = `JOB-${year}-${String(count + 1).padStart(6, '0')}`;
   }
-  next();
 });
 
 // Calculate totals before saving
-serviceOrderSchema.pre('save', function(next) {
+serviceOrderSchema.pre('save', function () {
   // Calculate part totals
   this.partsUsed.forEach(part => {
     part.total = part.quantity * part.unitPrice;
@@ -228,8 +227,6 @@ serviceOrderSchema.pre('save', function(next) {
       this.payment.paidAt = new Date();
     }
   }
-  
-  next();
 });
 
 const ServiceOrder = mongoose.model('ServiceOrder', serviceOrderSchema);

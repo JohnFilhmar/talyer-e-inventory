@@ -158,17 +158,16 @@ salesOrderSchema.index({ 'customer.name': 1 });
 salesOrderSchema.index({ 'customer.phone': 1 });
 
 // Auto-generate order number
-salesOrderSchema.pre('save', async function(next) {
+salesOrderSchema.pre('save', async function () {
   if (this.isNew && !this.orderNumber) {
     const year = new Date().getFullYear();
     const count = await this.constructor.countDocuments();
     this.orderNumber = `SO-${year}-${String(count + 1).padStart(6, '0')}`;
   }
-  next();
 });
 
 // Calculate totals before saving
-salesOrderSchema.pre('save', function(next) {
+salesOrderSchema.pre('save', function () {
   // Calculate item totals
   this.items.forEach(item => {
     item.total = (item.quantity * item.unitPrice) - (item.discount || 0);
@@ -205,8 +204,6 @@ salesOrderSchema.pre('save', function(next) {
       this.payment.paidAt = new Date();
     }
   }
-  
-  next();
 });
 
 const SalesOrder = mongoose.model('SalesOrder', salesOrderSchema);
