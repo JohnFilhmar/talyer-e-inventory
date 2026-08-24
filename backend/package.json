@@ -24,7 +24,7 @@
     "express-validator": "^7.3.1",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.19.3",
+    "mongoose": "^9.9.3",
     "multer": "^2.0.2",
     "redis": "^6.1.0",
     "sharp": "^0.35.3",
@@ -32,8 +32,8 @@
     "uuid": "^14.0.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.0",
-    "@babel/preset-env": "^7.29.0",
+    "@babel/core": "^8.0.1",
+    "@babel/preset-env": "^8.0.2",
     "babel-jest": "^30.2.0",
     "cross-env": "^10.1.0",
     "jest": "^30.2.0",
