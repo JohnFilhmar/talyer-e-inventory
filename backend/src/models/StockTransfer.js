@@ -68,21 +68,18 @@ stockTransferSchema.index({ status: 1 });
 stockTransferSchema.index({ createdAt: -1 });
 
 // Auto-generate transfer number
-stockTransferSchema.pre('save', async function(next) {
+stockTransferSchema.pre('save', async function () {
   if (this.isNew && !this.transferNumber) {
     const year = new Date().getFullYear();
     const count = await this.constructor.countDocuments();
     this.transferNumber = `TR-${year}-${String(count + 1).padStart(6, '0')}`;
   }
-  next();
 });
 
 // Validate that fromBranch and toBranch are different
-stockTransferSchema.pre('save', function(next) {
+stockTransferSchema.pre('save', function () {
   if (this.fromBranch.toString() === this.toBranch.toString()) {
-    next(new Error('Source and destination branches must be different'));
-  } else {
-    next();
+    throw new Error('Source and destination branches must be different');
   }
 });
 

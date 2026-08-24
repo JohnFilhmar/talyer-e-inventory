@@ -123,7 +123,7 @@ motorcycleModelSchema.virtual('productCount', {
 // unlike Category.code, which is only filled in when absent. Renaming a
 // motorcycle model here has to move its identity with it, or the old code
 // would keep blocking a legitimate re-entry of the new name.
-motorcycleModelSchema.pre('save', function (next) {
+motorcycleModelSchema.pre('save', function () {
   const inputsChanged =
     this.isModified('make') ||
     this.isModified('model') ||
@@ -138,8 +138,6 @@ motorcycleModelSchema.pre('save', function (next) {
       yearTo: this.yearTo
     });
   }
-
-  next();
 });
 
 const MotorcycleModel = mongoose.model('MotorcycleModel', motorcycleModelSchema);

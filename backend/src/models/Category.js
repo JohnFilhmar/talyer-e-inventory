@@ -69,7 +69,7 @@ categorySchema.virtual('productCount', {
 });
 
 // Auto-generate code from name if not provided
-categorySchema.pre('save', function(next) {
+categorySchema.pre('save', function () {
   if (!this.code && this.name) {
     this.code = this.name
       .toUpperCase()
@@ -77,7 +77,6 @@ categorySchema.pre('save', function(next) {
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '');
   }
-  next();
 });
 
 // Method to get full category path

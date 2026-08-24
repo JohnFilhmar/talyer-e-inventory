@@ -78,7 +78,7 @@ supplierSchema.index({ name: 1 });
 supplierSchema.index({ isActive: 1 });
 
 // Auto-generate code from name if not provided
-supplierSchema.pre('save', function(next) {
+supplierSchema.pre('save', function () {
   if (!this.code && this.name) {
     this.code = this.name
       .toUpperCase()
@@ -87,7 +87,6 @@ supplierSchema.pre('save', function(next) {
       .replace(/^-|-$/g, '')
       .substring(0, 50);
   }
-  next();
 });
 
 const Supplier = mongoose.model('Supplier', supplierSchema);

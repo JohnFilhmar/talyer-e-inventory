@@ -60,14 +60,13 @@ transactionSchema.index({ paymentMethod: 1 });
 transactionSchema.index({ 'reference.model': 1, 'reference.id': 1 });
 
 // Auto-generate transaction number
-transactionSchema.pre('save', async function(next) {
+transactionSchema.pre('save', async function () {
   if (this.isNew && !this.transactionNumber) {
     const year = new Date().getFullYear();
     const month = String(new Date().getMonth() + 1).padStart(2, '0');
     const count = await this.constructor.countDocuments();
     this.transactionNumber = `TXN-${year}${month}-${String(count + 1).padStart(6, '0')}`;
   }
-  next();
 });
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
