@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import {
   Star,
@@ -64,10 +64,15 @@ export const ProductImageEditor: React.FC<ProductImageEditorProps> = ({
   const [localImages, setLocalImages] = useState<ProductImage[]>(images);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Sync local images with props
-  useEffect(() => {
+  // Sync local images with props. This is adjusted during render rather than
+  // in an effect: an effect commits the stale list and paints it before the
+  // correction lands, and the React Compiler lint rejects a synchronous
+  // setState in an effect body.
+  const [syncedImages, setSyncedImages] = useState(images);
+  if (images !== syncedImages) {
+    setSyncedImages(images);
     setLocalImages(images);
-  }, [images]);
+  }
 
   // Mutations
   const uploadMutation = useUploadProductImage();
