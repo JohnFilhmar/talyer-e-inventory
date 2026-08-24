@@ -1,0 +1,2 @@
+# queries/ = one useQuery wrapper each; mutations/ = one useMutation each.
+# Thin: wire a queryKey from constants/query-keys.ts to a service fn, pass options through.

@@ -1,0 +1,2 @@
+# Presentational primitives (Button, Input, Modal, …). Feature components live in
+# sibling components/<domain>/ folders. PascalCase components, kebab-case files.

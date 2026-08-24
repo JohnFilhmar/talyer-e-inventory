@@ -1,0 +1,3 @@
+# api.ts (axios client + interceptors), secure-storage.ts, device-info.ts, and one
+# module per API domain. Layering: component -> hook -> service -> api client.
+# UI never imports axios.
