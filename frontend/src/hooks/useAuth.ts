@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
+import { listOutbox } from '@/lib/offline/outbox';
 import type { UserRole } from '@/types/auth';
 
 /**
@@ -67,6 +68,48 @@ export const useAuth = () => {
    * Logout and redirect to login page
    */
   const handleLogout = useCallback(async () => {
+    // Logout clears the outbox, and outbox rows are unsent sales and service
+    // orders that cannot be refetched. Warn before destroying them rather than
+    // trading a cross-user data leak for silent data loss.
+    //
+    // Every row counts, not just the unsent ones. `rejected` entries are the
+    // sales the server refused, and they are precisely the ones waiting on a
+    // human at /sync to void, backorder or re-price. Losing those silently is
+    // worse than losing a retryable one, so `countPendingOutbox` is not the
+    // right measure here: it excludes them by design.
+    //
+    // A failure to read the queue must not block logout. Signing out is the
+    // security-relevant action and has to win.
+    let queued: { unsent: number; rejected: number } = { unsent: 0, rejected: 0 };
+    try {
+      const rows = await listOutbox();
+      queued = {
+        unsent: rows.filter((entry) => entry.status !== 'rejected').length,
+        rejected: rows.filter((entry) => entry.status === 'rejected').length,
+      };
+    } catch {
+      queued = { unsent: 0, rejected: 0 };
+    }
+
+    const total = queued.unsent + queued.rejected;
+    if (total > 0) {
+      const parts: string[] = [];
+      if (queued.unsent > 0) {
+        parts.push(`${queued.unsent} not yet synced`);
+      }
+      if (queued.rejected > 0) {
+        parts.push(`${queued.rejected} rejected and still needing attention`);
+      }
+      const noun = total === 1 ? 'order' : 'orders';
+      const proceed = window.confirm(
+        `You have ${total} queued ${noun} (${parts.join(', ')}). ` +
+          `Signing out discards them permanently and they cannot be recovered.\n\n` +
+          `Reconnect and let the queue drain, or resolve them at /sync, to keep them.\n\n` +
+          `Sign out anyway?`
+      );
+      if (!proceed) return;
+    }
+
     await logout();
     router.push('/login');
   }, [logout, router]);

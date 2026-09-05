@@ -18,7 +18,11 @@ permissions:
 
 jobs:
   dependency-audit:
-    name: dependency-audit
+    # The matrix value must be in the name. GitHub appends "(<matrix>)" only when
+    # a job has no explicit `name:`, so a static name published every leg under
+    # one context and the per-package names required in branch-protection.json
+    # never existed.
+    name: dependency-audit (${{ matrix.package }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -69,7 +73,9 @@ jobs:
           category: /language:javascript-typescript
 
   image-scan:
-    name: image-scan
+    # Same reason as dependency-audit: the matrix value has to appear here for
+    # the per-package check contexts to exist.
+    name: image-scan (${{ matrix.package }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

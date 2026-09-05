@@ -193,3 +193,22 @@ export async function clearAllStores(): Promise<void> {
   const tx = db.transaction(storeNames, 'readwrite');
   await Promise.all([...storeNames.map((name) => tx.objectStore(name).clear()), tx.done]);
 }
+
+/**
+ * Wipes the outbox. Kept separate from `clearAllStores` because the outbox is
+ * not a mirror: its rows are unsent user work, not a cache of server state.
+ *
+ * It still has to be cleared on logout. Queued orders carry the customer's
+ * name, phone, address and the line items, and `initOutboxSync` replays them on
+ * the next mount against whoever is signed in then. On a shared counter tablet
+ * that means one salesperson's orders replaying under the next one's session,
+ * at whatever branch they belong to. The logout path must warn before calling
+ * this, because unlike the mirrors these rows cannot be refetched.
+ */
+export async function clearOutboxStore(): Promise<void> {
+  const db = await openOfflineDb();
+  if (!db) return;
+
+  const tx = db.transaction(OUTBOX_STORE, 'readwrite');
+  await Promise.all([tx.objectStore(OUTBOX_STORE).clear(), tx.done]);
+}

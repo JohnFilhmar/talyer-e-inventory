@@ -288,6 +288,12 @@ const resetPassword = asyncHandler(async (req, res) => {
   user.password = newPassword;
   user.resetPasswordToken = undefined;
   user.resetPasswordExpire = undefined;
+  // Reset is the one flow whose whole purpose is remediating a compromise, so
+  // the stored refresh token has to go with the password. Leaving it lets an
+  // attacker's 30-day cookie keep minting access tokens after the victim has
+  // "recovered" the account. `changeUserPassword` and `deactivateUser` already
+  // clear it; this path was the only one that did not.
+  user.refreshToken = undefined;
   await user.save();
 
   return ApiResponse.success(res, 200, 'Password reset successful');

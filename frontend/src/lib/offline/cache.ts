@@ -5,6 +5,7 @@
  */
 import {
   clearAllStores,
+  clearOutboxStore,
   getAll,
   putMany,
   setLastSyncedAt,
@@ -75,4 +76,8 @@ export async function readCachedById<T extends OfflineRecord>(
  */
 export async function clearOfflineCache(): Promise<void> {
   await clearAllStores();
+  // The outbox was previously left behind here, so queued orders and the
+  // customer details attached to them survived into the next person's session
+  // and replayed under their token.
+  await clearOutboxStore();
 }

@@ -85,28 +85,63 @@ jobs:
               ;;
           esac
 
-      - name: Confirm no other check is failing
+      - name: Wait for every other check to reach a terminal success
         id: checks
         if: steps.eligible.outputs.ok == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           PR: ${{ steps.pr.outputs.number }}
+          SELF_CHECK: auto-merge
+          TIMEOUT_SECONDS: '1800'
+          POLL_SECONDS: '30'
         run: |
-          set -euo pipefail
+          set -uo pipefail
           # CI succeeded — that is what triggered this run — but the Security
-          # workflow and any external checks report independently. Merging while
-          # one of those is red would make this automation a way to bypass them.
-          failing=$(gh pr checks "$PR" --repo "$REPO" --json name,state \
-            --jq '[.[] | select(.state == "FAILURE" or .state == "ERROR")] | length')
-          echo "Failing checks: $failing"
-          if [ "$failing" != "0" ]; then
-            gh pr checks "$PR" --repo "$REPO" --json name,state \
-              --jq '.[] | select(.state == "FAILURE" or .state == "ERROR") | "failing: \(.name)"'
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          fi
+          # workflow reports independently, and its jobs (codeql, and both
+          # image-scan legs) finish well after CI does. The previous gate counted
+          # only FAILURE and ERROR, so a still-queued CodeQL run contributed
+          # nothing to the count. Absence of failure is not success: require a
+          # terminal success from every check, and wait for the ones still going.
+          #
+          # `gh pr checks` sets its exit code from the aggregate check state, so
+          # its non-zero exits are tolerated here and the verdict is taken from
+          # the JSON instead. This job's own check run is excluded, or it would
+          # wait on itself and time out.
+          deadline=$(( SECONDS + TIMEOUT_SECONDS ))
+          while :; do
+            checks=$(gh pr checks "$PR" --repo "$REPO" --json name,state 2>/dev/null || true)
+            if [ -z "$checks" ]; then
+              echo "Could not read check runs for #$PR; refusing to merge."
+              echo "ok=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            others=$(echo "$checks" | jq --arg self "$SELF_CHECK" '[.[] | select(.name != $self)]')
+            failing=$(echo "$others" | jq '[.[] | select(.state == "FAILURE" or .state == "ERROR")] | length')
+            unfinished=$(echo "$others" | jq '[.[] | select(.state != "SUCCESS" and .state != "SKIPPED" and .state != "NEUTRAL" and .state != "FAILURE" and .state != "ERROR")] | length')
+
+            if [ "$failing" != "0" ]; then
+              echo "$others" | jq -r '.[] | select(.state == "FAILURE" or .state == "ERROR") | "failing: \(.name)"'
+              echo "ok=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if [ "$unfinished" = "0" ]; then
+              echo "Every check reached a terminal success."
+              echo "ok=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "$others" | jq -r '.[] | select(.state != "SUCCESS" and .state != "SKIPPED" and .state != "NEUTRAL") | "still pending: \(.name) (\(.state))"'
+              echo "Timed out after ${TIMEOUT_SECONDS}s. Leaving #$PR unmerged for a human."
+              exit 1
+            fi
+
+            echo "$others" | jq -r '.[] | select(.state != "SUCCESS" and .state != "SKIPPED" and .state != "NEUTRAL") | "waiting on: \(.name) (\(.state))"'
+            sleep "$POLL_SECONDS"
+          done
 
       - name: Squash merge
         if: steps.checks.outputs.ok == 'true'

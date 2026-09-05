@@ -3,6 +3,14 @@ import Branch from '../models/Branch.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 
+// Defence in depth on top of the schema's `select: false`. The field names must
+// match `models/User.js` exactly: Mongoose silently ignores an exclusion for a
+// path that does not exist, so a misspelling here is a guard that never fires.
+// These were previously spelled `passwordResetToken`/`passwordResetExpires`,
+// which are not fields on the model.
+const PUBLIC_USER_FIELDS =
+  '-password -refreshToken -resetPasswordToken -resetPasswordExpire';
+
 // @desc    Get all users (paginated with filters)
 // @route   GET /api/users
 // @access  Private/Admin
@@ -58,7 +66,7 @@ const getUsers = asyncHandler(async (req, res) => {
   // Execute query
   const [users, total] = await Promise.all([
     User.find(query)
-      .select('-password -refreshToken -passwordResetToken -passwordResetExpires')
+      .select(PUBLIC_USER_FIELDS)
       .populate('branch', 'name code')
       .sort(sortOptions)
       .skip(skip)
@@ -81,7 +89,7 @@ const getUsers = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const getUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id)
-    .select('-password -refreshToken -passwordResetToken -passwordResetExpires')
+    .select(PUBLIC_USER_FIELDS)
     .populate('branch', 'name code');
 
   if (!user) {
@@ -138,7 +146,7 @@ const createUser = asyncHandler(async (req, res) => {
 
   // Populate branch for response
   const populatedUser = await User.findById(user._id)
-    .select('-password -refreshToken -passwordResetToken -passwordResetExpires')
+    .select(PUBLIC_USER_FIELDS)
     .populate('branch', 'name code');
 
   return ApiResponse.success(res, 201, 'User created successfully', populatedUser);
@@ -220,7 +228,7 @@ const updateUser = asyncHandler(async (req, res) => {
 
   // Populate branch for response
   const populatedUser = await User.findById(user._id)
-    .select('-password -refreshToken -passwordResetToken -passwordResetExpires')
+    .select(PUBLIC_USER_FIELDS)
     .populate('branch', 'name code');
 
   return ApiResponse.success(res, 200, 'User updated successfully', populatedUser);
@@ -257,7 +265,7 @@ const deactivateUser = asyncHandler(async (req, res) => {
 
   // Populate branch for response
   const populatedUser = await User.findById(user._id)
-    .select('-password -refreshToken -passwordResetToken -passwordResetExpires')
+    .select(PUBLIC_USER_FIELDS)
     .populate('branch', 'name code');
 
   return ApiResponse.success(res, 200, 'User deactivated successfully', populatedUser);
@@ -286,7 +294,7 @@ const activateUser = asyncHandler(async (req, res) => {
 
   // Populate branch for response
   const populatedUser = await User.findById(user._id)
-    .select('-password -refreshToken -passwordResetToken -passwordResetExpires')
+    .select(PUBLIC_USER_FIELDS)
     .populate('branch', 'name code');
 
   return ApiResponse.success(res, 200, 'User activated successfully', populatedUser);
