@@ -829,10 +829,24 @@ use `:-`. A deploy that omits `MONGODB_URI` from its GitHub Environment therefor
 comes up healthy on the credential `talyer:change-me`, which is written verbatim
 in a file in a public repository.
 
+> **EVIDENCE CORRECTED 2026-09-06.** This entry originally rated the exposure S1
+> on the grounds that the fallback credential is published in a public
+> repository, citing `docs/DEPLOYMENT.md:46` ("This repository is **public**").
+> That document is wrong: `gh repo view` reports `visibility=PRIVATE`. The
+> defect is real and the fix still correct, but the blast radius is smaller than
+> stated, so treat this as S2 rather than S1: the credential is visible to
+> everyone with read access to the repository, not to the world.
+>
+> The stale visibility claim is itself a finding, and a consequential one. The
+> whole self-hosted-runner safety argument in `docs/DEPLOYMENT.md:44-52` is
+> built on the repository being public, and code scanning silently stopped
+> working when the repository became private (see the note in GAP-011). Add it
+> to GAP-052's list of documentation contradictions.
+
 **Why it matters**
 
-`docs/DEPLOYMENT.md:46` confirms the repository is public. Anyone who reads
-`docker-compose.yml` knows the fallback credential. Mongo publishes no host port
+Anyone with read access to the repository can read the fallback credential out
+of `docker-compose.yml`. Mongo publishes no host port
 in any overlay, so reaching it requires a shell on the VPS or another container
 on the same Compose network, but staging and production share one box
 (`docs/DEPLOYMENT.md:28-37`), so a compromise of the staging stack reaches the
