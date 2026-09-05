@@ -778,7 +778,12 @@ describe('Auth API - Reset Password', () => {
         .send({ email: 'revoke@example.com', password: 'oldpassword123' });
 
       expect(loginRes.statusCode).toBe(200);
-      const staleRefreshToken = loginRes.body.data.refreshToken;
+
+      // The refresh token is delivered as an httpOnly cookie, never in the
+      // response body, so it has to come off the set-cookie header.
+      const cookies = loginRes.headers['set-cookie'];
+      const refreshCookie = cookies?.find((c) => c.startsWith('refreshToken='));
+      const staleRefreshToken = refreshCookie?.split(';')[0].split('=')[1];
       expect(staleRefreshToken).toBeTruthy();
 
       // The stale token works before the reset.

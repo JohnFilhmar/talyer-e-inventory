@@ -15,14 +15,16 @@ concurrency:
 permissions:
   contents: read
   security-events: write
+  # github/codeql-action calls the workflow-runs API while uploading SARIF, both
+  # from `analyze` in the codeql job and from `upload-sarif` in image-scan.
+  # Without `actions: read` that call is refused with "Resource not accessible by
+  # integration" and the job fails *after* a clean analysis, which reads as a
+  # scanner failure rather than a permissions one.
+  actions: read
 
 jobs:
   dependency-audit:
-    # The matrix value must be in the name. GitHub appends "(<matrix>)" only when
-    # a job has no explicit `name:`, so a static name published every leg under
-    # one context and the per-package names required in branch-protection.json
-    # never existed.
-    name: dependency-audit (${{ matrix.package }})
+    name: dependency-audit
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -44,6 +46,13 @@ jobs:
   secret-scan:
     name: secret-scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # On a pull_request event gitleaks enumerates the PR's commits via
+      # /repos/{owner}/{repo}/pulls/{n}/commits, which the default token cannot
+      # read without this. Push events skip that call, so the job passed on
+      # master and only failed once the first pull request was opened.
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -73,9 +82,7 @@ jobs:
           category: /language:javascript-typescript
 
   image-scan:
-    # Same reason as dependency-audit: the matrix value has to appear here for
-    # the per-package check contexts to exist.
-    name: image-scan (${{ matrix.package }})
+    name: image-scan
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

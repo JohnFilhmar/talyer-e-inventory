@@ -1521,6 +1521,25 @@ Depends on none | Blocks none | Est. agent turns 2-4
         package: [backend, frontend]
 ```
 
+> **DISPROVEN 2026-09-06. No change required; do not action this entry.**
+> The premise was wrong. GitHub appends the matrix values to a matrix job's
+> check-run name *even when* `jobs.<id>.name` is set, in order to keep the legs
+> distinguishable. Observed on the Security run for `master` at `d92d38f`, which
+> predates any edit to `security.yml`: the check runs are already named
+> `dependency-audit (backend)`, `dependency-audit (frontend)`,
+> `image-scan (backend)` and `image-scan (frontend)`, exactly matching
+> `.github/branch-protection.json`. A trial edit adding `${{ matrix.package }}`
+> to both names produced identical check names, confirming the suffix is not
+> doubled and the edit is a no-op. It was reverted.
+>
+> The rest of this entry is left as written, for the record of what was
+> believed. The real blockers to enabling branch protection are the genuinely
+> failing checks, not the names. Verified separately: `codeql` and both
+> `image-scan` legs fail because `security.yml` did not grant `actions: read`,
+> which `github/codeql-action` needs while uploading SARIF, and `secret-scan`
+> fails on pull requests because gitleaks needs `pull-requests: read`. Those are
+> fixed in the same change that reverted this one.
+
 **What is wrong**
 
 GitHub appends `(<matrix values>)` to a check name only when `jobs.<id>.name` is
