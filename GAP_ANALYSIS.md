@@ -29,6 +29,23 @@ supersedes: docs/gap-audit.md
 
 # GAP_ANALYSIS.md
 
+## 0. Status
+
+**Wave 1 is closed** as of 2026-09-06 (PR #39): GAP-001, GAP-002, GAP-004,
+GAP-007, GAP-012 and the projection half of GAP-013 are fixed, each with a note
+on its entry. Two entries were withdrawn on evidence: **GAP-011 is DISPROVEN**
+(GitHub already appends matrix values to check-run names) and **GAP-004's
+severity was overstated** (the repository is private, not public, so the
+fail-open credential is exposed to people with read access rather than to the
+world). One new contradiction surfaced and is not yet written up as its own
+entry: `docs/DEPLOYMENT.md:46` states the repository is public when it is
+private, and the self-hosted-runner safety argument in that section rests on
+that claim.
+
+Remaining open: 45 of the original 52, plus the adjust-stock half of GAP-013.
+The severity and category counts in the front matter below describe the audit as
+first written and have not been restated.
+
 ## 1. Metadata
 
 See the front matter above. Every line number in this document was read against
@@ -463,6 +480,13 @@ fallbacks, which is unambiguous.
 
 ### GAP-001 [SEC] Password reset does not revoke the session or the refresh token
 
+> **FIXED 2026-09-06, Wave 1, PR #39.** `authController.resetPassword` now
+> clears `user.refreshToken`. A regression test in `backend/tests/auth.test.js`
+> asserts a refresh token captured before a reset is rejected afterwards and the
+> stored value is cleared. Residual and deliberately out of scope: access tokens
+> already issued stay valid for their 7-day life, which needs a
+> `passwordChangedAt` claim checked in `protect`.
+
 | Field | Value |
 |---|---|
 | Severity | S1 Critical |
@@ -570,6 +594,11 @@ None.
 ---
 
 ### GAP-002 [SEC] The offline outbox survives logout and replays under the next user
+
+> **FIXED 2026-09-06, Wave 1, PR #39.** `clearOutboxStore()` added to
+> `frontend/src/lib/offline/db.ts` and called from `clearOfflineCache()`.
+> `handleLogout` warns before discarding, and counts `rejected` entries as well
+> as unsent ones, because those are the rows awaiting a decision at `/sync`.
 
 | Field | Value |
 |---|---|
@@ -829,6 +858,11 @@ use `:-`. A deploy that omits `MONGODB_URI` from its GitHub Environment therefor
 comes up healthy on the credential `talyer:change-me`, which is written verbatim
 in a file in a public repository.
 
+> **FIXED 2026-09-06, Wave 1, PR #39.** Both Mongo variables now use `:?` and a
+> deploy that omits either aborts at `docker compose up` instead of silently
+> starting on `talyer:change-me`. Set `MONGODB_URI` and
+> `MONGO_INITDB_ROOT_PASSWORD` in every GitHub Environment before deploying.
+>
 > **EVIDENCE CORRECTED 2026-09-06.** This entry originally rated the exposure S1
 > on the grounds that the fallback credential is published in a public
 > repository, citing `docs/DEPLOYMENT.md:46` ("This repository is **public**").
@@ -1116,6 +1150,10 @@ None.
 ---
 
 ### GAP-007 [SEC] GET /stock/movements/branch/:branchId has no authorize() guard
+
+> **FIXED 2026-09-06, Wave 1, PR #39.** `authorize(USER_ROLES.ADMIN,
+> USER_ROLES.SALESPERSON)` added to the route. Regression tests assert a
+> mechanic is refused and a salesperson reaches only their own branch.
 
 | Field | Value |
 |---|---|
@@ -1627,6 +1665,17 @@ None.
 
 ### GAP-012 [SEC] Dependabot auto-merge treats a still-running security check as passing
 
+> **FIXED 2026-09-06, Wave 1, PR #39.** The gate now requires a terminal success
+> from every check, waits for pending ones under a bounded timeout, excludes its
+> own check run so it cannot wait on itself, and tolerates the non-zero exit
+> `gh pr checks` returns for a non-passing aggregate state.
+>
+> One correction to this entry's reasoning: because `gh pr checks` sets its exit
+> code from the aggregate state, the old gate under `set -e` most likely failed
+> its step rather than merging, so the practical symptom was eligible pull
+> requests never auto-merging rather than merging unsafely. The rewrite is
+> correct under either reading.
+
 Severity S2 Major | Complexity XS | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 5.0 | Agent suitability AGENT-READY |
 Depends on none | Blocks none | Est. agent turns 3-5
@@ -1717,6 +1766,12 @@ None.
 ---
 
 ### GAP-013 [CODE] The adjust-stock form defaults to an invalid reason and offers one the API rejects
+
+> **PARTIALLY FIXED 2026-09-06, Wave 1, PR #39.** The `userController`
+> projection defect that shared this wave is closed: the six `.select()` calls
+> now name the real schema fields through a shared `PUBLIC_USER_FIELDS`
+> constant. The adjust-stock form default and the `min: 5` reason-length rule
+> described in this entry are **still open**.
 
 Severity S2 Major | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 5.0 | Agent suitability AGENT-READY |
