@@ -762,6 +762,59 @@ describe('Auth API - Reset Password', () => {
       expect(loginRes.statusCode).toBe(401);
       expect(loginRes.body.message).toBe('Invalid credentials');
     });
+
+    // Reset is the flow whose entire purpose is remediating a compromise. It
+    // previously cleared only the reset token, so an attacker's 30-day refresh
+    // token stayed valid and kept minting access tokens after the victim had
+    // "recovered" the account.
+    it('revokes the existing refresh token when the password is reset', async () => {
+      await createTestUser({
+        email: 'revoke@example.com',
+        password: 'oldpassword123',
+      });
+
+      const loginRes = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'revoke@example.com', password: 'oldpassword123' });
+
+      expect(loginRes.statusCode).toBe(200);
+
+      // The refresh token is delivered as an httpOnly cookie, never in the
+      // response body, so it has to come off the set-cookie header.
+      const cookies = loginRes.headers['set-cookie'];
+      const refreshCookie = cookies?.find((c) => c.startsWith('refreshToken='));
+      const staleRefreshToken = refreshCookie?.split(';')[0].split('=')[1];
+      expect(staleRefreshToken).toBeTruthy();
+
+      // The stale token works before the reset.
+      const beforeReset = await request(app)
+        .post('/api/auth/refresh-token')
+        .send({ refreshToken: staleRefreshToken });
+      expect(beforeReset.statusCode).toBe(200);
+
+      const forgotRes = await request(app)
+        .post('/api/auth/forgot-password')
+        .send({ email: 'revoke@example.com' });
+
+      const resetRes = await request(app)
+        .post('/api/auth/reset-password')
+        .send({
+          resetToken: forgotRes.body.data.resetToken,
+          newPassword: 'newpassword123',
+        });
+      expect(resetRes.statusCode).toBe(200);
+
+      // ...and must not afterwards.
+      const afterReset = await request(app)
+        .post('/api/auth/refresh-token')
+        .send({ refreshToken: staleRefreshToken });
+      expect(afterReset.statusCode).toBe(401);
+
+      const stored = await User.findOne({ email: 'revoke@example.com' }).select(
+        '+refreshToken'
+      );
+      expect(stored.refreshToken).toBeFalsy();
+    });
   });
 });
 

@@ -15,6 +15,12 @@ concurrency:
 permissions:
   contents: read
   security-events: write
+  # github/codeql-action calls the workflow-runs API while uploading SARIF, both
+  # from `analyze` in the codeql job and from `upload-sarif` in image-scan.
+  # Without `actions: read` that call is refused with "Resource not accessible by
+  # integration" and the job fails *after* a clean analysis, which reads as a
+  # scanner failure rather than a permissions one.
+  actions: read
 
 jobs:
   dependency-audit:
@@ -40,6 +46,13 @@ jobs:
   secret-scan:
     name: secret-scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # On a pull_request event gitleaks enumerates the PR's commits via
+      # /repos/{owner}/{repo}/pulls/{n}/commits, which the default token cannot
+      # read without this. Push events skip that call, so the job passed on
+      # master and only failed once the first pull request was opened.
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -103,6 +116,15 @@ jobs:
 
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v4
+        # image-scan is reporting-only by design: the Trivy step sets no
+        # exit-code, so findings never fail the job, because base-image CVEs are
+        # frequently unfixable upstream and failing on them would block every
+        # merge. The upload was breaking that contract from the other side, by
+        # failing the job when the SARIF could not be delivered. It cannot be
+        # delivered while code scanning is disabled on this repository, which
+        # happened when the repository became private. Keep the scan running and
+        # the artifact produced; do not let the delivery decide the verdict.
+        continue-on-error: true
         with:
           sarif_file: trivy-${{ matrix.package }}.sarif
           category: trivy-${{ matrix.package }}

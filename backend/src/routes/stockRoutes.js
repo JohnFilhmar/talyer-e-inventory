@@ -131,6 +131,7 @@ router.get(
 router.get(
   '/movements/branch/:branchId',
   protect,
+  authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   checkBranchAccess,
   branchIdValidation,
   handleValidationErrors,

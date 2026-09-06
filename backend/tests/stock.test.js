@@ -1448,6 +1448,38 @@ describe('Stock API Tests', () => {
       expect(res.body.data.length).toBe(1);
       expect(res.body.data[0].branch._id).toBe(own._id.toString());
     });
+
+    // The three sibling movement routes name their roles; this one carried only
+    // protect + checkBranchAccess, which compares branch ids without consulting
+    // the role. A mechanic therefore passed both gates for their own branch and
+    // could read every restock, sale, transfer and adjustment for it, with the
+    // performer's name and email populated.
+    it('rejects a mechanic reading the branch movement ledger for their own branch', async () => {
+      // regularUser/userToken from the top-level beforeEach is a mechanic
+      // assigned to branchA, so checkBranchAccess alone would admit this.
+      const res = await request(app)
+        .get(`/api/stock/movements/branch/${branchA._id}`)
+        .set('Authorization', `Bearer ${userToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('allows a salesperson the branch movement ledger for their own branch only', async () => {
+      const own = await createTestBranch({ name: 'Mv Br Own', code: 'MV-BR-OWN' });
+      const other = await createTestBranch({ name: 'Mv Br Other', code: 'MV-BR-OTH' });
+
+      const { token } = await createTestSalesperson(own._id);
+
+      const allowed = await request(app)
+        .get(`/api/stock/movements/branch/${own._id}`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(allowed.status).toBe(200);
+
+      const denied = await request(app)
+        .get(`/api/stock/movements/branch/${other._id}`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(denied.status).toBe(403);
+    });
   });
 
   // ===================
