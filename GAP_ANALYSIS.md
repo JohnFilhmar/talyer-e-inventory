@@ -35,16 +35,32 @@ supersedes: docs/gap-audit.md
 GAP-007, GAP-012 and the projection half of GAP-013 are fixed, each with a note
 on its entry. Two entries were withdrawn on evidence: **GAP-011 is DISPROVEN**
 (GitHub already appends matrix values to check-run names) and **GAP-004's
-severity was overstated** (the repository is private, not public, so the
-fail-open credential is exposed to people with read access rather than to the
-world). One new contradiction surfaced and is not yet written up as its own
-entry: `docs/DEPLOYMENT.md:46` states the repository is public when it is
-private, and the self-hosted-runner safety argument in that section rests on
-that claim.
+severity was overstated** (see that entry's note).
+
+The repository visibility question that surfaced during Wave 1 is resolved. The
+repository had been private since roughly 2026-08-30, which silently disabled
+code scanning and had been failing `codeql` and both `image-scan` legs on every
+run since. It was made public again on 2026-09-06, restoring code scanning and
+bringing reality back in line with `docs/DEPLOYMENT.md:46`, which had said
+"public" throughout. No documentation change is needed; the code and the deploy
+guidance were right and the setting had drifted.
 
 Remaining open: 45 of the original 52, plus the adjust-stock half of GAP-013.
 The severity and category counts in the front matter below describe the audit as
 first written and have not been restated.
+
+**Code scanning is reporting again**, for the first time since roughly
+2026-08-30. Its findings independently confirm two entries and widen a third:
+
+- **GAP-015 is understated.** 60 open high-severity `js/sql-injection` alerts
+  across all nine controllers, against the seven `$regex` sites this audit
+  found. See the note on that entry before starting it.
+- **The log-injection sinks in GAP-051 are confirmed**, at `server.js:49` and
+  `:60` where `req.url` is interpolated raw, and at `cache.js:28` and `:32`,
+  which are the `cacheMiddleware` logs and are not covered by the `forLog`
+  sanitiser that protects `CacheUtil`.
+- The remaining alerts are Trivy container CVEs from `image-scan` and a handful
+  of `js/unused-local-variable` notes.
 
 ## 1. Metadata
 
@@ -863,19 +879,15 @@ in a file in a public repository.
 > starting on `talyer:change-me`. Set `MONGODB_URI` and
 > `MONGO_INITDB_ROOT_PASSWORD` in every GitHub Environment before deploying.
 >
-> **EVIDENCE CORRECTED 2026-09-06.** This entry originally rated the exposure S1
-> on the grounds that the fallback credential is published in a public
-> repository, citing `docs/DEPLOYMENT.md:46` ("This repository is **public**").
-> That document is wrong: `gh repo view` reports `visibility=PRIVATE`. The
-> defect is real and the fix still correct, but the blast radius is smaller than
-> stated, so treat this as S2 rather than S1: the credential is visible to
-> everyone with read access to the repository, not to the world.
->
-> The stale visibility claim is itself a finding, and a consequential one. The
-> whole self-hosted-runner safety argument in `docs/DEPLOYMENT.md:44-52` is
-> built on the repository being public, and code scanning silently stopped
-> working when the repository became private (see the note in GAP-011). Add it
-> to GAP-052's list of documentation contradictions.
+> **SEVERITY NOTE, revised twice on 2026-09-06.** This entry rated the exposure
+> S1 because the fallback credential sits in a public repository, citing
+> `docs/DEPLOYMENT.md:46`. Mid-remediation the repository was found to be
+> private, which briefly made that basis look wrong and the rating too high. It
+> was then made public again the same day, having drifted private around
+> 2026-08-30. So the original S1 basis holds: the default credential was, and
+> is, readable by anyone. Recorded here because the intermediate reasoning is in
+> the git history of this file and would otherwise look like an unexplained
+> reversal.
 
 **Why it matters**
 
@@ -1972,6 +1984,25 @@ against open orders would be a sensible follow-up gap.
 ---
 
 ### GAP-015 [SEC] User-supplied text reaches MongoDB $regex unescaped at seven sites
+
+> **SCOPE UNDERSTATED. Re-scope before working this entry.** With code scanning
+> restored on 2026-09-06, CodeQL reports **60 open high-severity
+> `js/sql-injection` alerts**, which is the query it uses for NoSQL injection
+> too. They span every controller, not the three this entry names:
+> `stockController.js` 18, `salesController.js` 12, `serviceController.js` 9,
+> `productController.js` 5, `userController.js` 4, `categoryController.js` 4,
+> `authController.js` 4, `branchController.js` 3, `supplierController.js` 1.
+>
+> The seven `$regex` sites below are a subset. The wider pattern is request
+> values reaching query objects without being constrained to a scalar, which
+> also admits operator injection such as `?field[$ne]=`, independent of regex
+> escaping. Escaping alone will not clear these alerts.
+>
+> Some proportion are likely false positives where the value is already
+> validated as a MongoId, so the alerts need triage rather than blanket
+> treatment. Treat this entry as the starting point of a larger piece of work,
+> not the whole of it, and re-estimate complexity from the triaged count. The
+> alert list is at the repository's Security tab under Code scanning.
 
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
