@@ -6,6 +6,7 @@ import path from 'path';
 import connectDB from './config/database.js';
 import { connectRedis } from './config/redis.js';
 import errorHandler from './middleware/errorHandler.js';
+import sanitizeRequest from './middleware/sanitizeRequest.js';
 import { apiLimiter } from './middleware/rateLimit.js';
 import { CORS } from './config/constants.js';
 import { resolveTrustProxy } from './utils/trustProxy.js';
@@ -28,6 +29,13 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 // Body parser middleware
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Reject Mongo operator syntax in request keys, immediately after the parsers
+// that create the objects and before any router sees them. Routes that declare
+// a validation rule are already safe; this covers the ones that do not, and the
+// ones not written yet. See middleware/sanitizeRequest.js for why it rejects
+// rather than strips.
+app.use(sanitizeRequest);
 
 // Cookie parser middleware (for the httpOnly refresh token and the CSRF token).
 //

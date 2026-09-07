@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
+import { escapeRegex } from '../utils/regex.js';
 import { CACHE_TTL, USER_ROLES } from '../config/constants.js';
 
 /**
@@ -21,13 +22,14 @@ export const getBranches = asyncHandler(async (req, res) => {
   }
   
   if (city) {
-    query['address.city'] = { $regex: city, $options: 'i' };
+    query['address.city'] = { $regex: escapeRegex(city), $options: 'i' };
   }
-  
+
   if (search) {
+    const pattern = { $regex: escapeRegex(search), $options: 'i' };
     query.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { code: { $regex: search, $options: 'i' } }
+      { name: pattern },
+      { code: pattern }
     ];
   }
 

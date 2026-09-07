@@ -2,6 +2,7 @@ import Supplier from '../models/Supplier.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
+import { escapeRegex } from '../utils/regex.js';
 import { CACHE_TTL, PAGINATION } from '../config/constants.js';
 
 /**
@@ -19,9 +20,10 @@ export const getSuppliers = asyncHandler(async (req, res) => {
   }
   
   if (search) {
+    const pattern = { $regex: escapeRegex(search), $options: 'i' };
     query.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { code: { $regex: search, $options: 'i' } }
+      { name: pattern },
+      { code: pattern }
     ];
   }
 

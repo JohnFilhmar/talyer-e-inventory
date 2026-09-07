@@ -1,12 +1,22 @@
 import express from 'express';
 const router = express.Router();
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import * as supplierController from '../controllers/supplierController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import { USER_ROLES } from '../config/constants.js';
 import handleValidationErrors from '../middleware/validationHandler.js';
 
 // Validation rules
+// `search` reaches a Mongo $regex in getSuppliers, escaped there. This caps the
+// input so even a legal pattern stays cheap, and `.isString()` rejects
+// `?search=a&search=b`, which Express parses into an array.
+const listSuppliersValidation = [
+  query('search')
+    .optional()
+    .isString().withMessage('Search must be a string')
+    .isLength({ max: 100 }).withMessage('Search query cannot exceed 100 characters')
+];
+
 const createSupplierValidation = [
   body('name').notEmpty().isLength({ max: 200 }).withMessage('Name is required and cannot exceed 200 characters'),
   body('code').optional().isLength({ max: 50 }).withMessage('Code cannot exceed 50 characters'),
@@ -42,6 +52,8 @@ router.get(
   '/',
   protect,
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
+  listSuppliersValidation,
+  handleValidationErrors,
   supplierController.getSuppliers
 );
 
