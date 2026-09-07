@@ -2013,6 +2013,15 @@ against open orders would be a sensible follow-up gap.
 
 ### GAP-015a [SEC] User-supplied text reaches MongoDB $regex unescaped at eight sites
 
+> **FIXED 2026-09-07.** `escapeRegex` now lives once in
+> `backend/src/utils/regex.js`; the two identical copies in
+> `productController.js` and `motorcycleModelController.js` are gone and all
+> eight unescaped sites go through it. `GET /api/branches` and
+> `GET /api/suppliers` gained the search length cap they had none of, with
+> `.isString()` so a repeated parameter cannot reach `$regex` as an array.
+> Residual and deliberately out of scope: the other query parameters on those
+> two routes are still undeclared, which is GAP-015d.
+
 > **Re-scoped on 2026-09-07 from the original GAP-015.** The 60 CodeQL
 > `js/sql-injection` alerts were triaged one by one; the result is in section 13.
 > GAP-015 has been split into GAP-015a (this entry, regex escaping), GAP-015b
@@ -2150,6 +2159,22 @@ None.
 ---
 
 ### GAP-015b [SEC] JSON request bodies reach Mongo as query operators; there is no request-shape guard
+
+> **FIXED 2026-09-07.** `backend/src/middleware/sanitizeRequest.js` rejects any
+> request key beginning with `$` or containing a `.`, mounted in `server.js`
+> between the body parsers and the routers.
+> `backend/tests/sanitizeRequest.test.js` covers it in 15 cases and needs no
+> database, so it runs where `mongodb-memory-server` cannot fetch its binary.
+> `backend/tests/service.test.js` now mounts the guard the way `server.js` does
+> and asserts that
+> `{"partsUsed":[{"product":{"$ne":null},"quantity":1}]}` on
+> `PUT /api/services/:id/parts` returns 400 with the stock untouched.
+>
+> Two residuals, both deliberate. The CodeQL alerts will not close: the query
+> does not recognise a hand-written guard as a barrier, so 36 of the 60 stay
+> open and the measure of this gap is the behaviour, not the alert count. And
+> the guard is a floor, not a substitute for GAP-017's validation chains, which
+> are still needed for the same four routes.
 
 Severity S1 Critical | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 4.0 | Agent suitability AGENT-READY |
