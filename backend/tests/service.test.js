@@ -10,6 +10,7 @@ import Branch from '../src/models/Branch.js';
 import User from '../src/models/User.js';
 import serviceRoutes from '../src/routes/serviceRoutes.js';
 import errorHandler from '../src/middleware/errorHandler.js';
+import sanitizeRequest from '../src/middleware/sanitizeRequest.js';
 import * as dbHandler from './setup/dbHandler.js';
 import {
   createTestUser,
@@ -105,6 +106,11 @@ afterAll(async () => {
 // Create Express app for testing
 const app = express();
 app.use(express.json());
+// Mirrors server.js: the guard sits between the body parser and the routers.
+// These routes are the reason it exists. `/:id/assign` and `/:id/parts` have no
+// validation chain, so before it an operator object in the body reached a Mongo
+// filter directly (see GAP-015b).
+app.use(sanitizeRequest);
 app.use('/api/services', serviceRoutes);
 app.use((err, req, res, next) => {
   res.status(err.statusCode || 500).json({
@@ -624,6 +630,40 @@ describe('Service Order Management', () => {
       expect(res.body.data.partsUsed[0].quantity).toBe(3);
       expect(res.body.data.partsUsed[0].unitPrice).toBe(250);
       expect(res.body.data.totalParts).toBe(750);
+    });
+
+    // GAP-015b. This route declares no validation chain, so before the request
+    // guard `{ product: { $ne: null } }` survived into
+    // `Stock.findOne({ product, branch })` and the deduction landed on whatever
+    // stock row Mongo returned first, with a StockMovement recorded against it.
+    // A mechanic is the lowest-privileged role that can reach this route.
+    it('should reject a Mongo operator object in place of a part product id', async () => {
+      const admin = await createTestAdmin();
+      const category = await createTestCategory();
+      const branch = await createTestBranch();
+      const mechanic = await createTestMechanic(branch._id);
+      const product = await createTestProduct(category);
+      await createTestStock(product, branch, { quantity: 50, sellingPrice: 250 });
+
+      const order = await createTestServiceOrder(branch, mechanic.user, admin.user, {
+        status: 'in-progress'
+      });
+
+      const res = await request(app)
+        .put(`/api/services/${order._id}/parts`)
+        .set('Authorization', `Bearer ${mechanic.token}`)
+        .send({
+          partsUsed: [
+            { product: { $ne: null }, quantity: 1 }
+          ]
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+
+      // and the stock it would have drained is untouched
+      const stock = await Stock.findOne({ product: product._id, branch: branch._id });
+      expect(stock.quantity).toBe(50);
     });
 
     it('should reject adding parts with insufficient stock', async () => {

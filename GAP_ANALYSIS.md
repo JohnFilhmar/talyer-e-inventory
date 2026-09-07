@@ -45,16 +45,29 @@ bringing reality back in line with `docs/DEPLOYMENT.md:46`, which had said
 "public" throughout. No documentation change is needed; the code and the deploy
 guidance were right and the setting had drifted.
 
-Remaining open: 45 of the original 52, plus the adjust-stock half of GAP-013.
-The severity and category counts in the front matter below describe the audit as
-first written and have not been restated.
+**GAP-015a and GAP-015b are closed** as of 2026-09-07, in the same change that
+split GAP-015. `escapeRegex` now lives in `backend/src/utils/regex.js` and is
+applied at all eight sites, and `backend/src/middleware/sanitizeRequest.js`
+rejects Mongo operator keys before any router sees them. GAP-015c and GAP-015d
+remain open.
+
+Remaining open: 46 of the 55 gaps now listed, plus the adjust-stock half of
+GAP-013. The count moved from 45 of 52 because splitting GAP-015 added three
+entries and closed two. The severity and category counts in the front matter
+below describe the audit as first written and have not been restated.
 
 **Code scanning is reporting again**, for the first time since roughly
 2026-08-30. Its findings independently confirm two entries and widen a third:
 
-- **GAP-015 is understated.** 60 open high-severity `js/sql-injection` alerts
-  across all nine controllers, against the seven `$regex` sites this audit
-  found. See the note on that entry before starting it.
+- **GAP-015 was understated, and has been triaged and split.** 60 open
+  high-severity `js/sql-injection` alerts across all nine controllers, against
+  the seven `$regex` sites this audit found. All 60 were triaged on 2026-09-07:
+  **8 are exploitable today, 28 are real but latent, and 24 are false positives**
+  where a route validator already rejects the payload. The per-alert table and
+  the four facts the verdicts rest on are in section 13. GAP-015 is replaced by
+  GAP-015a (regex escaping), GAP-015b (operator injection through request
+  bodies, S1), GAP-015c (whole-body update documents) and GAP-015d (read routes
+  with no query validation).
 - **The log-injection sinks in GAP-051 are confirmed**, at `server.js:49` and
   `:60` where `req.url` is interpolated raw, and at `cache.js:28` and `:32`,
   which are the `cacheMiddleware` logs and are not covered by the `forLog`
@@ -205,44 +218,47 @@ S1=8, S2=5, S3=2, S4=1; C1=1.0, C2=0.8, C3=0.5; XS=1, S=2, M=4, L=7, XL=12.
 | 12 | GAP-012 | SEC | Dependabot auto-merge treats a still-running security check as passing | S2 | XS | D2 | R2 | C1 | 5.0 | READY |
 | 13 | GAP-013 | CODE | The adjust-stock form defaults to an invalid reason and offers one the API rejects | S2 | XS | D1 | R1 | C1 | 5.0 | READY |
 | 14 | GAP-014 | CODE | Stock reservations leak on every order-creation failure path | S1 | S | D2 | R2 | C1 | 4.0 | READY |
-| 15 | GAP-015 | SEC | User-supplied text reaches MongoDB $regex unescaped at seven sites | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 16 | GAP-016 | CODE | A completed-but-unpaid sale can never be paid; on-account revenue is unrecordable | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
-| 17 | GAP-017 | SEC | Four mutating service routes have no validation chain | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 18 | GAP-018 | CODE | Stock adjustments ignore reservedQuantity and can strand pending orders | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
-| 19 | GAP-019 | CODE | Transfer completion credits the destination when the source Stock row is missing | S2 | S | D2 | R2 | C1 | 2.5 | READY |
-| 20 | GAP-020 | CODE | user.branch shape drift breaks BranchProvider, roleGuard and hasBranchAccess | S2 | S | D2 | R2 | C1 | 2.5 | READY |
-| 21 | GAP-021 | FEAT | Sales and service list search and sort are silently dropped by the API | S2 | S | D2 | R1 | C1 | 2.5 | ASSISTED |
-| 22 | GAP-022 | CODE | The offline replay queue can stall indefinitely with no user-visible retry | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 23 | GAP-023 | OPS | /health is a static 200, so a deploy is declared green on a dead application | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 24 | GAP-024 | OPS | No SIGTERM handler; every deploy severs in-flight writes and can break the ledger | S2 | S | D2 | R2 | C1 | 2.5 | READY |
-| 25 | GAP-025 | PROJ | mobile-app is absent from every CI, security and Dependabot workflow | S2 | S | D1 | R1 | C1 | 2.5 | READY |
-| 26 | GAP-026 | CODE | Five read endpoints have no pagination or no upper bound on limit | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 27 | GAP-027 | OPS | No resource limits or log rotation; staging and production share one box | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
-| 28 | GAP-028 | OPS | No backup or restore path for the MongoDB data or the uploads volume | S1 | M | D2 | R1 | C1 | 2.0 | HUMAN-FIRST |
-| 29 | GAP-029 | CODE | Tax is charged on the pre-discount subtotal and the discount has no ceiling | S2 | S | D4 | R3 | C2 | 2.0 | HUMAN-FIRST |
-| 30 | GAP-030 | SEC | The service worker caches cross-origin API responses in a shared bucket | S2 | S | D2 | R2 | C2 | 2.0 | ASSISTED |
-| 31 | GAP-031 | CODE | Cache invalidation is incomplete and one cache key omits a request parameter | S3 | XS | D2 | R1 | C1 | 2.0 | READY |
-| 32 | GAP-032 | CODE | CORS_ALLOWED_ORIGINS is split without trimming and no Vary: Origin is sent | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 33 | GAP-033 | SEC | The defensive .select() in userController excludes fields that do not exist | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 34 | GAP-034 | CODE | Dead configuration: unused constants, unused CORS headers, divergent upload limits | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 35 | GAP-035 | PROJ | Branch and workspace hygiene: staging is 94 commits behind master | S3 | XS | D1 | R2 | C1 | 2.0 | HUMAN-FIRST |
-| 36 | GAP-036 | OPS | seedBranches.js self-executes on import with no main-module guard | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 37 | GAP-037 | OPS | The repo-root uploads/ directory is neither gitignored nor mounted | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 38 | GAP-038 | SEC | Image processing returns the raw internal error message and path on 500 | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 39 | GAP-039 | CONTRA | apiLimiter is documented as 300/IP and implemented as 3000/user | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 40 | GAP-040 | CODE | Every human-readable identifier is generated with countDocuments() + 1 | S2 | M | D2 | R3 | C1 | 1.25 | ASSISTED |
-| 41 | GAP-041 | CODE | All money is IEEE-754 floating point with no rounding at any boundary | S2 | M | D3 | R3 | C1 | 1.25 | ASSISTED |
-| 42 | GAP-042 | FEAT | The dashboard, the post-login landing page, is entirely non-functional | S2 | M | D2 | R1 | C1 | 1.25 | ASSISTED |
-| 43 | GAP-043 | FEAT | Stock lists are silently truncated to one unpaginated page | S2 | M | D2 | R1 | C1 | 1.25 | READY |
-| 44 | GAP-044 | TEST | No concurrency test exists and the StockMovement ledger is never asserted | S2 | M | D3 | R1 | C1 | 1.25 | READY |
-| 45 | GAP-045 | TEST | branch.test.js tests Mongoose directly; four branch endpoints are unverified | S2 | M | D2 | R1 | C1 | 1.25 | READY |
-| 46 | GAP-046 | CODE | No atomicity on stock quantity writes: lost updates and oversell | S1 | L | D3 | R3 | C1 | 1.14 | HUMAN-FIRST |
-| 47 | GAP-047 | CODE | Frontend types drift from the API contract at four points | S3 | S | D2 | R1 | C1 | 1.0 | READY |
-| 48 | GAP-048 | OPS | Cache invalidation uses Redis KEYS on every mutation hot path | S3 | S | D2 | R1 | C1 | 1.0 | READY |
-| 49 | GAP-049 | CONTRA | Transaction numbers never take the documented TXN-YYYYMM shape | S3 | S | D2 | R3 | C1 | 1.0 | ASSISTED |
-| 50 | GAP-050 | FEAT | There is no refund, void, or reversal path anywhere in the system | S2 | L | D4 | R3 | C1 | 0.71 | HUMAN-FIRST |
-| 51 | GAP-051 | OPS | No observability: no metrics, structured logs, tracing, or alerting | S2 | L | D2 | R1 | C1 | 0.71 | ASSISTED |
-| 52 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
+| 15 | GAP-015b | SEC | JSON request bodies reach Mongo as query operators; there is no request-shape guard | S1 | S | D2 | R2 | C1 | 4.0 | READY |
+| 16 | GAP-015a | SEC | User-supplied text reaches MongoDB $regex unescaped at eight sites | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 17 | GAP-015c | SEC | Four update paths pass the whole request body to findByIdAndUpdate | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 18 | GAP-016 | CODE | A completed-but-unpaid sale can never be paid; on-account revenue is unrecordable | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
+| 19 | GAP-017 | SEC | Four mutating service routes have no validation chain | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 20 | GAP-018 | CODE | Stock adjustments ignore reservedQuantity and can strand pending orders | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
+| 21 | GAP-019 | CODE | Transfer completion credits the destination when the source Stock row is missing | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 22 | GAP-020 | CODE | user.branch shape drift breaks BranchProvider, roleGuard and hasBranchAccess | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 23 | GAP-021 | FEAT | Sales and service list search and sort are silently dropped by the API | S2 | S | D2 | R1 | C1 | 2.5 | ASSISTED |
+| 24 | GAP-022 | CODE | The offline replay queue can stall indefinitely with no user-visible retry | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 25 | GAP-023 | OPS | /health is a static 200, so a deploy is declared green on a dead application | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 26 | GAP-024 | OPS | No SIGTERM handler; every deploy severs in-flight writes and can break the ledger | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 27 | GAP-025 | PROJ | mobile-app is absent from every CI, security and Dependabot workflow | S2 | S | D1 | R1 | C1 | 2.5 | READY |
+| 28 | GAP-026 | CODE | Five read endpoints have no pagination or no upper bound on limit | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 29 | GAP-027 | OPS | No resource limits or log rotation; staging and production share one box | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
+| 30 | GAP-028 | OPS | No backup or restore path for the MongoDB data or the uploads volume | S1 | M | D2 | R1 | C1 | 2.0 | HUMAN-FIRST |
+| 31 | GAP-029 | CODE | Tax is charged on the pre-discount subtotal and the discount has no ceiling | S2 | S | D4 | R3 | C2 | 2.0 | HUMAN-FIRST |
+| 32 | GAP-030 | SEC | The service worker caches cross-origin API responses in a shared bucket | S2 | S | D2 | R2 | C2 | 2.0 | ASSISTED |
+| 33 | GAP-031 | CODE | Cache invalidation is incomplete and one cache key omits a request parameter | S3 | XS | D2 | R1 | C1 | 2.0 | READY |
+| 34 | GAP-032 | CODE | CORS_ALLOWED_ORIGINS is split without trimming and no Vary: Origin is sent | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 35 | GAP-033 | SEC | The defensive .select() in userController excludes fields that do not exist | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 36 | GAP-034 | CODE | Dead configuration: unused constants, unused CORS headers, divergent upload limits | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 37 | GAP-035 | PROJ | Branch and workspace hygiene: staging is 94 commits behind master | S3 | XS | D1 | R2 | C1 | 2.0 | HUMAN-FIRST |
+| 38 | GAP-036 | OPS | seedBranches.js self-executes on import with no main-module guard | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 39 | GAP-037 | OPS | The repo-root uploads/ directory is neither gitignored nor mounted | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 40 | GAP-038 | SEC | Image processing returns the raw internal error message and path on 500 | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 41 | GAP-039 | CONTRA | apiLimiter is documented as 300/IP and implemented as 3000/user | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 42 | GAP-040 | CODE | Every human-readable identifier is generated with countDocuments() + 1 | S2 | M | D2 | R3 | C1 | 1.25 | ASSISTED |
+| 43 | GAP-041 | CODE | All money is IEEE-754 floating point with no rounding at any boundary | S2 | M | D3 | R3 | C1 | 1.25 | ASSISTED |
+| 44 | GAP-042 | FEAT | The dashboard, the post-login landing page, is entirely non-functional | S2 | M | D2 | R1 | C1 | 1.25 | ASSISTED |
+| 45 | GAP-043 | FEAT | Stock lists are silently truncated to one unpaginated page | S2 | M | D2 | R1 | C1 | 1.25 | READY |
+| 46 | GAP-044 | TEST | No concurrency test exists and the StockMovement ledger is never asserted | S2 | M | D3 | R1 | C1 | 1.25 | READY |
+| 47 | GAP-045 | TEST | branch.test.js tests Mongoose directly; four branch endpoints are unverified | S2 | M | D2 | R1 | C1 | 1.25 | READY |
+| 48 | GAP-046 | CODE | No atomicity on stock quantity writes: lost updates and oversell | S1 | L | D3 | R3 | C1 | 1.14 | HUMAN-FIRST |
+| 49 | GAP-047 | CODE | Frontend types drift from the API contract at four points | S3 | S | D2 | R1 | C1 | 1.0 | READY |
+| 50 | GAP-048 | OPS | Cache invalidation uses Redis KEYS on every mutation hot path | S3 | S | D2 | R1 | C1 | 1.0 | READY |
+| 51 | GAP-049 | CONTRA | Transaction numbers never take the documented TXN-YYYYMM shape | S3 | S | D2 | R3 | C1 | 1.0 | ASSISTED |
+| 52 | GAP-050 | FEAT | There is no refund, void, or reversal path anywhere in the system | S2 | L | D4 | R3 | C1 | 0.71 | HUMAN-FIRST |
+| 53 | GAP-051 | OPS | No observability: no metrics, structured logs, tracing, or alerting | S2 | L | D2 | R1 | C1 | 0.71 | ASSISTED |
+| 54 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
+| 55 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
 
 **Order overrides.** None were needed. The dependency edges that exist
 (GAP-014 -> GAP-046, GAP-040 -> GAP-046, GAP-016 -> GAP-050, GAP-003 -> GAP-022)
@@ -252,13 +268,17 @@ sorts above it.
 
 ## 6. Index by Category
 
-**SEC (12)**: GAP-001 (8.0), GAP-002 (8.0), GAP-004 (8.0), GAP-005 (5.0),
-GAP-007 (5.0), GAP-008 (5.0), GAP-012 (5.0), GAP-015 (2.5), GAP-017 (2.5),
-GAP-030 (2.0), GAP-033 (2.0), GAP-038 (2.0).
+**SEC (15)**: GAP-001 (8.0), GAP-002 (8.0), GAP-004 (8.0), GAP-005 (5.0),
+GAP-007 (5.0), GAP-008 (5.0), GAP-012 (5.0), GAP-015b (4.0), GAP-015a (2.5),
+GAP-015c (2.5), GAP-017 (2.5), GAP-030 (2.0), GAP-033 (2.0), GAP-038 (2.0),
+GAP-015d (0.5).
 
-GAP-015 and GAP-017 are validation-surface findings classified SEC rather than
-CODE because the reachable consequence is denial of service or an unguarded
-write, not merely incorrect behaviour.
+The GAP-015 family and GAP-017 are validation-surface findings classified SEC
+rather than CODE because the reachable consequence is denial of service, silent
+data corruption or an unguarded write, not merely incorrect behaviour. GAP-015b
+is S1 because a mechanic, the lowest-privileged role that can reach the route,
+can make a stock deduction land on a product they did not name while the ledger
+records it as correct.
 
 **CODE (20)**: GAP-003 (8.0), GAP-006 (5.0), GAP-009 (5.0), GAP-010 (5.0),
 GAP-013 (5.0), GAP-014 (4.0), GAP-016 (2.5), GAP-018 (2.5), GAP-019 (2.5),
@@ -291,12 +311,13 @@ GAP-004, GAP-005, GAP-006, GAP-007, GAP-008, GAP-009, GAP-010, GAP-011, GAP-012,
 GAP-013, GAP-031, GAP-032, GAP-033, GAP-034, GAP-035, GAP-036, GAP-037, GAP-038,
 GAP-039.
 
-**S: 19 gaps, one module, under 200 lines.** GAP-014, GAP-015, GAP-016, GAP-017,
+**S: 21 gaps, one module, under 200 lines.** GAP-014, GAP-015a, GAP-015b,
+GAP-015c, GAP-016, GAP-017,
 GAP-018, GAP-019, GAP-020, GAP-021, GAP-022, GAP-023, GAP-024, GAP-025, GAP-026,
 GAP-027, GAP-029, GAP-030, GAP-047, GAP-048, GAP-049.
 
-**M: 8 gaps, several modules, one design choice each.** GAP-028, GAP-040,
-GAP-041, GAP-042, GAP-043, GAP-044, GAP-045, GAP-052.
+**M: 9 gaps, several modules, one design choice each.** GAP-015d, GAP-028,
+GAP-040, GAP-041, GAP-042, GAP-043, GAP-044, GAP-045, GAP-052.
 
 **L: 3 gaps, cross-cutting, plan before code.** GAP-046, GAP-050, GAP-051.
 
@@ -345,21 +366,25 @@ GAP-009 is held to Wave 3: it edits `authRoutes.js`, and Wave 2 already has an
 `authController.js` edit whose review is easier without a second auth change
 landing beside it.
 
-### Wave 3: inventory correctness, part one (6 gaps, fully parallel)
+### Wave 3: inventory correctness, part one (7 gaps)
 
 | Gap | Files touched |
 |---|---|
 | GAP-009 | `backend/src/routes/authRoutes.js`, `backend/src/routes/userRoutes.js` |
 | GAP-014 | `backend/src/controllers/salesController.js` |
-| GAP-015 | `backend/src/utils/regex.js` (new), `branchController.js`, `supplierController.js`, `userController.js`, `productController.js`, `motorcycleModelController.js` |
-| GAP-017 | `backend/src/routes/serviceRoutes.js` |
+| GAP-015a | `backend/src/utils/regex.js` (new), `branchController.js`, `supplierController.js`, `userController.js`, `productController.js`, `motorcycleModelController.js` |
+| GAP-015b | `backend/src/middleware/sanitizeRequest.js` (new), `backend/src/server.js`, `backend/tests/sanitizeRequest.test.js` (new), `backend/tests/service.test.js` |
+| GAP-017 | `backend/src/routes/serviceRoutes.js`, `backend/tests/service.test.js`: **serialise after GAP-015b** |
 | GAP-019 | `backend/src/controllers/stockController.js` |
 | GAP-022 | `frontend/src/app/(protected)/sync/page.tsx`, `frontend/src/lib/offline/sync.ts` |
 
-GAP-015 touches `productController.js` and GAP-026 also would, so GAP-026 moves
+GAP-015a touches `productController.js` and GAP-026 also would, so GAP-026 moves
 to Wave 4. GAP-018 touches `stockController.js` like GAP-019, so it also moves.
+GAP-015b and GAP-017 both edit `backend/tests/service.test.js`, so they are
+serialised rather than parallel: GAP-015b first, because its guard is what makes
+GAP-017's four routes safe while GAP-017's chains are still being written.
 
-### Wave 4: inventory correctness, part two (6 gaps, fully parallel)
+### Wave 4: inventory correctness, part two (7 gaps)
 
 | Gap | Files touched |
 |---|---|
@@ -369,11 +394,13 @@ to Wave 4. GAP-018 touches `stockController.js` like GAP-019, so it also moves.
 | GAP-020 | `frontend/src/types/auth.ts`, `frontend/src/providers/BranchProvider.tsx`, `frontend/src/middlewares/roleGuard.tsx` |
 | GAP-026 | `backend/src/controllers/productController.js`, `categoryController.js`, `branchController.js` |
 | GAP-032 | `backend/src/config/constants.js`, `backend/src/server.js` |
+| GAP-015c | `backend/src/utils/pickFields.js` (new), `branchController.js`, `categoryController.js`, `productController.js`, `supplierController.js`: **serialise after GAP-026** |
 
 GAP-006 (Wave 2) also edits `frontend/src/types/auth.ts`, which is why GAP-020
-waits until Wave 4 rather than joining Wave 2.
+waits until Wave 4 rather than joining Wave 2. GAP-015c shares three controllers
+with GAP-026, so it is serialised after it rather than run beside it.
 
-### Wave 5: operations and platform (7 gaps, fully parallel)
+### Wave 5: operations and platform (8 gaps)
 
 | Gap | Files touched |
 |---|---|
@@ -384,10 +411,11 @@ waits until Wave 4 rather than joining Wave 2.
 | GAP-034 | `backend/src/config/constants.js`, `backend/src/middleware/imageUpload.js` |
 | GAP-038 | `backend/src/middleware/imageUpload.js`: **serialise after GAP-034** |
 | GAP-048 | `backend/src/utils/cache.js` |
+| GAP-015d | `backend/src/routes/stockRoutes.js`, `salesRoutes.js`, `serviceRoutes.js`, `productRoutes.js`, `categoryRoutes.js`, `backend/src/controllers/serviceController.js` |
 
 Two serialisation edges inside this wave are called out explicitly because the
 pairs share a file. Run GAP-023 then GAP-024, and GAP-034 then GAP-038. The other
-five are mutually disjoint.
+six are mutually disjoint; GAP-015d is the only route-file edit in the wave.
 
 ### Wave 6: correctness with a design choice (5 gaps)
 
@@ -1983,48 +2011,52 @@ against open orders would be a sensible follow-up gap.
 
 ---
 
-### GAP-015 [SEC] User-supplied text reaches MongoDB $regex unescaped at seven sites
+### GAP-015a [SEC] User-supplied text reaches MongoDB $regex unescaped at eight sites
 
-> **SCOPE UNDERSTATED. Re-scope before working this entry.** With code scanning
-> restored on 2026-09-06, CodeQL reports **60 open high-severity
-> `js/sql-injection` alerts**, which is the query it uses for NoSQL injection
-> too. They span every controller, not the three this entry names:
-> `stockController.js` 18, `salesController.js` 12, `serviceController.js` 9,
-> `productController.js` 5, `userController.js` 4, `categoryController.js` 4,
-> `authController.js` 4, `branchController.js` 3, `supplierController.js` 1.
->
-> The seven `$regex` sites below are a subset. The wider pattern is request
-> values reaching query objects without being constrained to a scalar, which
-> also admits operator injection such as `?field[$ne]=`, independent of regex
-> escaping. Escaping alone will not clear these alerts.
->
-> Some proportion are likely false positives where the value is already
-> validated as a MongoId, so the alerts need triage rather than blanket
-> treatment. Treat this entry as the starting point of a larger piece of work,
-> not the whole of it, and re-estimate complexity from the triaged count. The
-> alert list is at the repository's Security tab under Code scanning.
+> **FIXED 2026-09-07.** `escapeRegex` now lives once in
+> `backend/src/utils/regex.js`; the two identical copies in
+> `productController.js` and `motorcycleModelController.js` are gone and all
+> eight unescaped sites go through it. `GET /api/branches` and
+> `GET /api/suppliers` gained the search length cap they had none of, with
+> `.isString()` so a repeated parameter cannot reach `$regex` as an array.
+> Residual and deliberately out of scope: the other query parameters on those
+> two routes are still undeclared, which is GAP-015d.
+
+> **Re-scoped on 2026-09-07 from the original GAP-015.** The 60 CodeQL
+> `js/sql-injection` alerts were triaged one by one; the result is in section 13.
+> GAP-015 has been split into GAP-015a (this entry, regex escaping), GAP-015b
+> (operator injection through request bodies), GAP-015c (update documents built
+> from raw `req.body`) and GAP-015d (read routes with no query validation),
+> because the four have different fixes in different files. The original entry
+> said seven sites in three controllers; there are eight sites in four
+> controllers, and the `userController.js` citations had drifted by eight lines.
 
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
 Depends on none | Blocks none | Est. agent turns 4-8
 
 **Location**
-- `backend/src/controllers/branchController.js:24`, `:29`, `:30` (primary; lowest privilege)
+- `backend/src/controllers/branchController.js:24`, `:29`, `:30` (primary; lowest privilege, `GET /api/branches` needs only `protect`)
 - `backend/src/controllers/supplierController.js:23`, `:24`
-- `backend/src/controllers/userController.js:27`, `:28`
+- `backend/src/controllers/userController.js:35`, `:36`
 - `backend/src/controllers/productController.js:125` (the `brand` filter)
 - `backend/src/controllers/motorcycleModelController.js:13` and `backend/src/controllers/productController.js:16` (two identical copies of the escape helper that is not applied at the sites above)
+- `backend/src/routes/branchRoutes.js:88-93` and `backend/src/routes/supplierRoutes.js:41-46` (the two list routes with no query validation chain at all)
 
 **Evidence**
 
 ```js
 // backend/src/controllers/branchController.js:23-31
-    if (city) {
-      query['address.city'] = { $regex: city, $options: 'i' };
-    }
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
+  if (city) {
+    query['address.city'] = { $regex: city, $options: 'i' };
+  }
+  
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { code: { $regex: search, $options: 'i' } }
+    ];
+  }
 ```
 
 ```js
@@ -2032,23 +2064,41 @@ Depends on none | Blocks none | Est. agent turns 4-8
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 ```
 
+Verified this session with `grep -rn '\$regex' backend/src`: twelve occurrences,
+of which two are already escaped (`motorcycleModelController.js:43`, `:51`), one
+more is escaped (`productController.js:252`), one is built from a server-side
+constant (`models/StockMovement.js:132`), and the remaining eight are the
+unescaped sites listed above.
+
 **What is wrong**
 
 The same concern is solved two incompatible ways in one codebase. `escapeRegex`
 is defined identically in two controllers and used correctly by
-`searchMotorcycleModels` and `searchProducts`, while seven other sites
+`searchMotorcycleModels` and `searchProducts`, while eight other sites
 interpolate raw request input into a regex. `GET /api/branches` carries `protect`
 and no validation chain at all, so any authenticated user, including a
 self-registered customer, controls the pattern with no length cap.
+
+Five of the eight sites are not reported by CodeQL at all. `branchController.js`
+alerts are numbers 6, 8 and 9, which point at `User.findById(manager)` and
+`Branch.findByIdAndUpdate`, not at the regex construction; the
+`getBranches` sink is unflagged, as is `getSuppliers`. Working only the alert
+list would leave five of the eight unescaped sites open.
 
 **Why it matters**
 
 A catastrophic-backtracking pattern such as `(a+)+(a+)+$` pins the single Node
 event loop for the whole process, so one request from a throwaway customer
-account stalls the entire API for every branch. Non-string input such as
-`?search[$ne]=1` also reaches Mongo as an operator object and produces a 500.
-`GET /api/users` is admin-only and capped at 100 characters, which bounds but does
-not remove the exposure.
+account stalls the entire API for every branch. `GET /api/users` is admin-only
+and capped at 100 characters by `userRoutes.js:19-22`, which bounds but does not
+remove the exposure. The branch and supplier list routes have no cap at all.
+
+Operator injection is *not* part of this entry. Under Express 5.2.1 the default
+`query parser` is `simple`, so `?search[$ne]=x` arrives as the literal key
+`search[$ne]` and never becomes a nested object. That was verified empirically
+against the pinned Express version, and it is why the original entry's claim that
+`?search[$ne]=1` reaches Mongo as an operator object is wrong. The query-string
+half of the operator problem is covered by GAP-015d; the body half is GAP-015b.
 
 **Intended behavior**
 
@@ -2058,7 +2108,7 @@ in one place rather than being duplicated and unevenly applied.
 **Proposed fix**
 
 Promote `escapeRegex` to `backend/src/utils/regex.js`, import it in all five
-controllers, delete both local copies, and apply it at all seven sites. Add a
+controllers, delete both local copies, and apply it at all eight sites. Add a
 length cap to the search validators on the branch and supplier routes, which
 today have none. Escaping is the correct primary fix; a length cap alone still
 permits a short pathological pattern.
@@ -2070,14 +2120,14 @@ permits a short pathological pattern.
 - [ ] In `backend/src/controllers/motorcycleModelController.js`, delete the local copy and import from the new util.
 - [ ] In `backend/src/controllers/branchController.js`, import and apply at lines 24, 29 and 30.
 - [ ] In `backend/src/controllers/supplierController.js`, import and apply at lines 23 and 24.
-- [ ] In `backend/src/controllers/userController.js`, import and apply at lines 27 and 28.
+- [ ] In `backend/src/controllers/userController.js`, import and apply at lines 35 and 36.
 - [ ] In `backend/src/routes/branchRoutes.js` and `supplierRoutes.js`, add a `query('search').optional().isString().isLength({ max: 100 })` rule with the file's existing validation-handler wiring.
 - [ ] In `backend/tests/branch.test.js`, add a test sending a regex metacharacter in `?search=` and asserting a 200 with zero matches rather than an error or a hang.
 - [ ] Run `npm test` from `backend/`.
 
 **Acceptance criteria**
 
-- [ ] `grep -rn '\$regex' backend/src/controllers` shows every occurrence wrapped in `escapeRegex` or built from a non-user constant.
+- [ ] `grep -rn '\$regex' backend/src` shows every occurrence wrapped in `escapeRegex` or built from a non-user constant.
 - [ ] `escapeRegex` is defined exactly once, in `backend/src/utils/regex.js`.
 - [ ] `GET /api/branches?search=(a%2B)%2B%24` returns 200 promptly with no matches.
 - [ ] The full backend suite passes.
@@ -2087,19 +2137,431 @@ permits a short pathological pattern.
 ```bash
 cd backend && npm test
 grep -rn "escapeRegex" src/ | grep -v "utils/regex.js"   # expect only import + call sites
+grep -rn '\$regex' src/                                   # expect no raw request value
 ```
 
 **Do not**
 
 Do not switch these queries to `$text` search: the indexes do not support it on
 these fields and the behaviour would change. Do not add a global regex-sanitising
-middleware. Do not change `searchProducts`' existing correct usage beyond
-swapping the import.
+middleware. Do not change `searchProducts`' or `searchMotorcycleModels`' existing
+correct usage beyond swapping the import.
 
 **Rollback**
 
 Revert the util and the five controllers. Search behaviour returns to accepting
 regex metacharacters as patterns.
+
+**Open questions**
+
+None.
+
+---
+
+### GAP-015b [SEC] JSON request bodies reach Mongo as query operators; there is no request-shape guard
+
+> **FIXED 2026-09-07.** `backend/src/middleware/sanitizeRequest.js` rejects any
+> request key beginning with `$` or containing a `.`, mounted in `server.js`
+> between the body parsers and the routers.
+> `backend/tests/sanitizeRequest.test.js` covers it in 15 cases and needs no
+> database, so it runs where `mongodb-memory-server` cannot fetch its binary.
+> `backend/tests/service.test.js` now mounts the guard the way `server.js` does
+> and asserts that
+> `{"partsUsed":[{"product":{"$ne":null},"quantity":1}]}` on
+> `PUT /api/services/:id/parts` returns 400 with the stock untouched.
+>
+> Two residuals, both deliberate. The CodeQL alerts will not close: the query
+> does not recognise a hand-written guard as a barrier, so 36 of the 60 stay
+> open and the measure of this gap is the behaviour, not the alert count. And
+> the guard is a floor, not a substitute for GAP-017's validation chains, which
+> are still needed for the same four routes.
+
+Severity S1 Critical | Complexity S | Difficulty D2 Standard | Risk R2 |
+Confidence C1 Verified | Priority score 4.0 | Agent suitability AGENT-READY |
+Depends on none | Blocks none | Est. agent turns 4-8
+
+**Location**
+- `backend/src/server.js:29-30` (the two body parsers; no guard follows them)
+- `backend/src/controllers/serviceController.js:224` (`User.findById(assignedTo)`, alert 26)
+- `backend/src/controllers/serviceController.js:295` (`User.findById(mechanicId)`, alert 29)
+- `backend/src/controllers/serviceController.js:485` (`Product.findById(part.product)`, alert 33)
+- `backend/src/controllers/serviceController.js:490` (`Stock.findOne({ product: part.product, branch: order.branch })`, alert 34)
+- `backend/src/routes/serviceRoutes.js:22-36` (`createServiceValidation` has no `assignedTo` rule)
+- `backend/src/routes/serviceRoutes.js:103-110`, `:125-129` (`/:id/assign` and `/:id/parts` have no chain at all; see GAP-017)
+
+**Evidence**
+
+```js
+// backend/src/controllers/serviceController.js:293-295
+  // Validate mechanic
+  const mechanic = await User.findById(mechanicId);
+```
+
+```js
+// backend/src/routes/serviceRoutes.js:103-107: the route that feeds it
+router.put(
+  '/:id/assign',
+  authorize('admin', 'salesperson'),
+  serviceController.assignMechanic
+);
+```
+
+Three facts were established empirically this session against the versions the
+lockfile pins, not inferred:
+
+- `express@5.2.1` parses `{"mechanicId": {"$ne": null}}` from an
+  `application/json` body into a real nested object, and
+  `express.urlencoded({ extended: true })` does the same for
+  `mechanicId[$ne]=x`. Both parsers are mounted at `server.js:29-30`.
+- `mongoose@9.9.4` casts `findOne({ _id: { $ne: null } })` to exactly that
+  filter and executes it. It is not rejected and it is not stripped.
+- `express-validator@7.3.2` only writes a value back into the request when the
+  chain contains a *sanitizer*. A validator that rejects the payload stops the
+  request, which is a barrier; a validator that accepts it is not.
+  `body('x').notEmpty()` accepts `{"$ne": null}`, because express-validator
+  stringifies it to `"[object Object]"` before testing, and leaves the object in
+  `req.body`.
+
+**What is wrong**
+
+There is no place in the request pipeline where a value is constrained to a
+scalar. The documented chain is
+`protect -> authorize -> express-validator -> handleValidationErrors -> controller`,
+and it works wherever a chain exists, because `isMongoId`, `isEmail`, `isIn`,
+`isInt` and `isString` all reject `"[object Object]"` and the request 400s before
+the controller runs. That is why 24 of the 60 alerts are false positives.
+
+The four sites above are the ones where no chain exists. `POST /api/services`
+has a chain but no rule for `assignedTo`. `PUT /api/services/:id/assign` and
+`PUT /api/services/:id/parts` have no chain at all. So the raw object survives
+into a filter.
+
+**Why it matters**
+
+`PUT /api/services/<id>/parts` with `{"partsUsed":[{"product":{"$ne":null},"quantity":1}]}`
+makes `serviceController.js:490` resolve `Stock.findOne` to an arbitrary stock row
+at that branch rather than the named product. The controller then deducts from
+whatever row Mongo returned and writes a `StockMovement` naming it, so the ledger
+records a deduction the caller never asked for and the real part is never
+decremented. A mechanic, the lowest-privileged role that can reach the route, is
+enough. This is silent inventory corruption with an audit trail that looks
+correct, which is why it is S1 rather than S2.
+
+`PUT /api/services/<id>/assign` with `{"mechanicId":{"$ne":null}}` selects an
+arbitrary user; the `role !== MECHANIC` check at `:299` then leaks whether the
+first matching user is a mechanic.
+
+**Intended behavior**
+
+A request value that a route does not explicitly declare as a Mongo operator can
+never be interpreted as one. The guard is positional, not per-site, so a route
+added later inherits it.
+
+**Proposed fix**
+
+Add `backend/src/middleware/sanitizeRequest.js` exporting a middleware that walks
+`req.body`, `req.query` and `req.params` and answers 400 through
+`ApiResponse.error` when any object key begins with `$` or contains a `.`. Mount
+it in `server.js` immediately after the two body parsers and before the routers.
+Reject rather than strip: stripping turns an attack into a silently different
+query, and no legitimate client sends such a key. This was checked, not assumed:
+`grep` over `frontend/src/lib/services/` finds no `$`-prefixed and no dotted key
+in any payload, and no backend test sends one.
+
+Note the interaction with Express 5. Assigning to `req.query` silently does
+nothing, because it is a getter; `Object.defineProperty` and in-place mutation
+both work. An inspect-and-reject guard needs neither, which is a further reason
+to reject rather than rewrite.
+
+This does not replace per-route validation. GAP-017 still has to add the chains
+for the same four routes, and GAP-015d still has to add them for the read routes.
+The guard is the floor that holds while those land, and the backstop for routes
+nobody has written yet.
+
+**Implementation checklist**
+
+- [ ] Create `backend/src/middleware/sanitizeRequest.js` exporting a default middleware that recursively inspects `req.body`, `req.query` and `req.params`.
+- [ ] Reject with `ApiResponse.error(res, 400, ...)` when an object key starts with `$` or contains `.`; name the offending key in the message.
+- [ ] Cap recursion depth and node count so a deeply nested body cannot make the guard itself expensive.
+- [ ] In `backend/src/server.js`, mount it after `express.urlencoded` at line 30 and before the first router.
+- [ ] Add `backend/tests/sanitizeRequest.test.js` mounting the middleware on a bare Express app, asserting 400 for a `$`-prefixed key at top level, nested in an object, and nested inside an array element, and 200 for an ordinary body.
+- [ ] In `backend/tests/service.test.js`, add a test posting `{"partsUsed":[{"product":{"$ne":null},"quantity":1}]}` to `PUT /api/services/:id/parts` and asserting 400.
+- [ ] Run `npm test` from `backend/`.
+
+**Acceptance criteria**
+
+- [ ] A JSON body containing `{"$ne": null}` at any depth returns 400, not 200.
+- [ ] An ordinary create-order body still returns 201.
+- [ ] `backend/tests/sanitizeRequest.test.js` passes without a database, so it runs in a sandbox where `mongodb-memory-server` cannot fetch its binary.
+- [ ] The full backend suite passes.
+
+**Verification commands**
+
+```bash
+cd backend && npm test -- sanitizeRequest.test.js
+cd backend && npm test
+```
+
+**Do not**
+
+Do not use `express-mongo-sanitize`: it mutates `req.query` in place, which is
+the pattern Express 5's getter broke, and it strips silently rather than
+rejecting. Do not mount the guard inside `/api/auth` only, the way `cookieParser`
+is scoped: the reachable sites are on `/api/services`. Do not treat this as a
+substitute for GAP-017 or GAP-015d.
+
+**Rollback**
+
+Remove the mount line from `server.js`. The middleware file is inert on its own.
+
+**Open questions**
+
+None.
+
+---
+
+### GAP-015c [SEC] Four update paths pass the whole request body to findByIdAndUpdate
+
+Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
+Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
+Depends on none | Blocks none | Est. agent turns 4-8
+
+**Location**
+- `backend/src/controllers/branchController.js:175-178` (alert 9)
+- `backend/src/controllers/categoryController.js:177-180` (alert 12)
+- `backend/src/controllers/productController.js:408-411` (alert 120)
+- `backend/src/controllers/supplierController.js:108-111` (alert 27)
+
+**Evidence**
+
+```js
+// backend/src/controllers/branchController.js:175-179
+  branch = await Branch.findByIdAndUpdate(
+    id,
+    req.body,
+    { new: true, runValidators: true }
+  );
+```
+
+Verified against `mongoose@9.9.4` by casting the query offline with
+`Query#cast()`:
+
+```
+body = {$unset:{code:1}}            -> CAST UPDATE: {"$unset":{"code":1}}
+body = {$rename:{name:"code"}}      -> CAST UPDATE: {"$rename":{"name":"code"}}
+body = {$inc:{"settings.taxRate":999}} -> CAST UPDATE: {"$inc":{"settings.taxRate":999}}
+body = {notInSchema:"x"}            -> CAST UPDATE: {"notInSchema":"x"}
+```
+
+Nothing is stripped, and `runValidators: true` does not help: it validates the
+paths the update names, not the ones it does not.
+
+**What is wrong**
+
+The express-validator chains on these four routes validate the fields they know
+about and say nothing about the rest of the body, because express-validator is a
+whitelist of *rules*, not a whitelist of *fields*. The controller then hands the
+entire body to Mongoose as an update document, so any key the chain did not
+mention reaches the database, including update operators.
+
+**Why it matters**
+
+`PUT /api/branches/<id>` with `{"$rename":{"name":"code"}}` renames a field on the
+stored document, which no application code can then read. `{"$unset":{"isActive":1}}`
+removes the archive flag entirely. On `PUT /api/products/<id>`,
+`{"$inc":{"sellingPrice":-9999}}` reprices a part without going through any of the
+price validation on the route.
+
+All four routes are `authorize(USER_ROLES.ADMIN)`, so this is not a
+privilege-escalation path from a low-privileged account; it is a way for a
+compromised or careless admin session to write shapes the schema was meant to
+forbid, and a mass-assignment hole for every field the chain does not name.
+GAP-015b's guard removes the operator half of this by rejecting `$`-prefixed
+keys before the controller runs. The mass-assignment half, an admin setting a
+field the form never exposes, survives the guard and is what this entry is for.
+
+**Intended behavior**
+
+An update document is built from an explicit allow-list of the fields the route
+accepts, not from whatever the client sent.
+
+**Proposed fix**
+
+In each of the four controllers, replace `req.body` with an object built by
+picking the fields the route's validation chain declares. Add a small
+`pickFields(source, allowed)` helper in `backend/src/utils/` rather than writing
+the same destructuring four times. Keep `runValidators: true`.
+
+**Implementation checklist**
+
+- [ ] Create `backend/src/utils/pickFields.js` exporting `pickFields(source, allowed)` that copies only own, defined keys named in `allowed`.
+- [ ] In `backend/src/controllers/branchController.js:175-178`, build the update from the fields `updateBranchValidation` declares in `branchRoutes.js:64-85`.
+- [ ] In `backend/src/controllers/categoryController.js:177-180`, do the same against `updateCategoryValidation` in `categoryRoutes.js:78-140`.
+- [ ] In `backend/src/controllers/productController.js:408-411`, do the same against `updateProductValidation` in `productRoutes.js:136-234`.
+- [ ] In `backend/src/controllers/supplierController.js:108-111`, do the same against `updateSupplierValidation` in `supplierRoutes.js:29-32`.
+- [ ] In `backend/tests/branch.test.js`, add a test sending an unlisted field and asserting it is not persisted.
+- [ ] Run `npm test` from `backend/`.
+
+**Acceptance criteria**
+
+- [ ] `grep -rn "findByIdAndUpdate(\s*$" backend/src/controllers` shows no call whose second argument is `req.body`.
+- [ ] A `PUT` carrying a field the route never declares leaves the stored document unchanged in that field.
+- [ ] The full backend suite passes.
+
+**Verification commands**
+
+```bash
+cd backend && npm test
+grep -rn "req.body," src/controllers/ | grep -i "findbyidandupdate" -A1
+```
+
+**Do not**
+
+Do not solve this by setting `strict: 'throw'` on the schemas: that changes
+behaviour for every write path in the application, including seeds and
+migrations, and it converts a silent no-op into a 500 rather than a 400. Do not
+remove `runValidators: true`.
+
+**Rollback**
+
+Revert the four controllers and delete the helper. Updates return to accepting
+any field.
+
+**Open questions**
+
+None.
+
+---
+
+### GAP-015d [SEC] Twelve read routes have no query-validation chain at all
+
+Severity S3 Moderate | Complexity M | Difficulty D2 Standard | Risk R1 |
+Confidence C1 Verified | Priority score 0.5 | Agent suitability AGENT-READY |
+Depends on none | Blocks none | Est. agent turns 10-20
+
+**Location**
+- `backend/src/routes/stockRoutes.js:85-90`, `:93-98`, `:103-108`, `:142-147` (no chain), `:121-128`, `:131-139`, `:180-188` (path parameter validated, query not)
+- `backend/src/routes/salesRoutes.js:77-82`, `:85-90` (no chain), `:93-100` (path parameter only)
+- `backend/src/routes/serviceRoutes.js:46-50`, `:57-61` (no chain)
+- `backend/src/routes/productRoutes.js:293-298` (no chain)
+- `backend/src/routes/categoryRoutes.js:143-148` (no chain)
+
+These twelve routes account for 28 of the 60 CodeQL alerts. The full mapping from
+alert number to route is in section 13.
+
+**Evidence**
+
+```js
+// backend/src/routes/stockRoutes.js:85-90: GET /api/stock, no validation chain
+router.get(
+  '/',
+  protect,
+  authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
+  stockController.getAllStock
+);
+```
+
+```js
+// backend/src/controllers/stockController.js:71-73: what it feeds
+  if (product) {
+    query.product = product;
+  }
+```
+
+**What is wrong**
+
+`userRoutes.js:18-45` shows what a complete read-route chain looks like in this
+codebase: every one of `search`, `role`, `branch`, `isActive`, `page`, `limit`,
+`sortBy` and `sortOrder` is constrained. The twelve routes above have nothing.
+Their query values go from `req.query` into a filter object with no type, format
+or length check.
+
+**Why it matters**
+
+The severity is S3, not higher, and the reason is specific and load-bearing.
+Express 5.2.1's default `query parser` is `simple`, verified empirically against
+the pinned version: `?branch[$ne]=x` produces the literal key `"branch[$ne]"`,
+not a nested object, so the operator injection these alerts describe is **not
+reachable through the query string today**. `server.js` never calls
+`app.set('query parser', ...)`, so the default stands.
+
+What *is* reachable is array widening. `?product=a&product=b` produces
+`["a","b"]`, and `mongoose@9.9.4` silently rewrites `{product: ["a","b"]}` into
+`{product: {$in: ["a","b"]}}` rather than raising a cast error. Both were
+verified this session. Every branch-scoping clamp was then re-read against this:
+`resolveBranchScope` (`utils/branchScope.js:13-29`), the inline
+`role !== ADMIN` clamps in `salesController.js:39-43` and
+`serviceController.js:41-45`, `checkBranchAccess` and `canAccessBranch` all pin a
+non-admin to a server-supplied branch id, so widening a filter does not cross a
+branch boundary. It broadens a result set the caller is already entitled to.
+
+The real cost is that this is one configuration line away from being critical. A
+future `app.set('query parser', 'extended')`, an Express major that restores `qs`
+as the default, or a proxy that rewrites the query string, turns all 28 of these
+into live operator injection with no other code change. GAP-015b's guard is what
+holds that line; this entry is about restoring the documented pipeline so the
+guard is not the only thing standing between request input and a filter.
+
+`serviceController.js:48-52` is a separate, smaller defect found during the same
+read and worth fixing here: `getServiceOrders` lets any non-mechanic caller set
+`?assignedTo=` freely, so a salesperson can read another user's jobs within their
+own branch. It is an authorisation gap rather than an injection, and it exists
+with or without arrays.
+
+**Intended behavior**
+
+Every read route declares its query parameters with the same express-validator
+wiring the write routes in the same file already use, so the pipeline documented
+in CLAUDE.md holds everywhere rather than in most places.
+
+**Proposed fix**
+
+Add a query-validation chain per route, modelled on `getUsersValidation` in
+`userRoutes.js:18-45`. Constrain ids with `isMongoId()`, enumerations with
+`isIn()` against `backend/src/config/constants.js`, `page` and `limit` with
+`isInt().toInt()`, dates with `isISO8601().toDate()`, and free text with
+`isString().isLength({ max: 100 })`. Prefer a sanitizer on every rule, since a
+sanitizer is what actually writes a scalar back into the request.
+
+Match the file's existing handler: `stockRoutes.js` and `supplierRoutes.js` use
+`handleValidationErrors`, the others use `validate`. They produce different
+payloads and the frontend reads both shapes.
+
+**Implementation checklist**
+
+- [ ] In `backend/src/routes/stockRoutes.js`, add chains for `GET /`, `/low-stock`, `/movements`, `/transfers`, and extend the three routes that validate only their path parameter.
+- [ ] In `backend/src/routes/salesRoutes.js`, add chains for `GET /` and `GET /stats`, and extend `GET /branch/:branchId`.
+- [ ] In `backend/src/routes/serviceRoutes.js`, add chains for `GET /` and `GET /my-jobs`.
+- [ ] In `backend/src/routes/productRoutes.js`, add a chain for `GET /`, including `sortBy` against an allow-list (see GAP-026).
+- [ ] In `backend/src/routes/categoryRoutes.js`, add a chain for `GET /`.
+- [ ] In `backend/src/controllers/serviceController.js:48-52`, clamp `assignedTo` so a non-admin cannot read another user's jobs.
+- [ ] Add tests asserting 400 for a malformed `?branch=`, a non-integer `?page=`, and an out-of-enum `?status=` on at least one route per file.
+- [ ] Run `npm test` from `backend/`.
+
+**Acceptance criteria**
+
+- [ ] Every `router.get` in the five files names a validation chain.
+- [ ] `GET /api/stock?branch=notanid` returns 400.
+- [ ] `GET /api/services?assignedTo=<another user>` no longer returns that user's jobs to a non-admin.
+- [ ] The full backend suite passes.
+
+**Verification commands**
+
+```bash
+cd backend && npm test
+grep -n "router.get" src/routes/*.js    # every hit should name a *Validation chain
+```
+
+**Do not**
+
+Do not set `app.set('query parser', 'extended')` to make the alerts reproduce.
+That converts 28 latent findings into live ones. Do not drop GAP-015b's guard on
+the grounds that these chains supersede it: the guard covers routes that do not
+exist yet.
+
+**Rollback**
+
+Revert the five route files. Reads return to accepting any query shape.
 
 **Open questions**
 
@@ -2214,6 +2676,16 @@ is why this entry is AGENT-ASSISTED.
 ---
 
 ### GAP-017 [SEC] Four mutating service routes have no validation chain
+
+> **The 2026-09-07 NoSQL triage raised what is at stake here.** These four routes
+> are the only place in the backend where an unvalidated request *body* value
+> reaches a Mongo filter, so they carried all four TP-1 alerts (26, 29, 33, 34).
+> `PUT /:id/parts` with `{"partsUsed":[{"product":{"$ne":null},"quantity":1}]}`
+> made `serviceController.js:490` deduct stock from an arbitrary product. The
+> guard added by GAP-015b closes that, so this entry is back to being about 400
+> versus 500 and the `NaN` payment. Add one thing to its scope: `POST /` has a
+> chain but declares no rule for `assignedTo`, which reaches
+> `serviceController.js:224`. See section 13.
 
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
@@ -2643,7 +3115,7 @@ pagination.
 
 Implement the three parameters in both controllers. Accept `search` and build an
 escaped `$or` over `orderNumber`, `customer.name` and `customer.phone` using the
-shared `escapeRegex` from GAP-015. Accept `sortBy` against an allow-list of
+shared `escapeRegex` from GAP-015a. Accept `sortBy` against an allow-list of
 sortable fields and `sortOrder` as `asc` or `desc`, defaulting to the current
 `createdAt` descending. Then delete the client-side `filteredOrders` fallback,
 which is misleading because it silently searches one page.
@@ -3109,7 +3581,7 @@ cd backend && npm test
 
 Do not change `PAGINATION.MAX_LIMIT`. Do not alter the twelve endpoints that
 already clamp correctly beyond swapping in the shared helper. Do not edit
-`productController.js` at the same time as GAP-015; sequence them.
+`productController.js` at the same time as GAP-015a; sequence them.
 
 **Rollback**
 
@@ -5679,7 +6151,10 @@ lines, no empty catch blocks, and no page importing axios directly.
 {"id":"GAP-012","cat":"SEC","sev":"S2","cplx":"XS","diff":"D2","risk":"R2","conf":"C1","pri":5.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":[".github/workflows/dependabot-auto-merge.yml"],"title":"Dependabot auto-merge treats a still-running security check as passing"},
 {"id":"GAP-013","cat":"CODE","sev":"S2","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":5.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["frontend/src/components/stock/AdjustStockModal.tsx","backend/src/routes/stockRoutes.js"],"title":"The adjust-stock form defaults to an invalid reason and offers one the API rejects"},
 {"id":"GAP-014","cat":"CODE","sev":"S1","cplx":"S","diff":"D2","risk":"R2","conf":"C1","pri":4.0,"agent":"AGENT-READY","depends_on":[],"blocks":["GAP-046"],"files":["backend/src/controllers/salesController.js","backend/src/controllers/stockController.js"],"title":"Stock reservations leak on every order-creation failure path"},
-{"id":"GAP-015","cat":"SEC","sev":"S2","cplx":"S","diff":"D2","risk":"R1","conf":"C1","pri":2.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/utils/regex.js","backend/src/controllers/branchController.js","backend/src/controllers/supplierController.js","backend/src/controllers/userController.js","backend/src/controllers/productController.js","backend/src/controllers/motorcycleModelController.js"],"title":"User-supplied text reaches MongoDB regex unescaped at seven sites"},
+{"id":"GAP-015a","cat":"SEC","sev":"S2","cplx":"S","diff":"D2","risk":"R1","conf":"C1","pri":2.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/utils/regex.js","backend/src/controllers/branchController.js","backend/src/controllers/supplierController.js","backend/src/controllers/userController.js","backend/src/controllers/productController.js","backend/src/controllers/motorcycleModelController.js"],"title":"User-supplied text reaches MongoDB regex unescaped at eight sites"},
+{"id":"GAP-015b","cat":"SEC","sev":"S1","cplx":"S","diff":"D2","risk":"R2","conf":"C1","pri":4.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/middleware/sanitizeRequest.js","backend/src/server.js","backend/tests/sanitizeRequest.test.js","backend/tests/service.test.js"],"title":"JSON request bodies reach Mongo as query operators; there is no request-shape guard"},
+{"id":"GAP-015c","cat":"SEC","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C1","pri":2.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/utils/pickFields.js","backend/src/controllers/branchController.js","backend/src/controllers/categoryController.js","backend/src/controllers/productController.js","backend/src/controllers/supplierController.js"],"title":"Four update paths pass the whole request body to findByIdAndUpdate"},
+{"id":"GAP-015d","cat":"SEC","sev":"S3","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/routes/stockRoutes.js","backend/src/routes/salesRoutes.js","backend/src/routes/serviceRoutes.js","backend/src/routes/productRoutes.js","backend/src/routes/categoryRoutes.js","backend/src/controllers/serviceController.js"],"title":"Twelve read routes have no query-validation chain at all"},
 {"id":"GAP-016","cat":"CODE","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C1","pri":2.5,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":["GAP-050"],"files":["backend/src/controllers/salesController.js","backend/src/utils/salesCompletion.js"],"title":"A completed-but-unpaid sale can never be paid; on-account revenue is unrecordable"},
 {"id":"GAP-017","cat":"SEC","sev":"S2","cplx":"S","diff":"D2","risk":"R1","conf":"C1","pri":2.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/routes/serviceRoutes.js"],"title":"Four mutating service routes have no validation chain"},
 {"id":"GAP-018","cat":"CODE","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C1","pri":2.5,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":[],"files":["backend/src/controllers/stockController.js"],"title":"Stock adjustments ignore reservedQuantity and can strand pending orders"},
@@ -5720,7 +6195,136 @@ lines, no empty catch blocks, and no page importing axios directly.
 ]
 ```
 
-## 13. Self-Audit Note
+## 13. NoSQL Injection Alert Triage (CodeQL `js/sql-injection`)
+
+Triaged on 2026-09-07 against `origin/master` at `ca99b7d`. Sixty open
+high-severity alerts, every one read at its sink and traced back to the route
+that feeds it. `js/sql-injection` is the query CodeQL uses for NoSQL injection
+on a Mongo codebase.
+
+**Result: 8 exploitable today, 28 real but latent, 24 false positives.**
+
+### 13.1 How the verdicts were reached
+
+Four facts decide every row, and all four were established by running code
+against the versions `backend/package-lock.json` pins, not by reading docs:
+
+1. **`express@5.2.1`'s default `query parser` is `simple`.** `?x[$ne]=1` yields
+   the literal key `"x[$ne]"`, never a nested object. `server.js` never calls
+   `app.set('query parser', ...)`. So **no query-string value can become an**
+   **operator object.** `?x=1&x=2` does yield `["1","2"]`.
+2. **`express.json()` and `express.urlencoded({ extended: true })` both do**
+   **produce nested objects** (`server.js:29-30`). So a *body* value can.
+3. **`express-validator@7.3.2` writes a value back only from a sanitizer.** A
+   validator that rejects `"[object Object]"` stops the request and is a real
+   barrier: `isMongoId`, `isEmail`, `isIn`, `isInt`, `isFloat`, `isString`,
+   `isURL`, `isBoolean` and a `.matches()` or `.custom()` regex test all do.
+   `notEmpty()` does **not**: it accepts `"[object Object]"` and leaves the
+   object in `req.body`. `.optional()` alone is not a barrier either.
+4. **`mongoose@9.9.4` neither strips nor rejects.** `{_id:{$ne:null}}` casts
+   and executes; `{code:["a","b"]}` is silently rewritten to
+   `{code:{$in:["a","b"]}}`; `$unset`, `$rename` and `$inc` pass through an
+   update document untouched even with `runValidators: true`.
+
+Route parameters are never a vector: an Express path segment is always a
+string, so neither an object nor an array is constructible there.
+
+### 13.2 Verdict classes
+
+| Class | Count | Meaning | Gap |
+|---|---|---|---|
+| TP-1 | 4 | Unvalidated **body** value reaches a filter. Operator injection works today. | GAP-015b |
+| TP-2 | 4 | Whole `req.body` becomes an update document. Operator injection and mass assignment work today. | GAP-015c |
+| TP-3 | 28 | Unvalidated **query** value reaches a filter. Operator injection blocked by the `simple` parser; array widening to `$in` works. One config line from critical. | GAP-015d |
+| FP-A | 24 | A route validator rejects the payload before the controller runs. Not exploitable. | dismiss |
+
+TP-3 is recorded as **LATENT** rather than TRUE POSITIVE in the table below,
+because the exploit CodeQL describes does not currently work. It is not a
+dismissal: the code is unconstrained, and every branch-scoping clamp was
+re-read to confirm array widening crosses no authorisation boundary today.
+
+### 13.3 Per-alert table
+
+All paths are relative to `backend/src/controllers/`; route citations are
+relative to `backend/src/routes/`.
+
+| # | Sink | Request field | Route and validator | Verdict | Class |
+|---|---|---|---|---|---|
+| 5 | `authController.js:55` | `body.email` | POST /auth/register: body('email').trim().isEmail() authRoutes.js:26-29 | FALSE POSITIVE | FP-A |
+| 10 | `authController.js:108` | `body.email` | POST /auth/login: body('email').trim().isEmail() authRoutes.js:57-60 | FALSE POSITIVE | FP-A |
+| 13 | `authController.js:238` | `body.email` | POST /auth/forgot-password: body('email').trim().isEmail() authRoutes.js:74-77 | FALSE POSITIVE | FP-A |
+| 14 | `authController.js:314` | `body.email` | POST /auth/register-customer: body('email').trim().isEmail() authRoutes.js:42-45 | FALSE POSITIVE | FP-A |
+| 6 | `branchController.js:118` | `body.manager` | POST /branches: body('manager').optional().isMongoId() branchRoutes.js:55-57 | FALSE POSITIVE | FP-A |
+| 8 | `branchController.js:165` | `body.manager` | PUT /branches/:id: body('manager').optional().isMongoId() branchRoutes.js:81-83 | FALSE POSITIVE | FP-A |
+| 9 | `branchController.js:177` | `whole req.body` | PUT /branches/:id: chain validates named fields only, branchRoutes.js:64-85 | TRUE POSITIVE | TP-2 |
+| 4 | `categoryController.js:36` | `query.parent` | GET /categories: no chain, categoryRoutes.js:143-148 | LATENT | TP-3 |
+| 7 | `categoryController.js:116` | `body.parent` | POST /categories: custom /^[0-9a-fA-F]{24}$/ test, categoryRoutes.js:46-58 | FALSE POSITIVE | FP-A |
+| 11 | `categoryController.js:170` | `body.parent` | PUT /categories/:id: custom ObjectId test, categoryRoutes.js:105-117 | FALSE POSITIVE | FP-A |
+| 12 | `categoryController.js:179` | `whole req.body` | PUT /categories/:id: chain validates named fields only, categoryRoutes.js:78-140 | TRUE POSITIVE | TP-2 |
+| 119 | `productController.js:165` | `query.* (7 fields)` | GET /products: no chain, productRoutes.js:293-298 | LATENT | TP-3 |
+| 16 | `productController.js:171` | `query.* (7 fields)` | GET /products: no chain, productRoutes.js:293-298 | LATENT | TP-3 |
+| 17 | `productController.js:314` | `body.category` | POST /products: body('category').notEmpty().isMongoId() productRoutes.js:59-63 | FALSE POSITIVE | FP-A |
+| 18 | `productController.js:383` | `body.category` | PUT /products/:id: body('category').optional().isMongoId() productRoutes.js:161-164 | FALSE POSITIVE | FP-A |
+| 120 | `productController.js:410` | `whole req.body` | PUT /products/:id: chain validates named fields only, productRoutes.js:136-234 | TRUE POSITIVE | TP-2 |
+| 24 | `salesController.js:65` | `query.* (5 fields)` | GET /sales: no chain, salesRoutes.js:85-90 | LATENT | TP-3 |
+| 25 | `salesController.js:72` | `query.* (5 fields)` | GET /sales: no chain, salesRoutes.js:85-90 | LATENT | TP-3 |
+| 28 | `salesController.js:142` | `query.status/dates` | GET /sales/branch/:branchId: param only, salesRoutes.js:93-100 | LATENT | TP-3 |
+| 30 | `salesController.js:148` | `query.status/dates` | GET /sales/branch/:branchId: param only, salesRoutes.js:93-100 | LATENT | TP-3 |
+| 109 | `salesController.js:193` | `body.clientRequestId, body.branch` | POST /sales: isString() + isMongoId(), salesRoutes.js:25-27 | FALSE POSITIVE | FP-A |
+| 31 | `salesController.js:206` | `body.items[].product` | POST /sales: body('items.*.product').isMongoId() salesRoutes.js:33 | FALSE POSITIVE | FP-A |
+| 32 | `salesController.js:216` | `body.items[].product` | POST /sales: body('items.*.product').isMongoId() salesRoutes.js:33 | FALSE POSITIVE | FP-A |
+| 35 | `salesController.js:621` | `query.branch/dates` | GET /sales/stats: no chain, salesRoutes.js:77-82 | LATENT | TP-3 |
+| 36 | `salesController.js:622` | `query.branch/dates` | GET /sales/stats: no chain, salesRoutes.js:77-82 | LATENT | TP-3 |
+| 37 | `salesController.js:623` | `query.branch/dates` | GET /sales/stats: no chain, salesRoutes.js:77-82 | LATENT | TP-3 |
+| 38 | `salesController.js:624` | `query.branch/dates` | GET /sales/stats: no chain, salesRoutes.js:77-82 | LATENT | TP-3 |
+| 111 | `salesController.js:629` | `query.branch/dates` | GET /sales/stats: no chain, salesRoutes.js:77-82 | LATENT | TP-3 |
+| 20 | `serviceController.js:78` | `query.* (7 fields)` | GET /services: no chain, serviceRoutes.js:46-50 | LATENT | TP-3 |
+| 21 | `serviceController.js:86` | `query.* (7 fields)` | GET /services: no chain, serviceRoutes.js:46-50 | LATENT | TP-3 |
+| 22 | `serviceController.js:121` | `query.status` | GET /services/my-jobs: no chain, serviceRoutes.js:57-61 | LATENT | TP-3 |
+| 23 | `serviceController.js:129` | `query.status` | GET /services/my-jobs: no chain, serviceRoutes.js:57-61 | LATENT | TP-3 |
+| 110 | `serviceController.js:213` | `body.clientRequestId, body.branch` | POST /services: isString() + isMongoId(), serviceRoutes.js:25-27 | FALSE POSITIVE | FP-A |
+| 26 | `serviceController.js:224` | `body.assignedTo` | POST /services: chain exists but declares no assignedTo rule, serviceRoutes.js:22-36 | TRUE POSITIVE | TP-1 |
+| 29 | `serviceController.js:295` | `body.mechanicId` | PUT /services/:id/assign: NO chain at all, serviceRoutes.js:103-107 | TRUE POSITIVE | TP-1 |
+| 33 | `serviceController.js:485` | `body.partsUsed[].product` | PUT /services/:id/parts: NO chain at all, serviceRoutes.js:125-129 | TRUE POSITIVE | TP-1 |
+| 34 | `serviceController.js:490` | `body.partsUsed[].product` | PUT /services/:id/parts: NO chain at all, serviceRoutes.js:125-129 | TRUE POSITIVE | TP-1 |
+| 121 | `stockController.js:89` | `query.branch/product` | GET /stock: no chain, stockRoutes.js:85-90 | LATENT | TP-3 |
+| 43 | `stockController.js:100` | `query.branch/product` | GET /stock: no chain, stockRoutes.js:85-90 | LATENT | TP-3 |
+| 44 | `stockController.js:147` | `query.category` | GET /stock/branch/:branchId: param only, stockRoutes.js:180-188 | LATENT | TP-3 |
+| 47 | `stockController.js:266` | `query.branch` | GET /stock/low-stock: no chain, stockRoutes.js:93-98 | LATENT | TP-3 |
+| 48 | `stockController.js:309` | `body.product` | POST /stock/restock: body('product').notEmpty().isMongoId() stockRoutes.js:12 | FALSE POSITIVE | FP-A |
+| 49 | `stockController.js:310` | `body.branch` | POST /stock/restock: body('branch').notEmpty().isMongoId() stockRoutes.js:13 | FALSE POSITIVE | FP-A |
+| 50 | `stockController.js:327` | `body.product/branch` | POST /stock/restock: both isMongoId(), stockRoutes.js:12-13 | FALSE POSITIVE | FP-A |
+| 51 | `stockController.js:406` | `body.product/branch` | POST /stock/adjust: both isMongoId(), stockRoutes.js:27-28 | FALSE POSITIVE | FP-A |
+| 122 | `stockController.js:415` | `body.product` | POST /stock/adjust: body('product').notEmpty().isMongoId() stockRoutes.js:27 | FALSE POSITIVE | FP-A |
+| 52 | `stockController.js:597` | `body.product/fromBranch` | POST /stock/transfers: both isMongoId(), stockRoutes.js:35-36 | FALSE POSITIVE | FP-A |
+| 53 | `stockController.js:830` | `query.branch/status` | GET /stock/transfers: no chain, stockRoutes.js:142-147 | LATENT | TP-3 |
+| 54 | `stockController.js:838` | `query.branch/status` | GET /stock/transfers: no chain, stockRoutes.js:142-147 | LATENT | TP-3 |
+| 55 | `stockController.js:942` | `query.* (5 fields)` | GET /stock/movements: no chain, stockRoutes.js:103-108 | LATENT | TP-3 |
+| 56 | `stockController.js:950` | `query.* (5 fields)` | GET /stock/movements: no chain, stockRoutes.js:103-108 | LATENT | TP-3 |
+| 57 | `stockController.js:1051` | `query.branch` | GET /stock/movements/product/:productId: param only, stockRoutes.js:121-128 | LATENT | TP-3 |
+| 58 | `stockController.js:1058` | `query.branch` | GET /stock/movements/product/:productId: param only, stockRoutes.js:121-128 | LATENT | TP-3 |
+| 59 | `stockController.js:1108` | `query.type/dates` | GET /stock/movements/branch/:branchId: param only, stockRoutes.js:131-139 | LATENT | TP-3 |
+| 60 | `stockController.js:1115` | `query.type/dates` | GET /stock/movements/branch/:branchId: param only, stockRoutes.js:131-139 | LATENT | TP-3 |
+| 27 | `supplierController.js:110` | `whole req.body` | PUT /suppliers/:id: chain validates named fields only, supplierRoutes.js:29-32 | TRUE POSITIVE | TP-2 |
+| 171 | `userController.js:68` | `query.search (regex)` | GET /users: full chain, query('search').trim() userRoutes.js:18-45 | FALSE POSITIVE | FP-A |
+| 42 | `userController.js:74` | `query.search (regex)` | GET /users: full chain, query('search').trim() userRoutes.js:18-45 | FALSE POSITIVE | FP-A |
+| 45 | `userController.js:128` | `body.branch` | POST /users: body('branch').optional().isMongoId() userRoutes.js:69-71 | FALSE POSITIVE | FP-A |
+| 46 | `userController.js:212` | `body.branch` | PUT /users/:id: body('branch').optional({values:'null'}).isMongoId() userRoutes.js:94-96 | FALSE POSITIVE | FP-A |
+
+### 13.4 What the triage does not cover
+
+The alert list is not a complete list of the unconstrained sites. Five of the
+eight unescaped `$regex` sites in GAP-015a carry no alert at all: CodeQL
+reports at the query sink, and the `getBranches` and `getSuppliers` sinks were
+not flagged. Fixing only what the Security tab lists would leave them open.
+
+Dismissing the 24 FP-A alerts in the Security tab is a human action and is not
+part of any gap. Expect the TP and LATENT alerts to stay open after GAP-015b
+lands: CodeQL will not recognise a hand-written guard as a barrier. The
+measure of that gap is the behaviour, not the alert count.
+
+---
+## 14. Self-Audit Note
 
 I re-read the deliverable against the Quality Bar and made the following changes.
 
@@ -5747,7 +6351,8 @@ now stands.
 produced about 120 raw findings. I merged aggressively on the root-cause rule:
 the reservation leak, the TOCTOU oversell, the lost update and the partial
 deduction were reported separately by two passes and became GAP-014 and GAP-046;
-seven separate unescaped-regex sites became one GAP-015; eight documentation
+seven separate unescaped-regex sites became one GAP-015, which the 2026-09-07
+triage later corrected to eight sites and split into four entries; eight documentation
 contradictions became one GAP-052; four cache defects became GAP-031 and GAP-048.
 I dropped the mobile app's 44 absent features to a single paragraph in section 11
 rather than writing 44 `FEAT` entries for an app whose own README says it has no
@@ -5781,9 +6386,9 @@ single unit test against `isURL`.
 - [x] Every checklist item is a single action naming the file it touches.
 - [x] Every AGENT-READY entry has `Open questions: None`. The five HUMAN-FIRST entries and the eight AGENT-ASSISTED entries each carry a real question.
 - [x] Every CONTRA entry names both positions with quoted evidence and states who decides.
-- [x] The JSON appendix has 52 objects whose ids, scores, dependencies and titles match the prose entries.
-- [x] Counts in the metadata block match the actual entries: 52 total; S1 7, S2 32, S3 13, S4 0; CODE 20, SEC 12, OPS 9, FEAT 4, TEST 2, CONTRA 3, PROJ 2.
-- [x] S1 findings are 7 of 52, or 13.5%, inside the 15% calibration ceiling.
+- [x] The JSON appendix has 55 objects whose ids, scores, dependencies and titles match the prose entries.
+- [x] Counts in the metadata block match the actual entries: 55 total; S1 8, S2 33, S3 14, S4 0; CODE 20, SEC 15, OPS 9, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
+- [x] S1 findings are 8 of 55, or 14.5%, inside the 15% calibration ceiling.
 
 **One caveat on my own confidence.** I read about 62% of the source and executed
 none of it. The largest unread surface is the frontend, which also has no tests,

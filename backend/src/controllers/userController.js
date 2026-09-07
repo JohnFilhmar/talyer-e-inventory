@@ -2,6 +2,7 @@ import User from '../models/User.js';
 import Branch from '../models/Branch.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
+import { escapeRegex } from '../utils/regex.js';
 
 // Defence in depth on top of the schema's `select: false`. The field names must
 // match `models/User.js` exactly: Mongoose silently ignores an exclusion for a
@@ -31,9 +32,10 @@ const getUsers = asyncHandler(async (req, res) => {
 
   // Search filter (name or email)
   if (search) {
+    const pattern = { $regex: escapeRegex(search), $options: 'i' };
     query.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
+      { name: pattern },
+      { email: pattern },
     ];
   }
 

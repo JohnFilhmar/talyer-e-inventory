@@ -1,5 +1,5 @@
 import express from 'express';
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import {
   getBranches,
   getBranch,
@@ -18,6 +18,23 @@ import { USER_ROLES, CACHE_TTL } from '../config/constants.js';
 const router = express.Router();
 
 // Validation chains
+// `search` and `city` both reach a Mongo $regex in getBranches. They are
+// escaped there, so this cap is the second half of the pair rather than the
+// defence: a bounded input keeps even a legal pattern cheap to match.
+// `.isString()` is deliberate, and rejects `?search=a&search=b`, which Express
+// parses into an array that would otherwise reach $regex as an array.
+const listBranchesValidation = [
+  query('search')
+    .optional()
+    .isString().withMessage('Search must be a string')
+    .isLength({ max: 100 }).withMessage('Search query cannot exceed 100 characters'),
+  query('city')
+    .optional()
+    .isString().withMessage('City must be a string')
+    .isLength({ max: 100 }).withMessage('City filter cannot exceed 100 characters'),
+  validate
+];
+
 const branchIdValidation = [
   param('id')
     .isMongoId()
@@ -88,6 +105,7 @@ const updateBranchValidation = [
 router.get(
   '/',
   protect,
+  listBranchesValidation,
   cacheMiddleware('branches', CACHE_TTL.LONG),
   getBranches
 );

@@ -4,16 +4,11 @@ import MotorcycleModel from '../models/MotorcycleModel.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
+import { escapeRegex } from '../utils/regex.js';
 import { CACHE_TTL, PAGINATION } from '../config/constants.js';
 
 /** Fields of a motorcycle model a product read needs to render a fitment chip. */
 const MOTORCYCLE_MODEL_SELECT = 'make model yearFrom yearTo code';
-
-/**
- * Escapes a user-supplied string for use inside a RegExp. A shopper searching
- * "125i (2018)" must not have the parentheses read as a capture group.
- */
-const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * Normalises the `motorcycleModel` filter, which arrives either as a repeated
@@ -122,7 +117,7 @@ export const getProducts = asyncHandler(async (req, res) => {
   }
 
   if (brand) {
-    query.brand = { $regex: brand, $options: 'i' };
+    query.brand = { $regex: escapeRegex(brand), $options: 'i' };
   }
 
   // Several motorcycles match ANY of them, not all: a customer with a Click

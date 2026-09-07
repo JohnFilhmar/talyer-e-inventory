@@ -3,14 +3,8 @@ import Product from '../models/Product.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
+import { escapeRegex } from '../utils/regex.js';
 import { CACHE_TTL } from '../config/constants.js';
-
-/**
- * Escapes a user-supplied string so it can be used inside a RegExp literally.
- * Without this a search for "125i (2018)" is parsed as a group and either
- * throws or matches the wrong thing.
- */
-const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * Cache invalidation for this domain.
