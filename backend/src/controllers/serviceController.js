@@ -44,8 +44,13 @@ export const getServiceOrders = asyncHandler(async (req, res) => {
     query.branch = branch;
   }
 
-  // Mechanics can only see their assigned jobs (unless viewing all)
-  if (req.user.role === USER_ROLES.MECHANIC && !assignedTo) {
+  // A mechanic sees only their own jobs, and the `?assignedTo=` filter cannot
+  // move them off that. The previous shape was
+  // `if (MECHANIC && !assignedTo) ... else if (assignedTo) ...`, so a mechanic
+  // who supplied the parameter took the second branch and read another
+  // mechanic's jobs within their branch. Everyone else may filter freely: only
+  // admins see across branches, and the branch clamp above already applies.
+  if (req.user.role === USER_ROLES.MECHANIC) {
     query.assignedTo = req.user._id;
   } else if (assignedTo) {
     query.assignedTo = assignedTo;

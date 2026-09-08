@@ -14,7 +14,13 @@ import {
 import { protect, authorize } from '../middleware/auth.js';
 import { checkBranchAccess } from '../middleware/branchAccess.js';
 import validate from '../middleware/validate.js';
-import { USER_ROLES } from '../config/constants.js';
+import { USER_ROLES, ORDER_STATUS, PAYMENT_STATUS } from '../config/constants.js';
+import {
+  idRule,
+  enumRule,
+  paginationRules,
+  dateRangeRules,
+} from '../utils/queryRules.js';
 
 const router = express.Router();
 
@@ -66,8 +72,29 @@ const mongoIdValidation = [
   validate
 ];
 
-const branchIdValidation = [
+// Query validation for the read routes (GAP-015d). These had no chain at all.
+// `listOrdersByBranchValidation` absorbed the old standalone `branchIdValidation`,
+// which validated the path parameter and nothing else.
+const listOrdersValidation = [
+  idRule('branch'),
+  enumRule('status', Object.values(ORDER_STATUS)),
+  enumRule('paymentStatus', Object.values(PAYMENT_STATUS)),
+  ...dateRangeRules(),
+  ...paginationRules(),
+  validate
+];
+
+const listOrdersByBranchValidation = [
   param('branchId').isMongoId().withMessage('Valid branch ID is required'),
+  enumRule('status', Object.values(ORDER_STATUS)),
+  ...dateRangeRules(),
+  ...paginationRules(),
+  validate
+];
+
+const statsValidation = [
+  idRule('branch'),
+  ...dateRangeRules(),
   validate
 ];
 
@@ -78,6 +105,7 @@ router.get(
   '/stats',
   protect,
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
+  statsValidation,
   getSalesStatistics
 );
 
@@ -86,6 +114,7 @@ router.get(
   '/',
   protect,
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
+  listOrdersValidation,
   getSalesOrders
 );
 
@@ -94,7 +123,7 @@ router.get(
   '/branch/:branchId',
   protect,
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
-  branchIdValidation,
+  listOrdersByBranchValidation,
   checkBranchAccess,
   getSalesOrdersByBranch
 );

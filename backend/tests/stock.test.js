@@ -1497,3 +1497,93 @@ describe('Stock API Tests', () => {
     });
   });
 });
+
+// GAP-015d. GET /api/stock, /low-stock, /movements and /transfers had no
+// validation chain at all, so their filter values went straight into a Mongo
+// filter. Express parses ?x=1&x=2 into an array, and Mongoose rewrites
+// {field: [...]} into {field: {$in: [...]}} rather than raising a cast error,
+// so a repeated parameter widened the filter.
+describe('Stock API - read route query validation', () => {
+  it('rejects a malformed branch id on GET /api/stock', async () => {
+    const { token } = await createTestAdmin();
+
+    const res = await request(app)
+      .get('/api/stock?branch=notanid')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a repeated branch parameter, which Mongoose would widen to $in', async () => {
+    const { token } = await createTestAdmin();
+    const a = await createTestBranch({ name: 'Alpha', code: 'ALP-1' });
+    const b = await createTestBranch({ name: 'Beta', code: 'BET-1' });
+
+    const res = await request(app)
+      .get(`/api/stock?branch=${a._id}&branch=${b._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a non-integer page', async () => {
+    const { token } = await createTestAdmin();
+
+    const res = await request(app)
+      .get('/api/stock?page=abc')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects an out-of-enum movement type on GET /api/stock/movements', async () => {
+    const { token } = await createTestAdmin();
+
+    const res = await request(app)
+      .get('/api/stock/movements?type=not_a_type')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('accepts a valid movement type', async () => {
+    const { token } = await createTestAdmin();
+
+    const res = await request(app)
+      .get('/api/stock/movements?type=restock')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects an out-of-enum transfer status', async () => {
+    const { token } = await createTestAdmin();
+
+    const res = await request(app)
+      .get('/api/stock/transfers?status=bogus')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('still serves an unfiltered listing', async () => {
+    const { token } = await createTestAdmin();
+
+    const res = await request(app)
+      .get('/api/stock')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('still serves a valid branch filter', async () => {
+    const { token } = await createTestAdmin();
+    const branch = await createTestBranch({ name: 'Gamma', code: 'GAM-1' });
+
+    const res = await request(app)
+      .get(`/api/stock?branch=${branch._id}&page=1&limit=10`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+  });
+});

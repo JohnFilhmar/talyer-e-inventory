@@ -5,6 +5,13 @@ import * as serviceController from '../controllers/serviceController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import validationHandler from '../middleware/validationHandler.js';
 import { isValidPhoneNumber, normalizePhoneNumber } from '../utils/phoneValidation.js';
+import { SERVICE_STATUS, SERVICE_PRIORITY, PAYMENT_STATUS } from '../config/constants.js';
+import {
+  idRule,
+  enumRule,
+  paginationRules,
+  dateRangeRules,
+} from '../utils/queryRules.js';
 
 // Custom phone number validator
 const phoneValidator = body('customer.phone')
@@ -17,6 +24,22 @@ const phoneValidator = body('customer.phone')
     }
     return true;
   });
+
+// Query validation for the read routes (GAP-015d). These had no chain at all.
+const listServicesValidation = [
+  idRule('branch'),
+  idRule('assignedTo'),
+  enumRule('status', Object.values(SERVICE_STATUS)),
+  enumRule('priority', Object.values(SERVICE_PRIORITY)),
+  enumRule('paymentStatus', Object.values(PAYMENT_STATUS)),
+  ...dateRangeRules(),
+  ...paginationRules()
+];
+
+const myJobsValidation = [
+  enumRule('status', Object.values(SERVICE_STATUS)),
+  ...paginationRules()
+];
 
 // Validation rules for creating service order
 const createServiceValidation = [
@@ -46,6 +69,8 @@ router.use(protect);
 router.get(
   '/',
   authorize('admin', 'salesperson', 'mechanic'),
+  listServicesValidation,
+  validationHandler,
   serviceController.getServiceOrders
 );
 
@@ -57,6 +82,8 @@ router.get(
 router.get(
   '/my-jobs',
   authorize('mechanic'),
+  myJobsValidation,
+  validationHandler,
   serviceController.getMyJobs
 );
 

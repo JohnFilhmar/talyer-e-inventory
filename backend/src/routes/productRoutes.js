@@ -15,6 +15,14 @@ import {
 } from '../controllers/productController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import validate from '../middleware/validate.js';
+import {
+  idRule,
+  enumRule,
+  boolRule,
+  textRule,
+  numberRule,
+  paginationRules,
+} from '../utils/queryRules.js';
 import { uploadSingleImage, processImage, handleUploadError } from '../middleware/imageUpload.js';
 import { USER_ROLES } from '../config/constants.js';
 
@@ -279,6 +287,31 @@ const searchValidation = [
     .trim()
 ];
 
+// The sort fields GET /api/products accepts. `sortBy` is used as an object key
+// (`sort[sortBy] = ...` in getProducts), so an allow-list is what keeps an
+// arbitrary string out of that position. Matches ProductListParams in
+// frontend/src/types/product.ts.
+const PRODUCT_SORT_FIELDS = ['name', 'sellingPrice', 'costPrice', 'createdAt', 'updatedAt'];
+
+// Query validation for GET /api/products (GAP-015d): no chain existed, so
+// `category`, `brand` and the price bounds reached a Mongo filter
+// unconstrained. `motorcycleModel` is deliberately comma-joined rather than a
+// repeated parameter, so it is text rather than an id rule; the controller
+// splits and validates each id in parseMotorcycleModelFilter.
+const listProductsValidation = [
+  idRule('category'),
+  textRule('brand'),
+  textRule('motorcycleModel', 1000),
+  textRule('search'),
+  boolRule('active'),
+  boolRule('discontinued'),
+  numberRule('minPrice'),
+  numberRule('maxPrice'),
+  enumRule('sortBy', PRODUCT_SORT_FIELDS),
+  enumRule('sortOrder', ['asc', 'desc']),
+  ...paginationRules()
+];
+
 // Routes
 // Search route must come before /:id to avoid conflicts
 router
@@ -294,6 +327,8 @@ router
   .route('/')
   .get(
     protect,
+    listProductsValidation,
+    validate,
     getProducts
   )
   .post(

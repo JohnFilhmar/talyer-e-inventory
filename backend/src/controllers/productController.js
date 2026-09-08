@@ -5,10 +5,34 @@ import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { escapeRegex } from '../utils/regex.js';
+import { pickFields } from '../utils/pickFields.js';
 import { CACHE_TTL, PAGINATION } from '../config/constants.js';
 
 /** Fields of a motorcycle model a product read needs to render a fitment chip. */
 const MOTORCYCLE_MODEL_SELECT = 'make model yearFrom yearTo code';
+
+// The fields PUT /api/products/:id accepts: the schema's top-level paths,
+// matching `UpdateProductPayload` in frontend/src/types/product.ts. What this
+// keeps out is everything else, `_id`, `__v` and the timestamps included.
+// `sku` stays updatable on purpose: the pre('save') hook only mints it when it
+// is absent, and the edit form exposes it.
+const PRODUCT_UPDATABLE_FIELDS = [
+  'sku',
+  'name',
+  'description',
+  'category',
+  'brand',
+  'productModel',
+  'motorcycleModels',
+  'costPrice',
+  'sellingPrice',
+  'barcode',
+  'images',
+  'specifications',
+  'tags',
+  'isActive',
+  'isDiscontinued',
+];
 
 /**
  * Normalises the `motorcycleModel` filter, which arrives either as a repeated
@@ -402,7 +426,7 @@ export const updateProduct = asyncHandler(async (req, res) => {
     // Update product
     product = await Product.findByIdAndUpdate(
       id,
-      req.body,
+      pickFields(req.body, PRODUCT_UPDATABLE_FIELDS),
       { new: true, runValidators: true }
     )
       .populate('category', 'name code')

@@ -1196,3 +1196,101 @@ describe('Service Order Management', () => {
     });
   });
 });
+
+// GAP-015d. GET /api/services and /my-jobs had no validation chain, and the
+// mechanic scope had a hole: the old shape was
+// `if (MECHANIC && !assignedTo) ... else if (assignedTo) ...`, so a mechanic
+// who supplied ?assignedTo= took the second branch and read another mechanic's
+// jobs inside their own branch.
+describe('Service API - read route query validation and scoping', () => {
+  it('rejects a malformed branch filter', async () => {
+    const { token } = await createTestAdmin();
+
+    const res = await request(app)
+      .get('/api/services?branch=notanid')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects an out-of-enum status', async () => {
+    const { token } = await createTestAdmin();
+
+    const res = await request(app)
+      .get('/api/services?status=bogus')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a repeated status parameter', async () => {
+    const { token } = await createTestAdmin();
+
+    const res = await request(app)
+      .get('/api/services?status=pending&status=completed')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('still serves a valid filtered listing', async () => {
+    const { token } = await createTestAdmin();
+
+    const res = await request(app)
+      .get('/api/services?status=pending&page=1&limit=10')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('does not let a mechanic read another mechanic\'s jobs via ?assignedTo=', async () => {
+    const admin = await createTestAdmin();
+    const branch = await createTestBranch();
+    const mine = await createTestMechanic(branch._id);
+    // createTestMechanic defaults to a fixed email, so the second one needs its
+    // own or it collides on the unique index.
+    const theirs = await createTestMechanic(branch._id, {
+      name: 'Other Mechanic',
+      email: 'other-mechanic@example.com'
+    });
+
+    await createTestServiceOrder(branch, theirs.user, admin.user, { status: 'pending' });
+
+    const res = await request(app)
+      .get(`/api/services?assignedTo=${theirs.user._id}`)
+      .set('Authorization', `Bearer ${mine.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(0);
+  });
+
+  it('still shows a mechanic their own jobs', async () => {
+    const admin = await createTestAdmin();
+    const branch = await createTestBranch();
+    const mine = await createTestMechanic(branch._id);
+
+    await createTestServiceOrder(branch, mine.user, admin.user, { status: 'pending' });
+
+    const res = await request(app)
+      .get('/api/services')
+      .set('Authorization', `Bearer ${mine.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+  });
+
+  it('still lets an admin filter by assignedTo', async () => {
+    const admin = await createTestAdmin();
+    const branch = await createTestBranch();
+    const mechanic = await createTestMechanic(branch._id);
+
+    await createTestServiceOrder(branch, mechanic.user, admin.user, { status: 'pending' });
+
+    const res = await request(app)
+      .get(`/api/services?assignedTo=${mechanic.user._id}`)
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+  });
+});

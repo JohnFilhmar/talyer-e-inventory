@@ -45,16 +45,27 @@ bringing reality back in line with `docs/DEPLOYMENT.md:46`, which had said
 "public" throughout. No documentation change is needed; the code and the deploy
 guidance were right and the setting had drifted.
 
-**GAP-015a and GAP-015b are closed** as of 2026-09-07, in the same change that
-split GAP-015. `escapeRegex` now lives in `backend/src/utils/regex.js` and is
-applied at all eight sites, and `backend/src/middleware/sanitizeRequest.js`
-rejects Mongo operator keys before any router sees them. GAP-015c and GAP-015d
-remain open.
+**The whole GAP-015 family is closed.** GAP-015a and GAP-015b landed
+2026-09-07 (PR #41) in the same change that split GAP-015; GAP-015c and
+GAP-015d landed 2026-09-08. `escapeRegex` lives in `backend/src/utils/regex.js`
+and is applied at all eight sites, `backend/src/middleware/sanitizeRequest.js`
+rejects Mongo operator keys before any router sees them,
+`backend/src/utils/pickFields.js` builds update documents from an allow-list,
+and all twelve read routes declare a query chain built from
+`backend/src/utils/queryRules.js`. Each entry carries a note, and GAP-015c's
+records where its own proposed fix was wrong.
 
-Remaining open: 46 of the 55 gaps now listed, plus the adjust-stock half of
+Two things the triage found that are worth carrying forward. The 24 false
+positives still need dismissing in the Security tab, which is a human action.
+And the true positives will not close automatically either: CodeQL does not
+recognise a hand-written guard or an allow-list as a barrier, so the alert count
+is not the measure of this work.
+
+Remaining open: 44 of the 55 gaps now listed, plus the adjust-stock half of
 GAP-013. The count moved from 45 of 52 because splitting GAP-015 added three
-entries and closed two. The severity and category counts in the front matter
-below describe the audit as first written and have not been restated.
+entries and all four are now closed. The severity and category counts in the
+front matter below describe the audit as first written and have not been
+restated.
 
 **Code scanning is reporting again**, for the first time since roughly
 2026-08-30. Its findings independently confirm two entries and widen a third:
@@ -2322,6 +2333,21 @@ None.
 
 ### GAP-015c [SEC] Four update paths pass the whole request body to findByIdAndUpdate
 
+> **FIXED 2026-09-08.** `backend/src/utils/pickFields.js` builds the update
+> document from an explicit allow-list, applied at all four sites.
+> `grep -rn "findByIdAndUpdate" backend/src/controllers` now shows no call whose
+> second argument is `req.body`.
+>
+> **The proposed fix below was wrong on one point and was not followed.** It
+> said to build each allow-list from the fields the route's *update validator*
+> declares. That would have broken the application: `updateBranchValidation`
+> names four fields while `UpdateBranchPayload` in
+> `frontend/src/types/branch.ts` sends eight, so address, contact, settings and
+> isActive edits would have stopped saving with no error. The allow-lists are
+> the schema's top-level paths instead, which match each client payload type
+> exactly. `backend/tests/branch.test.js` has a regression test for precisely
+> that: it sends address, contact and settings and asserts they persist.
+
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
 Depends on none | Blocks none | Est. agent turns 4-8
@@ -2435,6 +2461,31 @@ None.
 
 ### GAP-015d [SEC] Twelve read routes have no query-validation chain at all
 
+> **FIXED 2026-09-08.** All twelve routes now declare a chain, composed from
+> shared rule factories in `backend/src/utils/queryRules.js` so the same six
+> parameters are not respelled twelve times.
+>
+> One implementation detail is load-bearing and easy to undo: **every rule
+> begins with `.not().isArray()`.** Verified against express-validator 7.3.2
+> that `isMongoId()`, `isInt()` and `isISO8601()` all *accept* an array,
+> validating its first element and leaving the array in place; only
+> `isString()` and an explicit array check reject it. Since Mongoose rewrites
+> `{field: [...]}` into `{field: {$in: [...]}}`, dropping that first check
+> silently restores the filter widening this entry exists to close.
+>
+> Two further notes. `GET /api/categories` cannot use the shared `idRule` for
+> `parent`, because `?parent=null` is the documented way to ask for root
+> categories; it uses a custom test, and `.if()` is not an alternative because
+> express-validator skips a chain when the condition *throws*, not when it
+> returns false. And the `assignedTo` authorisation hole is closed: a mechanic
+> is now pinned to their own jobs regardless of the parameter.
+>
+> The `sortBy` allow-list for `GET /api/products` landed here as
+> `PRODUCT_SORT_FIELDS` in `productRoutes.js`. The checklist below pointed at
+> GAP-026 for it, which was a mis-citation: GAP-026 is about pagination bounds.
+> GAP-021 owns the equivalent work for the sales and service lists and is
+> untouched.
+
 Severity S3 Moderate | Complexity M | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 0.5 | Agent suitability AGENT-READY |
 Depends on none | Blocks none | Est. agent turns 10-20
@@ -2532,7 +2583,7 @@ payloads and the frontend reads both shapes.
 - [ ] In `backend/src/routes/stockRoutes.js`, add chains for `GET /`, `/low-stock`, `/movements`, `/transfers`, and extend the three routes that validate only their path parameter.
 - [ ] In `backend/src/routes/salesRoutes.js`, add chains for `GET /` and `GET /stats`, and extend `GET /branch/:branchId`.
 - [ ] In `backend/src/routes/serviceRoutes.js`, add chains for `GET /` and `GET /my-jobs`.
-- [ ] In `backend/src/routes/productRoutes.js`, add a chain for `GET /`, including `sortBy` against an allow-list (see GAP-026).
+- [ ] In `backend/src/routes/productRoutes.js`, add a chain for `GET /`, including `sortBy` against an allow-list.
 - [ ] In `backend/src/routes/categoryRoutes.js`, add a chain for `GET /`.
 - [ ] In `backend/src/controllers/serviceController.js:48-52`, clamp `assignedTo` so a non-admin cannot read another user's jobs.
 - [ ] Add tests asserting 400 for a malformed `?branch=`, a non-integer `?page=`, and an out-of-enum `?status=` on at least one route per file.
