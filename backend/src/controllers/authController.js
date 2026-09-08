@@ -9,10 +9,19 @@ import crypto from 'crypto';
 import { issueCsrfToken, clearCsrfToken } from '../middleware/csrf.js';
 
 // Cookie options for refresh token
+// The permissive values require an explicitly declared debug environment.
+// Gating the SAFE value on `=== 'production'` was fail-open: NODE_ENV unset, or
+// spelled PRODUCTION, prod or staging, sent a 30-day refresh cookie without
+// Secure and with SameSite=lax. This is the same shape GAP-005 removed from the
+// reset-token echo and the error handler; it was left until last because the
+// naive inversion sets Secure on plain-HTTP localhost and a browser will not
+// store that, which breaks local login. `npm run dev` now sets
+// NODE_ENV=development explicitly, so the debug branch is reached deliberately
+// rather than by the absence of a value.
 const getRefreshTokenCookieOptions = () => ({
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production', // Only HTTPS in production
-  sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+  secure: !isDebugEnvironment(),
+  sameSite: isDebugEnvironment() ? 'lax' : 'strict',
   maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
   path: '/',
 });
@@ -33,11 +42,13 @@ const setRefreshTokenCookie = (res, refreshToken) => {
  * Clear refresh token cookie
  */
 const clearRefreshTokenCookie = (res) => {
-  res.cookie('refreshToken', '', {
-    httpOnly: true,
-    expires: new Date(0),
-    path: '/',
-  });
+  // Same attributes as the set, minus the lifetime. A clear that does not match
+  // the original on secure/sameSite is not guaranteed to replace it: a browser
+  // will not let a non-Secure write overwrite a Secure cookie, so a mismatched
+  // clear can leave a live 30-day refresh token in place after logout. Deriving
+  // both from one function is what keeps them from drifting apart.
+  const { maxAge, ...clearOptions } = getRefreshTokenCookieOptions();
+  res.cookie('refreshToken', '', { ...clearOptions, expires: new Date(0) });
   clearCsrfToken(res);
 };
 
@@ -380,5 +391,10 @@ export {
   logout,
   forgotPassword,
   resetPassword,
-  getMe
+  getMe,
+  // Exported for tests. Asserting the attribute matrix over HTTP is not
+  // practical: varying NODE_ENV re-enables authLimiter, which skips only when
+  // NODE_ENV is exactly 'test', so a table-driven test spends the 10-request
+  // budget and starts getting 429s.
+  getRefreshTokenCookieOptions
 };

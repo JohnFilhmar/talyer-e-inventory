@@ -4,6 +4,7 @@ import { body, param, query } from 'express-validator';
 import * as supplierController from '../controllers/supplierController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import { USER_ROLES } from '../config/constants.js';
+import { boolRule, paginationRules } from '../utils/queryRules.js';
 import handleValidationErrors from '../middleware/validationHandler.js';
 
 // Validation rules
@@ -14,7 +15,11 @@ const listSuppliersValidation = [
   query('search')
     .optional()
     .isString().withMessage('Search must be a string')
-    .isLength({ max: 100 }).withMessage('Search query cannot exceed 100 characters')
+    .isLength({ max: 100 }).withMessage('Search query cannot exceed 100 characters'),
+  // As in branchRoutes: the rest of what getSuppliers reads. GAP-015a deferred
+  // these to GAP-015d, which never covered this file.
+  boolRule('active'),
+  ...paginationRules()
 ];
 
 const createSupplierValidation = [

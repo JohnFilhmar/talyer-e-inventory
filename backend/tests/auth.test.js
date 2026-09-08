@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import * as dbHandler from './setup/dbHandler.js';
 import { createTestUser, createTestAdmin } from './setup/testHelpers.js';
 import authRoutes from '../src/routes/authRoutes.js';
+import { getRefreshTokenCookieOptions } from '../src/controllers/authController.js';
 import User from '../src/models/User.js';
 
 /**
@@ -919,5 +920,81 @@ describe('Auth API - Response Format Consistency', () => {
     expect(res.body.errors.length).toBeGreaterThan(0);
     expect(res.body.errors[0]).toHaveProperty('field');
     expect(res.body.errors[0]).toHaveProperty('message');
+  });
+});
+
+// GAP-053. The refresh cookie's secure/sameSite were gated on
+// `NODE_ENV === 'production'` guarding the safe value, so an unset or
+// misspelled NODE_ENV sent a 30-day session credential without Secure and with
+// SameSite=lax. The test is now affirmative: permissive requires an explicit
+// development or test.
+//
+// The matrix is asserted against the options function rather than over HTTP.
+// Varying NODE_ENV re-enables authLimiter, which skips only when NODE_ENV is
+// exactly 'test', so a table of logins burns the 10-request budget and starts
+// returning 429. Two HTTP assertions below cover the wiring end to end.
+describe('refresh cookie attributes fail closed on NODE_ENV', () => {
+  const original = process.env.NODE_ENV;
+  afterEach(() => {
+    process.env.NODE_ENV = original;
+  });
+
+  it.each(['staging', 'PRODUCTION', 'prod', 'developement', '', 'production'])(
+    'is Secure and SameSite=strict when NODE_ENV is %p',
+    (value) => {
+      process.env.NODE_ENV = value;
+      const options = getRefreshTokenCookieOptions();
+
+      expect(options.secure).toBe(true);
+      expect(options.sameSite).toBe('strict');
+      expect(options.httpOnly).toBe(true);
+    }
+  );
+
+  it('is Secure and SameSite=strict when NODE_ENV is unset entirely', () => {
+    delete process.env.NODE_ENV;
+    const options = getRefreshTokenCookieOptions();
+
+    expect(options.secure).toBe(true);
+    expect(options.sameSite).toBe('strict');
+  });
+
+  it.each(['development', 'test'])(
+    'stays permissive when NODE_ENV is %p, so local HTTP login keeps working',
+    (value) => {
+      process.env.NODE_ENV = value;
+      const options = getRefreshTokenCookieOptions();
+
+      expect(options.secure).toBe(false);
+      expect(options.sameSite).toBe('lax');
+    }
+  );
+
+  it('sets the attributes on a real login response, and matches them on logout', async () => {
+    process.env.NODE_ENV = 'staging';
+    await createTestUser({ email: 'cookie-set@example.com', password: 'password123' });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'cookie-set@example.com', password: 'password123' });
+
+    expect(res.status).toBe(200);
+    const cookie = (res.headers['set-cookie'] || []).find((c) => c.startsWith('refreshToken='));
+    expect(cookie).toBeDefined();
+    expect(cookie).toMatch(/;\s*Secure/i);
+    expect(cookie).toMatch(/SameSite=Strict/i);
+
+    // The clear must carry the same attributes. A non-Secure write cannot
+    // replace a Secure cookie, so a mismatched clear would leave a live 30-day
+    // refresh token in place after logout.
+    const logout = await request(app)
+      .post('/api/auth/logout')
+      .set('Authorization', `Bearer ${res.body.data.accessToken}`);
+
+    expect(logout.status).toBe(200);
+    const cleared = (logout.headers['set-cookie'] || []).find((c) => c.startsWith('refreshToken='));
+    expect(cleared).toBeDefined();
+    expect(cleared).toMatch(/;\s*Secure/i);
+    expect(cleared).toMatch(/SameSite=Strict/i);
   });
 });
