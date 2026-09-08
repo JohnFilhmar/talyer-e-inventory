@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
+import { PRODUCT_UPLOADS_DIR } from '../utils/uploadsPath.js';
 
 // Configuration constants
 const IMAGE_CONFIG = {
@@ -15,7 +16,9 @@ const IMAGE_CONFIG = {
 };
 
 // Ensure uploads directory exists (skip on read-only filesystems like Vercel)
-const uploadsDir = path.join(process.cwd(), 'uploads', 'products');
+// Resolved from the module's own location, not process.cwd(): see
+// utils/uploadsPath.js for why the launch directory must not decide this.
+const uploadsDir = PRODUCT_UPLOADS_DIR;
 try {
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });

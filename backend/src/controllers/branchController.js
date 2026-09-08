@@ -7,6 +7,22 @@ import { escapeRegex } from '../utils/regex.js';
 import { pickFields } from '../utils/pickFields.js';
 import { CACHE_TTL, USER_ROLES } from '../config/constants.js';
 
+/**
+ * Staff identity is not customer-facing.
+ *
+ * `POST /auth/register-customer` is public and mints a `customer` account
+ * unconditionally, and the branch reads need only `protect`. Populating the
+ * manager for everyone therefore handed anyone on the internet a directory of
+ * every branch with its manager's real name and work email: a ready-made
+ * target list for phishing aimed at exactly the accounts holding elevated
+ * roles.
+ *
+ * Customers keep the branch data a customer needs (name, code, address,
+ * contact, hours). The route itself stays open to them, because they
+ * legitimately need the branch list.
+ */
+const canSeeStaffIdentity = (user) => user?.role !== USER_ROLES.CUSTOMER;
+
 // The fields PUT /api/branches/:id accepts. These are the schema's top-level
 // paths and they match `UpdateBranchPayload` in frontend/src/types/branch.ts
 // exactly. Deriving this from `updateBranchValidation` instead would be wrong:
@@ -51,8 +67,23 @@ export const getBranches = asyncHandler(async (req, res) => {
     ];
   }
 
+  // Whether the manager sub-document is populated depends on the caller's
+  // role, so the role is part of the key. Without it the first caller's shape
+  // is served to everyone for the whole TTL, in both directions: staff would
+  // leak the manager to customers, and a customer request would blank the
+  // manager out for staff. The route-level cacheMiddleware keys on the role for
+  // the same reason.
+  const showManager = canSeeStaffIdentity(req.user);
+
   // Check cache first
-  const cacheKey = CacheUtil.generateKey('branches', 'list', JSON.stringify(query), page, limit);
+  const cacheKey = CacheUtil.generateKey(
+    'branches',
+    'list',
+    showManager ? 'staff' : 'customer',
+    JSON.stringify(query),
+    page,
+    limit
+  );
   const cached = await CacheUtil.get(cacheKey);
   
   if (cached) {
@@ -73,8 +104,9 @@ export const getBranches = asyncHandler(async (req, res) => {
 
   // Execute query
   const [branches, total] = await Promise.all([
-    Branch.find(query)
-      .populate('manager', 'name email')
+    (showManager
+      ? Branch.find(query).populate('manager', 'name email')
+      : Branch.find(query).select('-manager'))
       .skip(skip)
       .limit(limitNum)
       .sort({ createdAt: -1 }),
@@ -106,9 +138,11 @@ export const getBranches = asyncHandler(async (req, res) => {
 export const getBranch = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const branch = await Branch.findById(id)
-    .populate('manager', 'name email role')
-    .populate('staffCount');
+  const branch = canSeeStaffIdentity(req.user)
+    ? await Branch.findById(id)
+        .populate('manager', 'name email role')
+        .populate('staffCount')
+    : await Branch.findById(id).select('-manager');
 
   if (!branch) {
     return ApiResponse.error(res, 404, 'Branch not found');

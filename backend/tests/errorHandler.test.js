@@ -49,3 +49,53 @@ describe('errorHandler', () => {
     expect(res.body.stack).toBeDefined();
   });
 });
+
+// GAP-005. The gate used to be `NODE_ENV === 'production'` guarding the safe
+// branch, so anything else, including an unset or misspelled value, disclosed
+// the raw 5xx message and a full stack trace. It is now an affirmative test for
+// development or test.
+describe('errorHandler fails closed on an unrecognised NODE_ENV', () => {
+  const original = process.env.NODE_ENV;
+  afterEach(() => {
+    process.env.NODE_ENV = original;
+  });
+
+  it.each(['staging', 'PRODUCTION', 'prod', 'developement', ''])(
+    'hides the message and stack when NODE_ENV is %p',
+    async (value) => {
+      process.env.NODE_ENV = value;
+      const res = await request(buildApp()).get('/boom');
+
+      expect(res.status).toBe(500);
+      expect(res.body.message).toBe('Server Error');
+      expect(res.body.stack).toBeUndefined();
+      expect(JSON.stringify(res.body)).not.toContain('mongodb://');
+    }
+  );
+
+  it('hides the message and stack when NODE_ENV is unset entirely', async () => {
+    delete process.env.NODE_ENV;
+    const res = await request(buildApp()).get('/boom');
+
+    expect(res.status).toBe(500);
+    expect(res.body.message).toBe('Server Error');
+    expect(res.body.stack).toBeUndefined();
+  });
+
+  it('still discloses in development, which the local workflow relies on', async () => {
+    process.env.NODE_ENV = 'development';
+    const res = await request(buildApp()).get('/boom');
+
+    expect(res.status).toBe(500);
+    expect(res.body.message).toContain('connection');
+    expect(res.body.stack).toBeDefined();
+  });
+
+  it('still returns actionable 4xx messages when failing closed', async () => {
+    process.env.NODE_ENV = 'staging';
+    const res = await request(buildApp()).get('/bad-request');
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Quantity must be at least 1');
+  });
+});

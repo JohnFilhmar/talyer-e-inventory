@@ -1,11 +1,26 @@
 /**
+ * One entry of the `errors` array a validation failure returns.
+ *
+ * The shape is set by backend/src/middleware/validate.js, which maps
+ * express-validator's result to `{ field, message, value }`. This type
+ * previously declared `Record<string, string[]>`, which no endpoint has ever
+ * sent; nothing read the field, so the drift went unnoticed until the reset
+ * page needed to render it.
+ */
+export interface ApiFieldError {
+  field: string;
+  message: string;
+  value?: unknown;
+}
+
+/**
  * Standard API response format matching backend ApiResponse utility
  */
 export interface ApiResponse<T = unknown> {
   success: boolean;
   message: string;
   data?: T;
-  errors?: Record<string, string[]>;
+  errors?: ApiFieldError[];
   pagination?: PaginationInfo;
   meta?: Record<string, unknown>;
 }
@@ -29,6 +44,6 @@ export interface PaginatedResponse<T> {
  */
 export interface ApiError {
   message: string;
-  errors?: Record<string, string[]>;
+  errors?: ApiFieldError[];
   statusCode?: number;
 }

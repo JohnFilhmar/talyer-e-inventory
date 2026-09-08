@@ -746,3 +746,133 @@ describe('Branch API - Restore', () => {
     });
   });
 });
+
+// GAP-008. POST /auth/register-customer is public and mints a customer
+// account unconditionally, and the branch reads need only `protect`. Populating
+// the manager for everyone handed anyone on the internet a directory of every
+// branch with its manager's real name and work email.
+describe('Branch API - manager identity is not customer-facing', () => {
+  // The branch has to exist before the manager: User makes `branch` required
+  // for salesperson and mechanic, so the manager cannot be created first.
+  const seedBranchWithManager = async () => {
+    const branch = await createTestBranch({ name: 'Managed Branch', code: 'MGD-1' });
+    const { user: manager } = await createTestUser({
+      name: 'Branch Manager',
+      email: 'branch-manager@example.com',
+      role: 'salesperson',
+      branch: branch._id
+    });
+    branch.manager = manager._id;
+    await branch.save();
+    return { branch, manager };
+  };
+
+  it('omits the manager for a customer on the list read', async () => {
+    await seedBranchWithManager();
+    const { token } = await createTestUser({
+      email: 'shopper@example.com',
+      role: 'customer'
+    });
+
+    const res = await request(app)
+      .get('/api/branches')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBeGreaterThan(0);
+    for (const branch of res.body.data) {
+      expect(branch.manager).toBeUndefined();
+    }
+    expect(JSON.stringify(res.body)).not.toContain('branch-manager@example.com');
+  });
+
+  it('omits the manager for a customer on the detail read', async () => {
+    const { branch } = await seedBranchWithManager();
+    const { token } = await createTestUser({
+      email: 'shopper2@example.com',
+      role: 'customer'
+    });
+
+    const res = await request(app)
+      .get(`/api/branches/${branch._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.manager).toBeUndefined();
+    expect(JSON.stringify(res.body)).not.toContain('branch-manager@example.com');
+  });
+
+  it('still gives a salesperson the populated manager', async () => {
+    const { branch } = await seedBranchWithManager();
+    const { token } = await createTestSalesperson(branch._id);
+
+    const res = await request(app)
+      .get('/api/branches')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    const managed = res.body.data.find((b) => String(b._id) === String(branch._id));
+    expect(managed.manager).toBeDefined();
+    expect(managed.manager.email).toBe('branch-manager@example.com');
+  });
+
+  it('still gives an admin the populated manager on the detail read', async () => {
+    const { branch } = await seedBranchWithManager();
+    const { token } = await createTestAdmin();
+
+    const res = await request(app)
+      .get(`/api/branches/${branch._id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.manager).toBeDefined();
+    expect(res.body.data.manager.email).toBe('branch-manager@example.com');
+  });
+
+  // The cache key must carry the role. Keyed on the URL alone, whichever shape
+  // was cached first is served to everyone for the whole TTL.
+  it('does not serve a staff-shaped cache entry to a customer', async () => {
+    const { branch } = await seedBranchWithManager();
+    const admin = await createTestAdmin();
+    const customer = await createTestUser({
+      email: 'shopper3@example.com',
+      role: 'customer'
+    });
+
+    const staffFirst = await request(app)
+      .get('/api/branches')
+      .set('Authorization', `Bearer ${admin.token}`);
+    expect(staffFirst.status).toBe(200);
+
+    const asCustomer = await request(app)
+      .get('/api/branches')
+      .set('Authorization', `Bearer ${customer.token}`);
+
+    expect(asCustomer.status).toBe(200);
+    expect(JSON.stringify(asCustomer.body)).not.toContain('branch-manager@example.com');
+    expect(String(branch._id)).toBeTruthy();
+  });
+
+  it('does not blank the manager out for staff after a customer request', async () => {
+    const { branch } = await seedBranchWithManager();
+    const customer = await createTestUser({
+      email: 'shopper4@example.com',
+      role: 'customer'
+    });
+    const admin = await createTestAdmin();
+
+    const customerFirst = await request(app)
+      .get('/api/branches')
+      .set('Authorization', `Bearer ${customer.token}`);
+    expect(customerFirst.status).toBe(200);
+
+    const asStaff = await request(app)
+      .get('/api/branches')
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(asStaff.status).toBe(200);
+    const managed = asStaff.body.data.find((b) => String(b._id) === String(branch._id));
+    expect(managed.manager).toBeDefined();
+    expect(managed.manager.email).toBe('branch-manager@example.com');
+  });
+});

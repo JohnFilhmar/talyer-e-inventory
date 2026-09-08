@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import path from 'path';
 import connectDB from './config/database.js';
 import { connectRedis } from './config/redis.js';
 import errorHandler from './middleware/errorHandler.js';
@@ -11,6 +10,7 @@ import { apiLimiter } from './middleware/rateLimit.js';
 import { CORS } from './config/constants.js';
 import { resolveTrustProxy } from './utils/trustProxy.js';
 import { seedAdminUser } from './utils/seedAdmin.js';
+import { UPLOADS_ROOT } from './utils/uploadsPath.js';
 
 // Initialize express app
 const app = express();
@@ -47,7 +47,9 @@ app.use(sanitizeRequest);
 app.use('/api/auth', cookieParser());
 
 // Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Same module-relative resolution the writer uses, so the served directory is
+// always the written one regardless of where the process was launched from.
+app.use('/uploads', express.static(UPLOADS_ROOT));
 
 // Request logger middleware
 app.use((req, res, next) => {

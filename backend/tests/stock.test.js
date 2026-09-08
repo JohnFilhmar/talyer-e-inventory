@@ -727,6 +727,43 @@ describe('Stock API Tests', () => {
       });
     });
 
+    // GAP-013. The reason floor was min 5, but the UI offers 'lost', which is
+    // four characters, so writing off lost stock was impossible: the modal
+    // reported a 5-to-500-character error for a value it had itself offered.
+    // The enum values are persisted in the StockMovement ledger, so the floor
+    // moved rather than the values.
+    it.each(['damaged', 'lost', 'found', 'inventory_count', 'returned', 'expired', 'other'])(
+      'accepts the reason %p that the adjust form offers',
+      async (reason) => {
+        const res = await request(app)
+          .post('/api/stock/adjust')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            product: product._id.toString(),
+            branch: branchA._id.toString(),
+            adjustment: -1,
+            reason
+          });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body.success).toBe(true);
+      }
+    );
+
+    it('still rejects a reason below the floor', async () => {
+      const res = await request(app)
+        .post('/api/stock/adjust')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          product: product._id.toString(),
+          branch: branchA._id.toString(),
+          adjustment: -1,
+          reason: 'x'
+        });
+
+      expect(res.statusCode).toBe(400);
+    });
+
     it('should adjust stock quantity (admin only)', async () => {
       const res = await request(app)
         .post('/api/stock/adjust')

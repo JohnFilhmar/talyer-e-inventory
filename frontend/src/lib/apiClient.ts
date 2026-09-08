@@ -92,6 +92,25 @@ function readCsrfCookie(): string | undefined {
 }
 
 /**
+ * Headers proving this caller can read cookies for the origin.
+ *
+ * Exported because two call sites need it and they must not drift: the refresh
+ * inside the 401 interceptor below, and `authService.refreshToken()`, which
+ * `authStore.initialize()` calls directly on the path where localStorage holds
+ * no access token. That second call omitted the header entirely, so a user with
+ * a valid 30-day refresh cookie but cleared localStorage got a 403 and was
+ * bounced to /login instead of being restored.
+ *
+ * Returns an empty object when no cookie is readable (SSR, or a session
+ * predating the CSRF rollout). The backend admits a request carrying no token
+ * as a migration allowance, so sending nothing is correct rather than fatal.
+ */
+export function csrfHeaders(): Record<string, string> {
+  const token = readCsrfCookie();
+  return token ? { 'X-XSRF-TOKEN': token } : {};
+}
+
+/**
  * Auth endpoints that should NOT trigger token refresh on 401
  * These endpoints return 401 for invalid credentials, not expired tokens
  */
@@ -191,13 +210,12 @@ apiClient.interceptors.response.use(
         // this origin, which a cross-site page cannot. An absent cookie sends
         // no header, which the backend treats as a pre-CSRF session and lets
         // through once.
-        const csrfToken = readCsrfCookie();
         const { data } = await axios.post<ApiResponse<RefreshTokenResponse>>(
           `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/auth/refresh-token`,
           {},
           {
             withCredentials: true,
-            headers: csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : undefined,
+            headers: csrfHeaders(),
           }
         );
 

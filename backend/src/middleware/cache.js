@@ -15,9 +15,21 @@ const cacheMiddleware = (keyPrefix, ttl = CACHE_TTL.MEDIUM) => {
     }
 
     try {
-      // Generate cache key from URL and query params
+      // Generate cache key from the caller's role, the URL and query params.
+      //
+      // The role is part of the key because responses on these routes vary by
+      // it: getBranches omits the manager sub-document for a customer. Keying
+      // on the URL alone served whichever shape was cached first to everyone,
+      // so one staff request would hand every customer the manager's name and
+      // email for the rest of the TTL, and one customer request would blank the
+      // manager out for staff.
+      //
+      // 'anonymous' covers a route mounted without `protect`. There is none
+      // today, but the key must not silently collapse to a shared bucket if one
+      // is added later.
       const cacheKey = CacheUtil.generateKey(
         keyPrefix,
+        req.user?.role || 'anonymous',
         req.originalUrl
       );
 

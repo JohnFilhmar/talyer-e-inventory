@@ -66,7 +66,10 @@ export interface ForgotPasswordRequest {
  * Reset password request
  */
 export interface ResetPasswordRequest {
-  token: string;
+  // Must stay `resetToken`: that is the name the backend validator
+  // (authRoutes.js) and controller both read. Sending `token` made every reset
+  // fail its validation chain, which is what made password reset impossible.
+  resetToken: string;
   newPassword: string;
 }
 

@@ -77,6 +77,10 @@ pids
 
 # Backend runtime artifacts
 backend/uploads/
+# Also the repository root: uploads paths resolve from process.cwd(), so a
+# launch from the repo root (systemd with no WorkingDirectory, a PM2 default,
+# `node backend/src/server.js`) writes user-uploaded blobs here instead.
+/uploads/
 backend/dist/
 
 # Redis dumps
