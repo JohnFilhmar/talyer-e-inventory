@@ -14,6 +14,7 @@ import { checkBranchAccess } from '../middleware/branchAccess.js';
 import validate from '../middleware/validate.js';
 import cacheMiddleware from '../middleware/cache.js';
 import { USER_ROLES, CACHE_TTL } from '../config/constants.js';
+import { boolRule, paginationRules } from '../utils/queryRules.js';
 
 const router = express.Router();
 
@@ -32,6 +33,12 @@ const listBranchesValidation = [
     .optional()
     .isString().withMessage('City must be a string')
     .isLength({ max: 100 }).withMessage('City filter cannot exceed 100 characters'),
+  // The remaining parameters getBranches actually reads. GAP-015a deferred
+  // these to GAP-015d, but GAP-015d's twelve routes were in stock, sales,
+  // service, product and category; this file was never in its scope, so the
+  // deferral pointed at a gap that closed without covering them.
+  boolRule('active'),
+  ...paginationRules(),
   validate
 ];
 

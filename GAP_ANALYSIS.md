@@ -68,7 +68,17 @@ And the true positives will not close automatically either: CodeQL does not
 recognise a hand-written guard or an allow-list as a barrier, so the alert count
 is not the measure of this work.
 
-Remaining open: 37 of the 55 gaps now listed. The count moved from 45 of 52 because splitting GAP-015 added three
+**GAP-053 is closed** as of 2026-09-09, the same day it was raised, because
+the workflow question it depended on was answered immediately.
+
+Remaining open: 39 of the 57 gaps now listed. Two new entries were raised on
+2026-09-08 from findings surfaced while working Wave 2 and deliberately not
+fixed there: **GAP-053** (the refresh cookie repeats GAP-005's fail-open shape,
+left alone because the naive inversion breaks local HTTP login) and
+**GAP-054** (`validate.js` echoes the submitted value, so a rejected password
+comes back in the 400 body). The count moved from a stated 37 to 40 because the
+37 was itself an arithmetic error: 55 entries less 16 fixed and 1 disproven is
+38, not 37. The count moved from 45 of 52 because splitting GAP-015 added three
 entries and all four are now closed. The severity and category counts in the
 front matter below describe the audit as first written and have not been
 restated.
@@ -234,48 +244,50 @@ S1=8, S2=5, S3=2, S4=1; C1=1.0, C2=0.8, C3=0.5; XS=1, S=2, M=4, L=7, XL=12.
 | 11 | GAP-011 | OPS | Branch protection requires four check names the workflows can never report | S2 | XS | D1 | R2 | C1 | 5.0 | READY |
 | 12 | GAP-012 | SEC | Dependabot auto-merge treats a still-running security check as passing | S2 | XS | D2 | R2 | C1 | 5.0 | READY |
 | 13 | GAP-013 | CODE | The adjust-stock form defaults to an invalid reason and offers one the API rejects | S2 | XS | D1 | R1 | C1 | 5.0 | READY |
-| 14 | GAP-014 | CODE | Stock reservations leak on every order-creation failure path | S1 | S | D2 | R2 | C1 | 4.0 | READY |
-| 15 | GAP-015b | SEC | JSON request bodies reach Mongo as query operators; there is no request-shape guard | S1 | S | D2 | R2 | C1 | 4.0 | READY |
-| 16 | GAP-015a | SEC | User-supplied text reaches MongoDB $regex unescaped at eight sites | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 17 | GAP-015c | SEC | Four update paths pass the whole request body to findByIdAndUpdate | S2 | S | D2 | R2 | C1 | 2.5 | READY |
-| 18 | GAP-016 | CODE | A completed-but-unpaid sale can never be paid; on-account revenue is unrecordable | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
-| 19 | GAP-017 | SEC | Four mutating service routes have no validation chain | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 20 | GAP-018 | CODE | Stock adjustments ignore reservedQuantity and can strand pending orders | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
-| 21 | GAP-019 | CODE | Transfer completion credits the destination when the source Stock row is missing | S2 | S | D2 | R2 | C1 | 2.5 | READY |
-| 22 | GAP-020 | CODE | user.branch shape drift breaks BranchProvider, roleGuard and hasBranchAccess | S2 | S | D2 | R2 | C1 | 2.5 | READY |
-| 23 | GAP-021 | FEAT | Sales and service list search and sort are silently dropped by the API | S2 | S | D2 | R1 | C1 | 2.5 | ASSISTED |
-| 24 | GAP-022 | CODE | The offline replay queue can stall indefinitely with no user-visible retry | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 25 | GAP-023 | OPS | /health is a static 200, so a deploy is declared green on a dead application | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 26 | GAP-024 | OPS | No SIGTERM handler; every deploy severs in-flight writes and can break the ledger | S2 | S | D2 | R2 | C1 | 2.5 | READY |
-| 27 | GAP-025 | PROJ | mobile-app is absent from every CI, security and Dependabot workflow | S2 | S | D1 | R1 | C1 | 2.5 | READY |
-| 28 | GAP-026 | CODE | Five read endpoints have no pagination or no upper bound on limit | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 29 | GAP-027 | OPS | No resource limits or log rotation; staging and production share one box | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
-| 30 | GAP-028 | OPS | No backup or restore path for the MongoDB data or the uploads volume | S1 | M | D2 | R1 | C1 | 2.0 | HUMAN-FIRST |
-| 31 | GAP-029 | CODE | Tax is charged on the pre-discount subtotal and the discount has no ceiling | S2 | S | D4 | R3 | C2 | 2.0 | HUMAN-FIRST |
-| 32 | GAP-030 | SEC | The service worker caches cross-origin API responses in a shared bucket | S2 | S | D2 | R2 | C2 | 2.0 | ASSISTED |
-| 33 | GAP-031 | CODE | Cache invalidation is incomplete and one cache key omits a request parameter | S3 | XS | D2 | R1 | C1 | 2.0 | READY |
-| 34 | GAP-032 | CODE | CORS_ALLOWED_ORIGINS is split without trimming and no Vary: Origin is sent | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 35 | GAP-033 | SEC | The defensive .select() in userController excludes fields that do not exist | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 36 | GAP-034 | CODE | Dead configuration: unused constants, unused CORS headers, divergent upload limits | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 37 | GAP-035 | PROJ | Branch and workspace hygiene: staging is 94 commits behind master | S3 | XS | D1 | R2 | C1 | 2.0 | HUMAN-FIRST |
-| 38 | GAP-036 | OPS | seedBranches.js self-executes on import with no main-module guard | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 39 | GAP-037 | OPS | The repo-root uploads/ directory is neither gitignored nor mounted | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 40 | GAP-038 | SEC | Image processing returns the raw internal error message and path on 500 | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 41 | GAP-039 | CONTRA | apiLimiter is documented as 300/IP and implemented as 3000/user | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 42 | GAP-040 | CODE | Every human-readable identifier is generated with countDocuments() + 1 | S2 | M | D2 | R3 | C1 | 1.25 | ASSISTED |
-| 43 | GAP-041 | CODE | All money is IEEE-754 floating point with no rounding at any boundary | S2 | M | D3 | R3 | C1 | 1.25 | ASSISTED |
-| 44 | GAP-042 | FEAT | The dashboard, the post-login landing page, is entirely non-functional | S2 | M | D2 | R1 | C1 | 1.25 | ASSISTED |
-| 45 | GAP-043 | FEAT | Stock lists are silently truncated to one unpaginated page | S2 | M | D2 | R1 | C1 | 1.25 | READY |
-| 46 | GAP-044 | TEST | No concurrency test exists and the StockMovement ledger is never asserted | S2 | M | D3 | R1 | C1 | 1.25 | READY |
-| 47 | GAP-045 | TEST | branch.test.js tests Mongoose directly; four branch endpoints are unverified | S2 | M | D2 | R1 | C1 | 1.25 | READY |
-| 48 | GAP-046 | CODE | No atomicity on stock quantity writes: lost updates and oversell | S1 | L | D3 | R3 | C1 | 1.14 | HUMAN-FIRST |
-| 49 | GAP-047 | CODE | Frontend types drift from the API contract at four points | S3 | S | D2 | R1 | C1 | 1.0 | READY |
-| 50 | GAP-048 | OPS | Cache invalidation uses Redis KEYS on every mutation hot path | S3 | S | D2 | R1 | C1 | 1.0 | READY |
-| 51 | GAP-049 | CONTRA | Transaction numbers never take the documented TXN-YYYYMM shape | S3 | S | D2 | R3 | C1 | 1.0 | ASSISTED |
-| 52 | GAP-050 | FEAT | There is no refund, void, or reversal path anywhere in the system | S2 | L | D4 | R3 | C1 | 0.71 | HUMAN-FIRST |
-| 53 | GAP-051 | OPS | No observability: no metrics, structured logs, tracing, or alerting | S2 | L | D2 | R1 | C1 | 0.71 | ASSISTED |
-| 54 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
-| 55 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
+| 14 | GAP-053 | SEC | The refresh cookie's secure and sameSite fail open on NODE_ENV | S2 | XS | D2 | R2 | C1 | 5.0 | ASSISTED |
+| 15 | GAP-014 | CODE | Stock reservations leak on every order-creation failure path | S1 | S | D2 | R2 | C1 | 4.0 | READY |
+| 16 | GAP-015b | SEC | JSON request bodies reach Mongo as query operators; there is no request-shape guard | S1 | S | D2 | R2 | C1 | 4.0 | READY |
+| 17 | GAP-015a | SEC | User-supplied text reaches MongoDB $regex unescaped at eight sites | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 18 | GAP-015c | SEC | Four update paths pass the whole request body to findByIdAndUpdate | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 19 | GAP-016 | CODE | A completed-but-unpaid sale can never be paid; on-account revenue is unrecordable | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
+| 20 | GAP-017 | SEC | Four mutating service routes have no validation chain | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 21 | GAP-018 | CODE | Stock adjustments ignore reservedQuantity and can strand pending orders | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
+| 22 | GAP-019 | CODE | Transfer completion credits the destination when the source Stock row is missing | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 23 | GAP-020 | CODE | user.branch shape drift breaks BranchProvider, roleGuard and hasBranchAccess | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 24 | GAP-021 | FEAT | Sales and service list search and sort are silently dropped by the API | S2 | S | D2 | R1 | C1 | 2.5 | ASSISTED |
+| 25 | GAP-022 | CODE | The offline replay queue can stall indefinitely with no user-visible retry | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 26 | GAP-023 | OPS | /health is a static 200, so a deploy is declared green on a dead application | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 27 | GAP-024 | OPS | No SIGTERM handler; every deploy severs in-flight writes and can break the ledger | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 28 | GAP-025 | PROJ | mobile-app is absent from every CI, security and Dependabot workflow | S2 | S | D1 | R1 | C1 | 2.5 | READY |
+| 29 | GAP-026 | CODE | Five read endpoints have no pagination or no upper bound on limit | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 30 | GAP-027 | OPS | No resource limits or log rotation; staging and production share one box | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
+| 31 | GAP-028 | OPS | No backup or restore path for the MongoDB data or the uploads volume | S1 | M | D2 | R1 | C1 | 2.0 | HUMAN-FIRST |
+| 32 | GAP-029 | CODE | Tax is charged on the pre-discount subtotal and the discount has no ceiling | S2 | S | D4 | R3 | C2 | 2.0 | HUMAN-FIRST |
+| 33 | GAP-030 | SEC | The service worker caches cross-origin API responses in a shared bucket | S2 | S | D2 | R2 | C2 | 2.0 | ASSISTED |
+| 34 | GAP-031 | CODE | Cache invalidation is incomplete and one cache key omits a request parameter | S3 | XS | D2 | R1 | C1 | 2.0 | READY |
+| 35 | GAP-032 | CODE | CORS_ALLOWED_ORIGINS is split without trimming and no Vary: Origin is sent | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 36 | GAP-033 | SEC | The defensive .select() in userController excludes fields that do not exist | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 37 | GAP-034 | CODE | Dead configuration: unused constants, unused CORS headers, divergent upload limits | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 38 | GAP-035 | PROJ | Branch and workspace hygiene: staging is 94 commits behind master | S3 | XS | D1 | R2 | C1 | 2.0 | HUMAN-FIRST |
+| 39 | GAP-036 | OPS | seedBranches.js self-executes on import with no main-module guard | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 40 | GAP-037 | OPS | The repo-root uploads/ directory is neither gitignored nor mounted | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 41 | GAP-038 | SEC | Image processing returns the raw internal error message and path on 500 | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 42 | GAP-039 | CONTRA | apiLimiter is documented as 300/IP and implemented as 3000/user | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 43 | GAP-054 | SEC | Validation errors echo the submitted value, including passwords | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 44 | GAP-040 | CODE | Every human-readable identifier is generated with countDocuments() + 1 | S2 | M | D2 | R3 | C1 | 1.25 | ASSISTED |
+| 45 | GAP-041 | CODE | All money is IEEE-754 floating point with no rounding at any boundary | S2 | M | D3 | R3 | C1 | 1.25 | ASSISTED |
+| 46 | GAP-042 | FEAT | The dashboard, the post-login landing page, is entirely non-functional | S2 | M | D2 | R1 | C1 | 1.25 | ASSISTED |
+| 47 | GAP-043 | FEAT | Stock lists are silently truncated to one unpaginated page | S2 | M | D2 | R1 | C1 | 1.25 | READY |
+| 48 | GAP-044 | TEST | No concurrency test exists and the StockMovement ledger is never asserted | S2 | M | D3 | R1 | C1 | 1.25 | READY |
+| 49 | GAP-045 | TEST | branch.test.js tests Mongoose directly; four branch endpoints are unverified | S2 | M | D2 | R1 | C1 | 1.25 | READY |
+| 50 | GAP-046 | CODE | No atomicity on stock quantity writes: lost updates and oversell | S1 | L | D3 | R3 | C1 | 1.14 | HUMAN-FIRST |
+| 51 | GAP-047 | CODE | Frontend types drift from the API contract at four points | S3 | S | D2 | R1 | C1 | 1.0 | READY |
+| 52 | GAP-048 | OPS | Cache invalidation uses Redis KEYS on every mutation hot path | S3 | S | D2 | R1 | C1 | 1.0 | READY |
+| 53 | GAP-049 | CONTRA | Transaction numbers never take the documented TXN-YYYYMM shape | S3 | S | D2 | R3 | C1 | 1.0 | ASSISTED |
+| 54 | GAP-050 | FEAT | There is no refund, void, or reversal path anywhere in the system | S2 | L | D4 | R3 | C1 | 0.71 | HUMAN-FIRST |
+| 55 | GAP-051 | OPS | No observability: no metrics, structured logs, tracing, or alerting | S2 | L | D2 | R1 | C1 | 0.71 | ASSISTED |
+| 56 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
+| 57 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
 
 **Order overrides.** None were needed. The dependency edges that exist
 (GAP-014 -> GAP-046, GAP-040 -> GAP-046, GAP-016 -> GAP-050, GAP-003 -> GAP-022)
@@ -285,10 +297,10 @@ sorts above it.
 
 ## 6. Index by Category
 
-**SEC (15)**: GAP-001 (8.0), GAP-002 (8.0), GAP-004 (8.0), GAP-005 (5.0),
+**SEC (17)**: GAP-001 (8.0), GAP-002 (8.0), GAP-004 (8.0), GAP-005 (5.0),
 GAP-007 (5.0), GAP-008 (5.0), GAP-012 (5.0), GAP-015b (4.0), GAP-015a (2.5),
 GAP-015c (2.5), GAP-017 (2.5), GAP-030 (2.0), GAP-033 (2.0), GAP-038 (2.0),
-GAP-015d (0.5).
+GAP-053 (5.0), GAP-054 (2.0), GAP-015d (0.5).
 
 The GAP-015 family and GAP-017 are validation-surface findings classified SEC
 rather than CODE because the reachable consequence is denial of service, silent
@@ -323,10 +335,10 @@ than listed separately.
 
 ## 7. Index by Complexity (ascending, for parallel quick-win clearing)
 
-**XS: 22 gaps, single file, under 20 lines each.** GAP-001, GAP-002, GAP-003,
+**XS: 24 gaps, single file, under 20 lines each.** GAP-001, GAP-002, GAP-003,
 GAP-004, GAP-005, GAP-006, GAP-007, GAP-008, GAP-009, GAP-010, GAP-011, GAP-012,
 GAP-013, GAP-031, GAP-032, GAP-033, GAP-034, GAP-035, GAP-036, GAP-037, GAP-038,
-GAP-039.
+GAP-039, GAP-053, GAP-054.
 
 **S: 21 gaps, one module, under 200 lines.** GAP-014, GAP-015a, GAP-015b,
 GAP-015c, GAP-016, GAP-017,
@@ -2079,8 +2091,12 @@ against open orders would be a sensible follow-up gap.
 > eight unescaped sites go through it. `GET /api/branches` and
 > `GET /api/suppliers` gained the search length cap they had none of, with
 > `.isString()` so a repeated parameter cannot reach `$regex` as an array.
-> Residual and deliberately out of scope: the other query parameters on those
-> two routes are still undeclared, which is GAP-015d.
+> Residual, now closed: the other query parameters on those two routes
+> (`active`, `page`, `limit`) were deferred to GAP-015d, but GAP-015d's twelve
+> routes were in stock, sales, service, product and category and never covered
+> this file, so the deferral pointed at a gap that closed without doing it. Both
+> routes now declare them through the shared factories in
+> `backend/src/utils/queryRules.js`.
 
 > **Re-scoped on 2026-09-07 from the original GAP-015.** The 60 CodeQL
 > `js/sql-injection` alerts were triaged one by one; the result is in section 13.
@@ -3600,6 +3616,19 @@ None.
 ---
 
 ### GAP-026 [CODE] Five read endpoints have no pagination or no upper bound on limit
+
+> **Partly overtaken by GAP-015d and its follow-up, 2026-09-08.** Several of
+> these endpoints now bound `limit` at the route instead of the controller: the
+> shared `limitRule()` in `backend/src/utils/queryRules.js` caps it at
+> `PAGINATION.MAX_LIMIT` and 400s anything larger, which is applied to the stock,
+> sales, service, product, category, branch and supplier list routes. That closes
+> the *input* half for those, including `branchController.js:51`.
+>
+> What remains is the controller half, which is what this entry should now be
+> read as: `getLowStock` still has no skip and no limit at all, and the
+> controllers still trust whatever reaches them, which matters for any caller
+> that bypasses the route. Re-check each location before working it rather than
+> assuming the list is still accurate.
 
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
@@ -6152,6 +6181,229 @@ this drift happened. Retiring it and folding the still-accurate design constrain
 into CLAUDE.md may be better than fixing it, but that is the owner's call about
 their own documentation, which is why this entry is AGENT-ASSISTED.
 
+### GAP-053 [SEC] The refresh cookie's secure and sameSite fail open on NODE_ENV
+
+> **FIXED 2026-09-09, same day it was raised.** The open question below was
+> answered: local development is meant to run with `NODE_ENV=development`, so
+> the simple inversion is the right shape and the `COOKIE_SECURE` override was
+> not needed. Both flags now derive from `isDebugEnvironment()`.
+>
+> **The premise needed making true first.** `npm run dev` was
+> `nodemon src/server.js` and set nothing; only the three `test` scripts used
+> `cross-env`, and `.env.example` never mentions `NODE_ENV`. So the value came
+> from whatever a developer happened to have in their own `backend/.env`, and
+> inverting the flags on that basis would have set `Secure` on plain-HTTP
+> localhost for anyone whose file omitted it. The dev script now declares
+> `cross-env NODE_ENV=development` explicitly.
+>
+> Two things found while fixing it. `clearRefreshTokenCookie` hardcoded its own
+> attributes instead of reusing the options, so the clear no longer matched the
+> set once `secure` flipped; a browser will not let a non-Secure write replace a
+> Secure cookie, which would have left a live 30-day refresh token after logout.
+> Both now derive from one function. And the attribute matrix is asserted
+> against the exported options function rather than over HTTP, because varying
+> `NODE_ENV` re-enables `authLimiter` (it skips only on exactly `test`) and a
+> table of logins exhausts the 10-request budget and starts returning 429.
+
+Severity S2 Major | Complexity XS | Difficulty D2 Standard | Risk R2 |
+Confidence C1 Verified | Priority score 5.0 | Agent suitability AGENT-ASSISTED |
+Depends on none | Blocks none | Est. agent turns 2-4
+
+**Location**
+- `backend/src/controllers/authController.js:14-15` (primary, inside `getRefreshTokenCookieOptions` at `:12`)
+- `backend/src/utils/environment.js` (the affirmative test GAP-005 introduced for the same shape)
+
+**Evidence**
+
+```js
+// backend/src/controllers/authController.js:12-15
+const getRefreshTokenCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production', // Only HTTPS in production
+  sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+```
+
+**What is wrong**
+
+This is the same fail-open shape GAP-005 removed from the reset-token echo and
+the error handler, in the one place GAP-005 deliberately did not touch. The
+condition gates the *safe* value on `NODE_ENV` being exactly `production`, so
+unset, `PRODUCTION`, `prod` and `staging` all produce `secure: false` and
+`sameSite: 'lax'`.
+
+It was left out of GAP-005 because the naive inversion is not safe here.
+Flipping it to fail closed sets `Secure` on a plain-HTTP `localhost`, and a
+browser will not store a `Secure` cookie over HTTP, so local login stops working
+entirely. The other two call sites had no such cost, which is why they were
+changed immediately and this one was recorded instead.
+
+**Why it matters**
+
+`secure: false` lets the 30-day refresh cookie travel over plaintext, so any
+network position between the browser and the app can lift a long-lived session
+credential. `sameSite: 'lax'` rather than `strict` widens the set of cross-site
+navigations that attach it. The committed compose files set
+`NODE_ENV: production`, so a containerised deploy is unaffected today; the
+exposure is a bare-metal run, a systemd unit with no `Environment=`, a PM2
+default, or a staging environment named `staging`.
+
+**Intended behavior**
+
+The cookie is `Secure` and `SameSite=strict` everywhere except an explicitly
+declared local HTTP development environment, so a misspelled or absent
+`NODE_ENV` yields the safe setting rather than the permissive one.
+
+**Proposed fix**
+
+Derive the flags from `isDebugEnvironment()` in
+`backend/src/utils/environment.js` rather than from `=== 'production'`, so the
+permissive values require an explicit `development` or `test`. That inverts the
+default without changing behaviour for anyone who already sets `NODE_ENV`
+correctly, and it keeps local HTTP working because local runs set
+`NODE_ENV=development`.
+
+The residual risk is a developer who runs with `NODE_ENV` unset over HTTP: they
+would get `Secure` and lose login. Whether that is acceptable is the open
+question below. A more conservative variant adds an explicit
+`COOKIE_SECURE` override read only when `isDebugEnvironment()` is true, so the
+insecure setting can never be reached in an unrecognised environment.
+
+**Implementation checklist**
+
+- [ ] In `backend/src/controllers/authController.js`, import `isDebugEnvironment` and derive both `secure` and `sameSite` from it.
+- [ ] Confirm `clearRefreshTokenCookie` uses the same options object, so the clear matches the set and the cookie is actually removed.
+- [ ] In `backend/tests/auth.test.js`, add a test asserting the `set-cookie` header carries `Secure` and `SameSite=Strict` when `NODE_ENV` is an unrecognised value.
+- [ ] In `backend/tests/auth.test.js`, add the matching test asserting it does not when `NODE_ENV=development`.
+- [ ] Document the local-development expectation in `README.md` if the decision below requires `NODE_ENV=development` to be set explicitly.
+- [ ] Run `npm test -- auth.test.js` from `backend/`.
+
+**Acceptance criteria**
+
+- [ ] With `NODE_ENV` unset, the refresh cookie is issued with `Secure` and `SameSite=Strict`.
+- [ ] With `NODE_ENV=development`, local login over `http://localhost` still works.
+- [ ] The cookie set on login and the cookie cleared on logout use identical attributes.
+- [ ] The full auth suite passes.
+
+**Verification commands**
+
+```bash
+cd backend && npm test -- auth.test.js
+grep -n "NODE_ENV === 'production'" src/          # expect no security-relevant hits
+```
+
+**Do not**
+
+Do not simply delete the `secure` flag. Do not change the refresh token's
+lifetime or the CSRF pairing in `middleware/csrf.js`. Do not alter
+`isDebugEnvironment()`'s list without also reconsidering GAP-005, which depends
+on it.
+
+**Rollback**
+
+Revert the one function. The cookie returns to being permissive when `NODE_ENV`
+is not exactly `production`.
+
+**Open questions**
+
+Answered 2026-09-09: local development runs with `NODE_ENV=development`, so the
+simple inversion applies. `npm run dev` now sets it explicitly rather than
+relying on each developer's `.env`, which is what makes that answer true in
+practice as well as in intent.
+
+---
+
+### GAP-054 [SEC] Validation errors echo the submitted value, including passwords
+
+Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
+Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |
+Depends on none | Blocks none | Est. agent turns 2-3
+
+**Location**
+- `backend/src/middleware/validate.js:12-16` (primary)
+- `backend/src/routes/authRoutes.js:32`, `:48`, `:86` (the three password length rules that reach it)
+- `frontend/src/types/api.ts` (`ApiFieldError`, which declares the field)
+
+**Evidence**
+
+```js
+// backend/src/middleware/validate.js:12-16
+    const formattedErrors = errors.array().map(err => ({
+      field: err.path || err.param || 'unknown',
+      message: err.msg,
+      value: err.value
+    }));
+```
+
+**What is wrong**
+
+Every rejection carries the value that was rejected. `registerValidation`,
+`customerRegisterValidation` and `resetPasswordValidation` all apply
+`isLength({ min: 6 })` to a password field, so submitting a short password
+returns that password in the 400 body under `errors[0].value`.
+
+`value` is not read anywhere. Verified with `grep` over `frontend/src`: nothing
+consumes `errors[].value`, and `ApiFieldError` marks it optional. It is emitted
+for no consumer.
+
+**Why it matters**
+
+The value returns to the same client over the same TLS connection, so this is
+not a disclosure to a third party. The cost is everywhere else a response body
+is retained: an access log that captures bodies, an error-tracking service, a
+proxy buffer, a screenshot in a support ticket. A rejected password is still a
+password, and users commonly retry a rejected one with a small edit. GAP-051
+proposes structured logging, which would widen this from a transient body to a
+stored record.
+
+**Intended behavior**
+
+A validation error names the field and says what is wrong with it, without
+repeating what was sent.
+
+**Proposed fix**
+
+Drop `value` from the formatted error. It has no consumer, so nothing needs a
+replacement. The narrower alternative, redacting only fields whose name matches
+a password pattern, is worse: it needs a list that will drift, and it leaves the
+same exposure for any other sensitive field added later.
+
+**Implementation checklist**
+
+- [ ] In `backend/src/middleware/validate.js`, remove `value: err.value` from the mapped error object.
+- [ ] In `frontend/src/types/api.ts`, remove `value` from `ApiFieldError`.
+- [ ] In `backend/tests/auth.test.js`, add a test posting a too-short password to `POST /api/auth/register` and asserting the response body does not contain it.
+- [ ] Run `npm test` from `backend/`, then `npm run build` from `frontend/`.
+
+**Acceptance criteria**
+
+- [ ] A 400 from a password rule contains the field name and message but not the submitted password.
+- [ ] `grep -rn "errors\[.*\]\.value\|\.value" frontend/src/types/api.ts` shows the field is gone.
+- [ ] The existing auth and validation tests still pass; they assert on `field` and `message` only.
+
+**Verification commands**
+
+```bash
+cd backend && npm test
+cd frontend && npm run build
+```
+
+**Do not**
+
+Do not switch `authRoutes.js` from `validate.js` to `validationHandler.js`: that
+changes the payload shape for every auth route, which is what GAP-006 warns
+against. Do not stop returning `errors[]` itself; the reset page now depends on
+it.
+
+**Rollback**
+
+Restore the one property. No data effect.
+
+**Open questions**
+
+None.
+
+---
+
 ## 11. Deferred and Rejected
 
 Things considered and consciously not listed as gaps, with the reason.
@@ -6312,6 +6564,8 @@ lines, no empty catch blocks, and no page importing axios directly.
 {"id":"GAP-050","cat":"FEAT","sev":"S2","cplx":"L","diff":"D4","risk":"R3","conf":"C1","pri":0.71,"agent":"HUMAN-FIRST","depends_on":["GAP-016"],"blocks":[],"files":["backend/src/models/SalesOrder.js","backend/src/controllers/salesController.js","backend/src/models/Transaction.js"],"title":"There is no refund, void, or reversal path anywhere in the system"},
 {"id":"GAP-051","cat":"OPS","sev":"S2","cplx":"L","diff":"D2","risk":"R1","conf":"C1","pri":0.71,"agent":"AGENT-ASSISTED","depends_on":["GAP-023"],"blocks":[],"files":["backend/src/server.js","backend/src/middleware/errorHandler.js","backend/package.json","docs/DEPLOYMENT.md"],"title":"No observability: no metrics, structured logs, tracing, or alerting"},
 {"id":"GAP-052","cat":"CONTRA","sev":"S3","cplx":"M","diff":"D1","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":[],"files":["README.md","frontend/docs/Frontend-Guidelines.md","CLAUDE.md","backend/src/server.js","frontend/src/lib/apiClient.ts","backend/package.json","frontend/package.json"],"title":"Documentation contradicts the code at eight independent points"}
+{"id":"GAP-053","cat":"SEC","sev":"S2","cplx":"XS","diff":"D2","risk":"R2","conf":"C1","pri":5.0,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":[],"files":["backend/src/controllers/authController.js","backend/src/utils/environment.js"],"title":"The refresh cookie's secure and sameSite fail open on NODE_ENV"},
+{"id":"GAP-054","cat":"SEC","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/middleware/validate.js","frontend/src/types/api.ts"],"title":"Validation errors echo the submitted value, including passwords"}
 ]
 ```
 
@@ -6506,9 +6760,9 @@ single unit test against `isURL`.
 - [x] Every checklist item is a single action naming the file it touches.
 - [x] Every AGENT-READY entry has `Open questions: None`. The five HUMAN-FIRST entries and the eight AGENT-ASSISTED entries each carry a real question.
 - [x] Every CONTRA entry names both positions with quoted evidence and states who decides.
-- [x] The JSON appendix has 55 objects whose ids, scores, dependencies and titles match the prose entries.
-- [x] Counts in the metadata block match the actual entries: 55 total; S1 8, S2 33, S3 14, S4 0; CODE 20, SEC 15, OPS 9, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
-- [x] S1 findings are 8 of 55, or 14.5%, inside the 15% calibration ceiling.
+- [x] The JSON appendix has 57 objects whose ids, scores, dependencies and titles match the prose entries.
+- [x] Counts in the metadata block match the actual entries: 57 total; S1 8, S2 34, S3 15, S4 0; CODE 20, SEC 17, OPS 9, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
+- [x] S1 findings are 8 of 57, or 14.0%, inside the 15% calibration ceiling.
 
 **One caveat on my own confidence.** I read about 62% of the source and executed
 none of it. The largest unread surface is the frontend, which also has no tests,
