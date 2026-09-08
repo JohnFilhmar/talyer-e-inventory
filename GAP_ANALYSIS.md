@@ -357,6 +357,16 @@ agent starts.
 
 ## 8. Recommended Execution Order (waves)
 
+**Read section 0 first for what is already closed.** The wave tables below are
+the plan as originally written and still list entries that have since been
+fixed; they are left in place so the file-conflict reasoning stays legible.
+Waves 1 and 2 are complete.
+
+**Four entries were absent from every wave** and were added on 2026-09-09:
+GAP-021, GAP-030 and GAP-031 were omissions in the original plan, and GAP-054
+was raised later. An open entry in no wave is unreachable by anyone following
+this section, which is how all four went unscheduled.
+
 **Conflict check performed.** For every wave I listed the primary and secondary
 file paths of each member gap and compared them pairwise. Two gaps share a wave
 only when their file sets are disjoint. Where two gaps touch the same file
@@ -395,7 +405,7 @@ GAP-009 is held to Wave 3: it edits `authRoutes.js`, and Wave 2 already has an
 `authController.js` edit whose review is easier without a second auth change
 landing beside it.
 
-### Wave 3: inventory correctness, part one (7 gaps)
+### Wave 3: inventory correctness, part one (8 gaps)
 
 | Gap | Files touched |
 |---|---|
@@ -406,6 +416,7 @@ landing beside it.
 | GAP-017 | `backend/src/routes/serviceRoutes.js`, `backend/tests/service.test.js`: **serialise after GAP-015b** |
 | GAP-019 | `backend/src/controllers/stockController.js` |
 | GAP-022 | `frontend/src/app/(protected)/sync/page.tsx`, `frontend/src/lib/offline/sync.ts` |
+| GAP-054 | `backend/src/middleware/validate.js`, `frontend/src/types/api.ts` |
 
 GAP-015a touches `productController.js` and GAP-026 also would, so GAP-026 moves
 to Wave 4. GAP-018 touches `stockController.js` like GAP-019, so it also moves.
@@ -413,7 +424,7 @@ GAP-015b and GAP-017 both edit `backend/tests/service.test.js`, so they are
 serialised rather than parallel: GAP-015b first, because its guard is what makes
 GAP-017's four routes safe while GAP-017's chains are still being written.
 
-### Wave 4: inventory correctness, part two (7 gaps)
+### Wave 4: inventory correctness, part two (8 gaps)
 
 | Gap | Files touched |
 |---|---|
@@ -424,12 +435,13 @@ GAP-017's four routes safe while GAP-017's chains are still being written.
 | GAP-026 | `backend/src/controllers/productController.js`, `categoryController.js`, `branchController.js` |
 | GAP-032 | `backend/src/config/constants.js`, `backend/src/server.js` |
 | GAP-015c | `backend/src/utils/pickFields.js` (new), `branchController.js`, `categoryController.js`, `productController.js`, `supplierController.js`: **serialise after GAP-026** |
+| GAP-031 | `backend/src/controllers/categoryController.js`, `productController.js`: **serialise after GAP-026** |
 
 GAP-006 (Wave 2) also edits `frontend/src/types/auth.ts`, which is why GAP-020
 waits until Wave 4 rather than joining Wave 2. GAP-015c shares three controllers
 with GAP-026, so it is serialised after it rather than run beside it.
 
-### Wave 5: operations and platform (8 gaps)
+### Wave 5: operations and platform (10 gaps)
 
 | Gap | Files touched |
 |---|---|
@@ -441,10 +453,13 @@ with GAP-026, so it is serialised after it rather than run beside it.
 | GAP-038 | `backend/src/middleware/imageUpload.js`: **serialise after GAP-034** |
 | GAP-048 | `backend/src/utils/cache.js` |
 | GAP-015d | `backend/src/routes/stockRoutes.js`, `salesRoutes.js`, `serviceRoutes.js`, `productRoutes.js`, `categoryRoutes.js`, `backend/src/controllers/serviceController.js` |
+| GAP-021 | `backend/src/controllers/salesController.js`, `serviceController.js`, `frontend/src/app/(protected)/sales/page.tsx` |
+| GAP-030 | `frontend/src/app/sw.ts`, `frontend/src/lib/offline/cache.ts` |
 
 Two serialisation edges inside this wave are called out explicitly because the
-pairs share a file. Run GAP-023 then GAP-024, and GAP-034 then GAP-038. The other
-six are mutually disjoint; GAP-015d is the only route-file edit in the wave.
+pairs share a file. Run GAP-023 then GAP-024, and GAP-034 then GAP-038. The rest
+are mutually disjoint. GAP-021 is the only entry here touching the sales and
+service controllers, and GAP-030 the only one touching the service worker.
 
 ### Wave 6: correctness with a design choice (5 gaps)
 
