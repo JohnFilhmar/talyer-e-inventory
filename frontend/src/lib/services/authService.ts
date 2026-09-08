@@ -1,4 +1,4 @@
-import apiClient from '@/lib/apiClient';
+import apiClient, { csrfHeaders } from '@/lib/apiClient';
 import { setAccessToken, clearTokens } from '@/lib/tokenStorage';
 import type { ApiResponse } from '@/types/api';
 import type {
@@ -108,8 +108,16 @@ export const authService = {
    * Backend reads httpOnly cookie and returns new access token
    */
   async refreshToken(): Promise<ApiResponse<RefreshTokenResponse>> {
+    // The CSRF header is required here, not optional. /auth/refresh-token is
+    // the one endpoint that authenticates from a cookie, so requireCsrfToken
+    // rejects it with 403 when an XSRF-TOKEN cookie exists and the header does
+    // not echo it. Only the apiClient interceptor used to attach it, and this
+    // method is called directly by authStore.initialize() on the path where
+    // localStorage is empty, which is exactly when session restore matters.
     const { data } = await apiClient.post<ApiResponse<RefreshTokenResponse>>(
-      '/auth/refresh-token'
+      '/auth/refresh-token',
+      {},
+      { headers: csrfHeaders() }
     );
 
     if (data.success && data.data?.accessToken) {

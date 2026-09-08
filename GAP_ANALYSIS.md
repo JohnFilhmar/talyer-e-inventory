@@ -45,6 +45,13 @@ bringing reality back in line with `docs/DEPLOYMENT.md:46`, which had said
 "public" throughout. No documentation change is needed; the code and the deploy
 guidance were right and the setting had drifted.
 
+**Wave 2 is closed** as of 2026-09-08: GAP-005, GAP-006, GAP-008, GAP-010,
+GAP-013 (its remaining half), GAP-036 and GAP-037 are fixed, each with a note on
+its entry. Three of those entries understated their own scope, and the notes say
+how: GAP-008 named one role-blind cache when there are two, GAP-006 surfaced a
+second contract drift in `ApiResponse.errors`, and GAP-037's path fix needed a
+Babel plugin before the suite would load.
+
 **The whole GAP-015 family is closed.** GAP-015a and GAP-015b landed
 2026-09-07 (PR #41) in the same change that split GAP-015; GAP-015c and
 GAP-015d landed 2026-09-08. `escapeRegex` lives in `backend/src/utils/regex.js`
@@ -61,8 +68,7 @@ And the true positives will not close automatically either: CodeQL does not
 recognise a hand-written guard or an allow-list as a barrier, so the alert count
 is not the measure of this work.
 
-Remaining open: 44 of the 55 gaps now listed, plus the adjust-stock half of
-GAP-013. The count moved from 45 of 52 because splitting GAP-015 added three
+Remaining open: 37 of the 55 gaps now listed. The count moved from 45 of 52 because splitting GAP-015 added three
 entries and all four are now closed. The severity and category counts in the
 front matter below describe the audit as first written and have not been
 restated.
@@ -994,6 +1000,19 @@ None.
 
 ### GAP-005 [SEC] forgot-password returns the reset token unless NODE_ENV is exactly production
 
+> **FIXED 2026-09-08, Wave 2.** The gate is now an affirmative test for
+> `development` or `test` via `backend/src/utils/environment.js`, applied to
+> both the token echo and the errorHandler message/stack. Anything else,
+> including an unset NODE_ENV, is treated as production. Tests cover `staging`,
+> `PRODUCTION`, `prod`, a typo, an empty string and unset, and assert the token
+> is still *minted* so an email transport would work.
+>
+> Residual, deliberately out of scope: `getRefreshTokenCookieOptions` in
+> `authController.js` derives the cookie's `secure` and `sameSite` from the same
+> `=== 'production'` test and has the same fail-open shape. It was left alone
+> because flipping it would set `Secure` on plain-HTTP localhost and break local
+> login. It needs its own entry.
+
 | Field | Value |
 |---|---|
 | Severity | S2 Major |
@@ -1094,6 +1113,16 @@ None.
 ---
 
 ### GAP-006 [CODE] Password reset is impossible: the client sends token, the API requires resetToken
+
+> **FIXED 2026-09-08, Wave 2.** The client field is renamed to `resetToken` in
+> `frontend/src/types/auth.ts` and the reset page. The page now renders the
+> first entry of `errors[]` before falling back to `message`.
+>
+> Doing that turned up a second contract drift: `ApiResponse.errors` was typed
+> `Record<string, string[]>`, but `backend/src/middleware/validate.js` sends an
+> array of `{ field, message, value }`. Nothing in the frontend read the field,
+> so the drift had gone unnoticed. `frontend/src/types/api.ts` now declares an
+> `ApiFieldError[]` matching what the server actually sends.
 
 | Field | Value |
 |---|---|
@@ -1311,6 +1340,18 @@ None.
 
 ### GAP-008 [SEC] Any authenticated customer can enumerate branch managers' names and emails
 
+> **FIXED 2026-09-08, Wave 2.** `canSeeStaffIdentity` in `branchController.js`
+> gates the manager populate on both the list and detail reads; a customer gets
+> the branch with `manager` absent. The route stays open to customers.
+>
+> The entry named one cache to fix. There are **two**, and both were role-blind:
+> the route-level `cacheMiddleware`, which keys on `req.originalUrl`, and an
+> internal `CacheUtil.generateKey('branches', 'list', ...)` inside
+> `getBranches`. Fixing only the middleware would have left the controller cache
+> serving one role's shape to the other. Both now carry the role, and there are
+> tests for both directions: a staff request must not leak the manager to a
+> customer afterwards, and a customer request must not blank it out for staff.
+
 Severity S2 Major | Complexity XS | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 5.0 | Agent suitability AGENT-ASSISTED |
 Depends on none | Blocks none | Est. agent turns 3-6
@@ -1505,6 +1546,10 @@ producing.
 ---
 
 ### GAP-010 [CODE] authService.refreshToken omits the CSRF header, so session restore always 403s
+
+> **FIXED 2026-09-08, Wave 2.** `csrfHeaders()` is exported from
+> `frontend/src/lib/apiClient.ts` and used both by the 401 interceptor and by
+> `authService.refreshToken()`, which previously sent no header at all.
 
 Severity S2 Major | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 5.0 | Agent suitability AGENT-READY |
@@ -1818,11 +1863,15 @@ None.
 
 ### GAP-013 [CODE] The adjust-stock form defaults to an invalid reason and offers one the API rejects
 
-> **PARTIALLY FIXED 2026-09-06, Wave 1, PR #39.** The `userController`
-> projection defect that shared this wave is closed: the six `.select()` calls
-> now name the real schema fields through a shared `PUBLIC_USER_FIELDS`
-> constant. The adjust-stock form default and the `min: 5` reason-length rule
-> described in this entry are **still open**.
+> **FIXED 2026-09-08, Wave 2.** Completed in two parts. The `userController`
+> projection defect that shared this wave closed on 2026-09-06 in Wave 1 (PR
+> #39): the six `.select()` calls name the real schema fields through a shared
+> `PUBLIC_USER_FIELDS` constant. The remaining two defects closed on 2026-09-08:
+> the adjust form now defaults to `inventory_count`, a real member of
+> `ADJUSTMENT_REASONS`, and the server's reason floor moved from 5 to 3 at both
+> adjust routes. A parameterised test asserts every one of the seven reasons the
+> UI offers is accepted, `lost` included, and that a one-character reason is
+> still rejected.
 
 Severity S2 Major | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 5.0 | Agent suitability AGENT-READY |
@@ -4463,6 +4512,13 @@ decision and can proceed.
 
 ### GAP-036 [OPS] seedBranches.js self-executes on import with no main-module guard
 
+> **FIXED 2026-09-08, Wave 2.** Three guards now stand between an import and a
+> deletion: the module must be the process entry point, `--confirm` must be
+> passed, and `NODE_ENV=production` additionally needs `--force-production`. The
+> target host and database are printed, credentials redacted, before anything is
+> deleted. Verified: importing the module performs no writes, and both refusal
+> paths exit 1.
+
 Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |
 Depends on none | Blocks none | Est. agent turns 2-4
@@ -4546,6 +4602,19 @@ None.
 ---
 
 ### GAP-037 [OPS] The repo-root uploads/ directory is neither gitignored nor mounted
+
+> **FIXED 2026-09-08, Wave 2.** `/uploads/` is gitignored at the repository
+> root, and `backend/src/utils/uploadsPath.js` resolves the directory from its
+> own module location so the launch directory no longer decides where images go.
+> Both the multer writer and the `express.static` mount use it. The container
+> path is unchanged: `/app/src/utils/` resolves to `/app/uploads`, which is where
+> `docker-compose.yml` mounts the `backend-uploads` volume.
+>
+> One knock-on: `import.meta` is a *parse* error under Jest's Babel-to-CJS
+> transform, so any file containing it fails to load and takes its whole suite
+> with it. `product.test.js` and `imageUpload.test.js` both broke this way.
+> `babel-plugin-transform-import-meta` is now a devDependency and is registered
+> in `babel.config.cjs`; the production ESM path is untouched.
 
 Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |

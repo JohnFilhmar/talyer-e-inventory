@@ -542,6 +542,60 @@ describe('Auth API - Forgot Password', () => {
       expect(res.body.data).toHaveProperty('resetToken');
     });
 
+    // GAP-005. The echo used to be gated on `NODE_ENV === 'production'`, so an
+    // unset or misspelled value handed any unauthenticated caller a working
+    // reset token for any account. The gate is now an affirmative test for
+    // development or test.
+    describe('fails closed on an unrecognised NODE_ENV', () => {
+      const original = process.env.NODE_ENV;
+      afterEach(() => {
+        process.env.NODE_ENV = original;
+      });
+
+      it.each(['staging', 'PRODUCTION', 'prod', 'developement', ''])(
+        'withholds the token when NODE_ENV is %p',
+        async (value) => {
+          await createTestUser({ email: 'envcheck@example.com' });
+          process.env.NODE_ENV = value;
+
+          const res = await request(app)
+            .post('/api/auth/forgot-password')
+            .send({ email: 'envcheck@example.com' });
+
+          expect(res.status).toBe(200);
+          expect(res.body.success).toBe(true);
+          expect(res.body.data).toBeUndefined();
+          expect(JSON.stringify(res.body)).not.toContain('resetToken');
+        }
+      );
+
+      it('withholds the token when NODE_ENV is unset entirely', async () => {
+        await createTestUser({ email: 'unset@example.com' });
+        delete process.env.NODE_ENV;
+
+        const res = await request(app)
+          .post('/api/auth/forgot-password')
+          .send({ email: 'unset@example.com' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data).toBeUndefined();
+      });
+
+      it('still issues the token, so the reset remains completable', async () => {
+        const { user } = await createTestUser({ email: 'stillworks@example.com' });
+        process.env.NODE_ENV = 'staging';
+
+        await request(app)
+          .post('/api/auth/forgot-password')
+          .send({ email: 'stillworks@example.com' });
+
+        // Withholding the echo must not stop the token being minted: an email
+        // transport would still need it.
+        const stored = await User.findById(user._id).select('+resetPasswordToken');
+        expect(stored.resetPasswordToken).toBeTruthy();
+      });
+    });
+
     it('should fail with missing email', async () => {
       const res = await request(app)
         .post('/api/auth/forgot-password')

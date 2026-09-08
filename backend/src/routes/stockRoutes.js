@@ -35,8 +35,12 @@ const adjustStockValidation = [
   body('product').notEmpty().isMongoId().withMessage('Valid product ID is required'),
   body('branch').notEmpty().isMongoId().withMessage('Valid branch ID is required'),
   body('adjustment').notEmpty().isInt().withMessage('Adjustment must be an integer').toInt(),
-  body('reason').notEmpty().isString().isLength({ min: 5, max: 500 })
-    .withMessage('Reason is required and must be between 5-500 characters')
+  // min 3, not 5: 'lost' is four characters and is a value the UI itself
+  // offers, so a min of 5 made writing off lost stock impossible. The enum
+  // values are persisted in the StockMovement ledger and must not be renamed
+  // to suit a validator.
+  body('reason').notEmpty().isString().isLength({ min: 3, max: 500 })
+    .withMessage('Reason is required and must be between 3-500 characters')
 ];
 
 const createTransferValidation = [
@@ -77,8 +81,9 @@ const restockByIdValidation = [
 const adjustByIdValidation = [
   param('id').isMongoId().withMessage('Valid stock ID is required'),
   body('quantity').notEmpty().isInt().withMessage('Adjustment quantity is required').toInt(),
-  body('reason').notEmpty().isString().isLength({ min: 5, max: 500 })
-    .withMessage('Reason is required and must be between 5-500 characters'),
+  // Same floor as adjustStockValidation above; the two routes must agree.
+  body('reason').notEmpty().isString().isLength({ min: 3, max: 500 })
+    .withMessage('Reason is required and must be between 3-500 characters'),
   body('notes').optional().isString().isLength({ max: 500 }).withMessage('Notes cannot exceed 500 characters')
 ];
 

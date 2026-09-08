@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import path from 'path';
+import { pathToFileURL } from 'url';
 import mongoose from 'mongoose';
 import Branch from '../models/Branch.js';
 
@@ -119,4 +121,62 @@ const seedBranches = async () => {
   }
 };
 
-seedBranches();
+/**
+ * Redact credentials from a Mongo URI so the target can be printed safely.
+ * Returns a coarse description rather than throwing on an unparseable value.
+ */
+const describeTarget = (uri) => {
+  if (!uri) return '(MONGODB_URI is not set)';
+  try {
+    const parsed = new URL(uri);
+    return `${parsed.host}${parsed.pathname}`;
+  } catch {
+    return '(unparseable MONGODB_URI)';
+  }
+};
+
+/**
+ * This module used to end in a bare `seedBranches()`, so merely importing it
+ * ran `Branch.deleteMany({})` against whatever `MONGODB_URI` pointed at. Its
+ * safety rested entirely on nobody ever importing the file.
+ *
+ * Three guards now stand between an import and a deletion: the module must be
+ * the process entry point, `--confirm` must be passed, and a `production`
+ * NODE_ENV additionally needs `--force-production`. The resolved target is
+ * printed before anything is deleted so an operator can abort.
+ */
+const isEntryPoint = () => {
+  const invoked = process.argv[1];
+  if (!invoked) return false;
+  return import.meta.url === pathToFileURL(path.resolve(invoked)).href;
+};
+
+const usage = () => {
+  console.error('Refusing to run: seedBranches DELETES ALL EXISTING BRANCHES.');
+  console.error('');
+  console.error('  node src/utils/seedBranches.js --confirm');
+  console.error('');
+  console.error('Target database:', describeTarget(process.env.MONGODB_URI));
+  console.error('Add --force-production to allow this with NODE_ENV=production.');
+};
+
+if (isEntryPoint()) {
+  const args = process.argv.slice(2);
+  const confirmed = args.includes('--confirm');
+  const forcedProduction = args.includes('--force-production');
+
+  if (!confirmed) {
+    usage();
+    process.exit(1);
+  } else if (process.env.NODE_ENV === 'production' && !forcedProduction) {
+    console.error('Refusing to run against NODE_ENV=production without --force-production.');
+    console.error('Target database:', describeTarget(process.env.MONGODB_URI));
+    process.exit(1);
+  } else {
+    console.log('Seeding branches. This deletes every existing branch first.');
+    console.log('Target database:', describeTarget(process.env.MONGODB_URI));
+    seedBranches();
+  }
+}
+
+export { seedBranches, branches };

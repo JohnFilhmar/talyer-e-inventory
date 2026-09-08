@@ -11,6 +11,27 @@ import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { authService } from '@/lib/services/authService';
 import { resetPasswordSchema, type ResetPasswordFormData } from '@/utils/validators/auth';
+import type { ApiFieldError } from '@/types/api';
+
+/**
+ * Pick the most useful message out of a failed reset.
+ *
+ * `/auth/reset-password` is wired with validate.js, which answers every
+ * rejection with `message: 'Validation failed'` and puts the per-field text in
+ * `errors[]`. Showing `message` alone tells the user nothing they can act on.
+ */
+function resolveResetError(err: unknown): string {
+  const response = (err as { response?: { data?: { message?: string; errors?: ApiFieldError[] } } })
+    ?.response?.data;
+
+  const fieldMessage = response?.errors?.find((entry) => entry?.message)?.message;
+  if (fieldMessage) return fieldMessage;
+
+  if (response?.message) return response.message;
+  if (err instanceof Error && err.message) return err.message;
+
+  return 'An unexpected error occurred';
+}
 
 /**
  * Inner component that uses useSearchParams
@@ -58,7 +79,7 @@ function ResetPasswordForm() {
 
     try {
       const response = await authService.resetPassword({
-        token,
+        resetToken: token,
         newPassword: data.newPassword,
       });
 
@@ -72,10 +93,12 @@ function ResetPasswordForm() {
         setError(response.message || 'Failed to reset password');
       }
     } catch (err: unknown) {
-      const message = err instanceof Error 
-        ? (err as Error & { response?: { data?: { message?: string } } }).response?.data?.message || err.message
-        : 'An unexpected error occurred';
-      setError(message);
+      // Prefer the per-field text in `errors[]` over `message`. Routes wired
+      // with validate.js answer every rejection with a generic
+      // "Validation failed" and put the actionable detail in `errors[]`, so
+      // reading only `message` is what hid the token/resetToken field-name bug
+      // from anyone using this page.
+      setError(resolveResetError(err));
     } finally {
       setIsLoading(false);
     }

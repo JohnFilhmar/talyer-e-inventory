@@ -3,6 +3,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { generateToken, generateRefreshToken } from '../utils/jwt.js';
 import ApiResponse from '../utils/apiResponse.js';
 import { USER_ROLES } from '../config/constants.js';
+import { isDebugEnvironment } from '../utils/environment.js';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { issueCsrfToken, clearCsrfToken } from '../middleware/csrf.js';
@@ -244,10 +245,15 @@ const forgotPassword = asyncHandler(async (req, res) => {
   const resetToken = user.getResetPasswordToken();
   await user.save();
 
-  // There is no mail transport in this project. Outside production the token
-  // is echoed so the flow is usable locally and under test; in production it
-  // is never sent to the caller.
-  if (process.env.NODE_ENV === 'production') {
+  // There is no mail transport in this project, so the token is echoed in
+  // development and test to keep the flow usable locally and under test.
+  //
+  // The test is affirmative, not `!== 'production'`. Gating on production fails
+  // open: NODE_ENV unset, or spelled `PRODUCTION`, `prod` or `staging`, took
+  // the echoing branch and handed any caller a working reset token for any
+  // account. Anything not explicitly a debug environment is treated as
+  // production.
+  if (!isDebugEnvironment()) {
     return ApiResponse.success(res, 200, genericMessage);
   }
 

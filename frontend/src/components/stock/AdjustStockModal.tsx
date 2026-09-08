@@ -54,7 +54,10 @@ export const AdjustStockModal: React.FC<AdjustStockModalProps> = ({
     resolver: zodResolver(adjustStockSchema),
     defaultValues: {
       quantity: 0,
-      reason: 'correction',
+      // 'correction' is not a member of ADJUSTMENT_REASONS, so the select
+      // rendered with nothing chosen while the form state held a value the Zod
+      // enum rejects. 'inventory_count' is a real member and the most neutral.
+      reason: 'inventory_count',
       notes: '',
     },
   });
@@ -64,7 +67,7 @@ export const AdjustStockModal: React.FC<AdjustStockModalProps> = ({
     if (isOpen && stock) {
       reset({
         quantity: 0,
-        reason: 'correction',
+        reason: 'inventory_count',
         notes: '',
       });
       setSubmitError(null);

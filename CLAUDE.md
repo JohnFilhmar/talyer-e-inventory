@@ -26,7 +26,7 @@ npm test                          # jest --runInBand (NODE_ENV=test) — green: 
 npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
-node src/utils/seedBranches.js    # DESTRUCTIVE: deletes ALL existing branches, then seeds 3 Philippine branches into MONGODB_URI
+node src/utils/seedBranches.js --confirm   # DESTRUCTIVE: deletes ALL existing branches, then seeds 3 Philippine branches into MONGODB_URI. Without --confirm it prints the target database and exits 1; under NODE_ENV=production it also needs --force-production. Importing the module does nothing.
 npm run migrate:product-model     # one-off: renames Product.model → Product.productModel; idempotent
 
 # Frontend (cd frontend)

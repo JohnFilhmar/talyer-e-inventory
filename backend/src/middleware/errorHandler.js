@@ -1,3 +1,5 @@
+import { isDebugEnvironment } from '../utils/environment.js';
+
 const errorHandler = (err, req, res, next) => {
   let error = { ...err };
   error.message = err.message;
@@ -41,19 +43,24 @@ const errorHandler = (err, req, res, next) => {
   }
 
   const statusCode = error.statusCode || 500;
-  const isProduction = process.env.NODE_ENV === 'production';
+
+  // Affirmative test, not `!== 'production'`. Gating disclosure on production
+  // fails open: NODE_ENV unset, or spelled `PRODUCTION`, `prod` or `staging`,
+  // used to leak the raw 5xx message and a full stack trace. Anything not
+  // explicitly development or test is now treated as production.
+  const canDisclose = isDebugEnvironment();
 
   // 5xx messages come from internal failures and can carry connection
   // strings, driver internals, or file paths. Never send them to a client.
   const message =
-    statusCode >= 500 && isProduction
+    statusCode >= 500 && !canDisclose
       ? 'Server Error'
       : error.message || 'Server Error';
 
   res.status(statusCode).json({
     success: false,
     message,
-    ...(!isProduction && { stack: err.stack }),
+    ...(canDisclose && { stack: err.stack }),
   });
 };
 
