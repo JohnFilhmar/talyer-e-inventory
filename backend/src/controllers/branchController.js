@@ -4,7 +4,25 @@ import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { escapeRegex } from '../utils/regex.js';
+import { pickFields } from '../utils/pickFields.js';
 import { CACHE_TTL, USER_ROLES } from '../config/constants.js';
+
+// The fields PUT /api/branches/:id accepts. These are the schema's top-level
+// paths and they match `UpdateBranchPayload` in frontend/src/types/branch.ts
+// exactly. Deriving this from `updateBranchValidation` instead would be wrong:
+// that chain declares rules for only four of them, and an allow-list built from
+// it would silently stop address, contact, settings and isActive edits from
+// saving. Add a field here when the client contract gains one.
+const BRANCH_UPDATABLE_FIELDS = [
+  'name',
+  'code',
+  'address',
+  'contact',
+  'manager',
+  'settings',
+  'isActive',
+  'description',
+];
 
 /**
  * @desc    Get all branches
@@ -176,7 +194,7 @@ export const updateBranch = asyncHandler(async (req, res) => {
   // Update branch
   branch = await Branch.findByIdAndUpdate(
     id,
-    req.body,
+    pickFields(req.body, BRANCH_UPDATABLE_FIELDS),
     { new: true, runValidators: true }
   ).populate('manager', 'name email role');
 

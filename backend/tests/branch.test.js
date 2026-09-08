@@ -586,6 +586,90 @@ describe('Branch API - Response Format Consistency', () => {
   });
 });
 
+// GAP-015c. updateBranch used to hand the whole parsed body to
+// findByIdAndUpdate, so any key the validation chain did not name was written
+// through. express-validator whitelists rules, not fields, so only an explicit
+// allow-list in the controller closes this.
+describe('Branch API - Update field allow-list', () => {
+  describe('PUT /api/branches/:id', () => {
+    it('persists the declared fields', async () => {
+      const branch = await createTestBranch({ name: 'Old Name', code: 'OLD-001' });
+      const { token } = await createTestAdmin();
+
+      const res = await request(app)
+        .put(`/api/branches/${branch._id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'New Name', description: 'Now with a description' });
+
+      expect(res.status).toBe(200);
+
+      const stored = await Branch.findById(branch._id).lean();
+      expect(stored.name).toBe('New Name');
+      expect(stored.description).toBe('Now with a description');
+    });
+
+    it('still saves fields the update validator does not declare a rule for', async () => {
+      // address, contact and settings are absent from updateBranchValidation but
+      // are part of UpdateBranchPayload. An allow-list derived from the
+      // validator instead of the client contract would silently drop these.
+      const branch = await createTestBranch({ name: 'Cebu', code: 'CEB-9' });
+      const { token } = await createTestAdmin();
+
+      const res = await request(app)
+        .put(`/api/branches/${branch._id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          address: {
+            street: '9 New Street',
+            city: 'Cebu City',
+            province: 'Cebu'
+          },
+          contact: { phone: '+63 32 111 2222' },
+          settings: { taxRate: 12 }
+        });
+
+      expect(res.status).toBe(200);
+
+      const stored = await Branch.findById(branch._id).lean();
+      expect(stored.address.street).toBe('9 New Street');
+      expect(stored.contact.phone).toBe('+63 32 111 2222');
+      expect(stored.settings.taxRate).toBe(12);
+    });
+
+    it('ignores a field the route never declared', async () => {
+      const branch = await createTestBranch({ name: 'Iloilo', code: 'ILO-1' });
+      const { token } = await createTestAdmin();
+
+      const res = await request(app)
+        .put(`/api/branches/${branch._id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Iloilo Main', smuggledField: 'should not persist' });
+
+      expect(res.status).toBe(200);
+
+      const stored = await Branch.findById(branch._id).lean();
+      expect(stored.name).toBe('Iloilo Main');
+      expect(stored).not.toHaveProperty('smuggledField');
+    });
+
+    it('leaves createdAt alone when the body tries to set it', async () => {
+      const branch = await createTestBranch({ name: 'Bacolod', code: 'BCD-1' });
+      const { token } = await createTestAdmin();
+      const before = (await Branch.findById(branch._id).lean()).createdAt;
+
+      const res = await request(app)
+        .put(`/api/branches/${branch._id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Bacolod Main', createdAt: '1999-01-01T00:00:00.000Z' });
+
+      expect(res.status).toBe(200);
+
+      const stored = await Branch.findById(branch._id).lean();
+      expect(new Date(stored.createdAt).getTime()).toBe(new Date(before).getTime());
+    });
+  });
+});
+
 describe('Branch API - Restore', () => {
   describe('PATCH /api/branches/:id/restore', () => {
     it('brings an archived branch back', async () => {

@@ -1,6 +1,6 @@
 import express from 'express';
 const router = express.Router();
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import {
   getCategories,
   getCategory,
@@ -13,6 +13,27 @@ import {
 import { protect, authorize } from '../middleware/auth.js';
 import validate from '../middleware/validate.js';
 import { USER_ROLES } from '../config/constants.js';
+import { boolRule } from '../utils/queryRules.js';
+
+// Query validation for GET /api/categories (GAP-015d): no chain existed, so
+// `parent` reached a Mongo filter unconstrained.
+//
+// `parent` cannot use the shared idRule: `?parent=null` is the documented way
+// to ask for root categories, and getCategories maps that literal string to a
+// null parent. A plain isMongoId() rejects it. This mirrors the custom
+// ObjectId test the body('parent') rules in this file already use. Note that
+// `.if()` is not an option here: express-validator skips a chain when the
+// condition *throws*, not when it returns false.
+const listCategoriesValidation = [
+  query('parent')
+    .optional()
+    .not().isArray().withMessage('parent must be a single value')
+    .bail()
+    .custom((value) => value === 'null' || /^[0-9a-fA-F]{24}$/.test(value))
+    .withMessage('Invalid parent category ID'),
+  boolRule('active'),
+  boolRule('includeChildren')
+];
 
 // Validation chains
 const categoryIdValidation = [
@@ -144,6 +165,8 @@ router
   .route('/')
   .get(
     protect,
+    listCategoriesValidation,
+    validate,
     getCategories
   )
   .post(

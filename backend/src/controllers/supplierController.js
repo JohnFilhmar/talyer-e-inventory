@@ -3,7 +3,21 @@ import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { escapeRegex } from '../utils/regex.js';
+import { pickFields } from '../utils/pickFields.js';
 import { CACHE_TTL, PAGINATION } from '../config/constants.js';
+
+// The fields PUT /api/suppliers/:id accepts: the schema's top-level paths,
+// matching `UpdateSupplierPayload` in frontend/src/types/supplier.ts.
+const SUPPLIER_UPDATABLE_FIELDS = [
+  'name',
+  'code',
+  'contact',
+  'address',
+  'paymentTerms',
+  'creditLimit',
+  'notes',
+  'isActive',
+];
 
 /**
  * @desc    Get all suppliers
@@ -109,7 +123,7 @@ export const updateSupplier = asyncHandler(async (req, res) => {
 
     supplier = await Supplier.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      pickFields(req.body, SUPPLIER_UPDATABLE_FIELDS),
       { new: true, runValidators: true }
     );
 

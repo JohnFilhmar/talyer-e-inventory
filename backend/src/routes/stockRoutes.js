@@ -3,9 +3,17 @@ const router = express.Router();
 import { body, param, query } from 'express-validator';
 import * as stockController from '../controllers/stockController.js';
 import { protect, authorize } from '../middleware/auth.js';
-import { USER_ROLES } from '../config/constants.js';
+import { USER_ROLES, STOCK_TRANSFER_STATUS } from '../config/constants.js';
 import { checkBranchAccess } from '../middleware/branchAccess.js';
 import handleValidationErrors from '../middleware/validationHandler.js';
+import { MOVEMENT_TYPES } from '../utils/stockMovement.js';
+import {
+  idRule,
+  enumRule,
+  boolRule,
+  paginationRules,
+  dateRangeRules,
+} from '../utils/queryRules.js';
 
 // Validation rules
 const restockValidation = [
@@ -79,6 +87,48 @@ const stockIdValidation = [
   param('stockId').isMongoId().withMessage('Valid stock ID is required')
 ];
 
+// Query validation for the read routes (GAP-015d). These had no chain at all,
+// so their filter values reached Mongo unconstrained.
+const listStockValidation = [
+  idRule('branch'),
+  idRule('product'),
+  boolRule('lowStock'),
+  boolRule('outOfStock'),
+  ...paginationRules()
+];
+
+const lowStockValidation = [idRule('branch')];
+
+const listMovementsValidation = [
+  enumRule('type', Object.values(MOVEMENT_TYPES)),
+  idRule('branch'),
+  idRule('product'),
+  ...dateRangeRules(),
+  ...paginationRules()
+];
+
+const movementsByStockValidation = [...paginationRules()];
+
+const movementsByProductValidation = [idRule('branch'), ...paginationRules()];
+
+const movementsByBranchValidation = [
+  enumRule('type', Object.values(MOVEMENT_TYPES)),
+  ...dateRangeRules(),
+  ...paginationRules()
+];
+
+const listTransfersValidation = [
+  idRule('branch'),
+  enumRule('status', Object.values(STOCK_TRANSFER_STATUS)),
+  ...paginationRules()
+];
+
+const branchStockValidation = [
+  idRule('category'),
+  boolRule('lowStock'),
+  ...paginationRules()
+];
+
 // Routes
 
 // GET /api/stock - Get all stock with filters
@@ -86,6 +136,8 @@ router.get(
   '/',
   protect,
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
+  listStockValidation,
+  handleValidationErrors,
   stockController.getAllStock
 );
 
@@ -94,6 +146,8 @@ router.get(
   '/low-stock',
   protect,
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
+  lowStockValidation,
+  handleValidationErrors,
   stockController.getLowStock
 );
 
@@ -104,6 +158,8 @@ router.get(
   '/movements',
   protect,
   authorize(USER_ROLES.ADMIN),
+  listMovementsValidation,
+  handleValidationErrors,
   stockController.getMovements
 );
 
@@ -113,6 +169,7 @@ router.get(
   protect,
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   stockIdValidation,
+  movementsByStockValidation,
   handleValidationErrors,
   stockController.getMovementsByStock
 );
@@ -123,6 +180,7 @@ router.get(
   protect,
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   productIdValidation,
+  movementsByProductValidation,
   handleValidationErrors,
   stockController.getMovementsByProduct
 );
@@ -134,6 +192,7 @@ router.get(
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   checkBranchAccess,
   branchIdValidation,
+  movementsByBranchValidation,
   handleValidationErrors,
   stockController.getMovementsByBranch
 );
@@ -143,6 +202,8 @@ router.get(
   '/transfers',
   protect,
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
+  listTransfersValidation,
+  handleValidationErrors,
   stockController.getStockTransfers
 );
 
@@ -183,6 +244,7 @@ router.get(
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   checkBranchAccess,
   branchIdValidation,
+  branchStockValidation,
   handleValidationErrors,
   stockController.getBranchStock
 );

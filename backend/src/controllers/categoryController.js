@@ -3,7 +3,23 @@ import Product from '../models/Product.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
+import { pickFields } from '../utils/pickFields.js';
 import { CACHE_TTL } from '../config/constants.js';
+
+// The fields PUT /api/categories/:id accepts: the schema's top-level paths,
+// matching `UpdateCategoryPayload` in frontend/src/types/category.ts. `parent`
+// is deliberately included even though it may arrive as null, which is how the
+// client promotes a category to a root.
+const CATEGORY_UPDATABLE_FIELDS = [
+  'name',
+  'code',
+  'description',
+  'parent',
+  'image',
+  'color',
+  'sortOrder',
+  'isActive',
+];
 
 /**
  * @desc    Get all categories
@@ -176,7 +192,7 @@ export const updateCategory = asyncHandler(async (req, res) => {
   // Update category
   category = await Category.findByIdAndUpdate(
     id,
-    req.body,
+    pickFields(req.body, CATEGORY_UPDATABLE_FIELDS),
     { new: true, runValidators: true }
   ).populate('parent', 'name code');
 
