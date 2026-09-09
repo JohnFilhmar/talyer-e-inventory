@@ -614,6 +614,15 @@ ported to the mount-the-router + `dbHandler` pattern above, minting tokens direc
 `testHelpers` instead of logging in over HTTP, so it needs no carve-out and CI runs a plain
 `npm test` — see the `backend-test` job in [ci.yml](.github/workflows/ci.yml).
 
+**Nothing in the Jest suite imports `server.js`, so nothing in it is covered.** That is the
+deliberate consequence of the pattern above, and it has a cost worth knowing: a green `npm test`
+says nothing about the global middleware chain, the CORS block, the request logger, or the route
+mounting. The only thing in the pipeline that runs `server.js` is the **backend smoke test inside
+`docker-build`**, which boots the image and polls `/health`. GAP-059 shipped a `server.js` that
+threw `ReferenceError` on every request, and 825 green tests plus `node --check` plus a clean
+typecheck all missed it; the smoke test caught it. When you touch `server.js`, that job is the
+check that matters.
+
 `tests/setup/dbHandler.js` runs `mongodb-memory-server` (`connect` in `beforeAll`,
 `clearDatabase` in `afterEach`, `closeDatabase` in `afterAll`).
 `tests/setup/testEnv.js` is a `setupFiles` entry that injects the JWT secrets — no `.env` is read
