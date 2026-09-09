@@ -1,5 +1,6 @@
 import Stock from '../models/Stock.js';
 import Transaction from '../models/Transaction.js';
+import { roundCurrency } from './currency.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from './stockMovement.js';
 
 /**
@@ -99,7 +100,9 @@ export const recordSaleTransaction = async (order, user) => {
   await Transaction.create({
     type: 'sale',
     branch: order.branch,
-    amount: order.total,
+    // Rounded again at the ledger boundary. The order total is already exact,
+    // and an order written before GAP-041 is not.
+    amount: roundCurrency(order.total),
     paymentMethod: order.payment.method,
     reference: { model: 'SalesOrder', id: order._id },
     description: `Sales Order ${order.orderNumber}`,

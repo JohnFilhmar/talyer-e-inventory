@@ -1766,3 +1766,86 @@ describe('order numbering under concurrency', () => {
     expect(second.body.data.orderNumber).not.toBe(first.body.data.orderNumber);
   });
 });
+
+describe('money rounding', () => {
+  // Three units at PHP 8.10 multiply out to 24.299999999999997, and at 12% VAT
+  // the total lands on 27.215999999999998. That number is not cosmetic: it is
+  // what `amountPaid >= total` compares against, so a cashier tendering the
+  // 27.22 shown on the screen used to stay in `partial`.
+  it('stores a total exact to the centavo, and pays off at the printed price', async () => {
+    const admin = await createTestAdmin();
+    const category = await createTestCategory();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(category);
+    await createTestStock(product, branch, { quantity: 100, sellingPrice: 8.1 });
+
+    const res = await request(app)
+      .post('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({
+        branch: branch._id.toString(),
+        customer: { name: 'Walk-in', phone: '09171234567' },
+        items: [{ product: product._id.toString(), quantity: 3 }],
+        taxRate: 12,
+        paymentMethod: 'cash',
+        amountPaid: 27.22,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.subtotal).toBe(24.3);
+    expect(res.body.data.tax.amount).toBe(2.92);
+    expect(res.body.data.total).toBe(27.22);
+    expect(res.body.data.payment.status).toBe('paid');
+    expect(res.body.data.payment.change).toBe(0);
+  });
+
+  it('accepts a full line discount instead of rejecting it on a negative epsilon', async () => {
+    const admin = await createTestAdmin();
+    const category = await createTestCategory();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(category);
+    await createTestStock(product, branch, { quantity: 100, sellingPrice: 8.1 });
+
+    const res = await request(app)
+      .post('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({
+        branch: branch._id.toString(),
+        customer: { name: 'Walk-in', phone: '09171234567' },
+        items: [{ product: product._id.toString(), quantity: 3, discount: 24.3 }],
+        paymentMethod: 'cash',
+      });
+
+    // Unrounded, this total is about -3.55e-15, which trips the schema's
+    // `min: 0` and answers with a message describing nothing the operator did.
+    expect(res.status).toBe(201);
+    expect(res.body.data.total).toBe(0);
+  });
+
+  it('writes a ledger amount equal to the order total', async () => {
+    const admin = await createTestAdmin();
+    const category = await createTestCategory();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(category);
+    await createTestStock(product, branch, { quantity: 100, sellingPrice: 8.1 });
+
+    const created = await request(app)
+      .post('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({
+        branch: branch._id.toString(),
+        customer: { name: 'Walk-in', phone: '09171234567' },
+        items: [{ product: product._id.toString(), quantity: 3 }],
+        taxRate: 12,
+        paymentMethod: 'cash',
+        amountPaid: 27.22,
+      });
+    expect(created.status).toBe(201);
+    // A fully paid order completes on creation and writes its ledger row there.
+    expect(created.body.data.status).toBe('completed');
+
+    const transaction = await Transaction.findOne({ 'reference.id': created.body.data._id });
+    expect(transaction.amount).toBe(27.22);
+    expect(transaction.amount).toBe(created.body.data.total);
+  });
+});

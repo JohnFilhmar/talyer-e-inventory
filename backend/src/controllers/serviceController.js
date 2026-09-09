@@ -8,6 +8,7 @@ import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { PAGINATION, USER_ROLES } from '../config/constants.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
+import { roundCurrency } from '../utils/currency.js';
 import { canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
 // The fields a list may be ordered by. `sortBy` is used as an object key, so an
@@ -449,7 +450,7 @@ export const updateServiceOrderStatus = asyncHandler(async (req, res) => {
       await Transaction.create({
         type: 'service',
         branch: order.branch,
-        amount: order.totalAmount,
+        amount: roundCurrency(order.totalAmount),
         paymentMethod: order.payment.method,
         reference: {
           model: 'ServiceOrder',
@@ -611,7 +612,7 @@ export const updatePayment = asyncHandler(async (req, res) => {
     await Transaction.create({
       type: 'service',
       branch: order.branch,
-      amount: order.totalAmount,
+      amount: roundCurrency(order.totalAmount),
       paymentMethod: order.payment.method,
       reference: {
         model: 'ServiceOrder',

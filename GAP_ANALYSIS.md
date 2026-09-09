@@ -5434,6 +5434,45 @@ climbing across years instead; it is a one-line change to the key.
 
 ### GAP-041 [CODE] All money is IEEE-754 floating point with no rounding at any boundary
 
+> **FIXED 2026-09-09, Wave 6.** `backend/src/utils/currency.js` exports
+> `roundCurrency`, half away from zero to two decimals, and `sumCurrency`, which
+> adds raw and rounds once so a half centavo cannot compound across a long
+> receipt. Both totals hooks round at every assignment: `item.total`,
+> `subtotal`, `tax.amount`, `total` and `payment.change` on `SalesOrder`, and
+> `part.total`, `totalParts` and `totalAmount` on `ServiceOrder`. The three
+> ledger writes round again at the boundary, since an order written before this
+> change is not exact.
+>
+> **The obvious implementation is wrong and the helper does not use it.**
+> `Math.round(value * 100) / 100` reintroduces the error it is meant to remove:
+> `1.005 * 100` is `100.49999999999999`, which rounds down to the wrong centavo.
+> The helper shifts the decimal exponent through `toExponential` instead, which
+> is exact, and going through `toExponential` rather than string concatenation
+> also keeps it correct for a value already in exponential notation. `${-3.55e-15}e2`
+> is `NaN`, and a negative epsilon is exactly the case this has to handle.
+>
+> Three smaller decisions, each with a reason:
+>
+> - Half **away from zero**, not `Math.round`, which is half toward positive
+>   infinity and would round -0.005 to -0.00 while rounding 0.005 to 0.01.
+> - A rounded negative epsilon is normalised from `-0` to `0`. Storing `-0` is
+>   arithmetically harmless and confusing in every report that prints it.
+> - A non-finite input returns 0 rather than propagating. A `NaN` total compares
+>   false against every threshold, so it would leave an order permanently neither
+>   paid nor unpaid.
+>
+> `amountPaid` is deliberately **not** rounded: it is what the cashier entered,
+> not a computed value, and the comparison it feeds is now exact on the other
+> side.
+>
+> `backend/tests/currency.test.js` is new, 11 tests and no database, including
+> the 1.005 case that the naive scaling fails. `sales.test.js` gains three:
+> three units at 8.10 with 12% VAT storing subtotal 24.3, tax 2.92 and total
+> 27.22 and settling as `paid` at the printed price; a full line discount
+> accepted with a total of exactly 0 rather than rejected on the schema's
+> `min: 0`; and a ledger amount equal to the order total. Backend suite:
+> 26 suites, 784 tests, run locally.
+
 Severity S2 Major | Complexity M | Difficulty D3 Specialist | Risk R3 |
 Confidence C1 Verified | Priority score 1.25 | Agent suitability AGENT-ASSISTED |
 Depends on GAP-040 | Blocks none | Est. agent turns 6-12
@@ -5525,11 +5564,16 @@ their exact values, which remain correct.
 
 **Open questions**
 
-Rounding half-up is the common retail convention, but banker's rounding is used in
-some accounting contexts. I chose half-up because it matches what a cashier and a
-printed receipt expect. If the owner's bookkeeper requires banker's rounding, that
-is a one-line change in the helper, and it should be decided before the first
-production run rather than after.
+Still open, and it should be settled before the first production run rather
+than after.
+
+Shipped as half away from zero, the retail convention, because it matches what a
+cashier and a printed receipt expect. Banker's rounding, which rounds a half to
+the nearest even centavo, is used in some accounting contexts to avoid the
+upward bias half-up introduces across many transactions. If the owner's
+bookkeeper requires it, the change is the single `Math.round` line in
+`roundCurrency` and nothing else; amounts already stored stay correct either
+way, since the two agree on every value that is not exactly a half centavo.
 
 ---
 

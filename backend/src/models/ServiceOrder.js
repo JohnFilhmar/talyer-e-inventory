@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { PHONE_REGEX, normalizePhoneNumber } from '../utils/phoneValidation.js';
+import { roundCurrency, sumCurrency } from '../utils/currency.js';
 import { highestSuffix, nextIdentifier, yearKey } from '../utils/sequence.js';
 
 const serviceOrderSchema = new mongoose.Schema(
@@ -209,18 +210,19 @@ serviceOrderSchema.pre('validate', async function () {
   }
 });
 
-// Calculate totals before saving
+// Calculate totals before saving. Rounded to centavos at every assignment for
+// the same reason as SalesOrder: `totalAmount` is what decides payment status.
 serviceOrderSchema.pre('save', function () {
   // Calculate part totals
   this.partsUsed.forEach(part => {
-    part.total = part.quantity * part.unitPrice;
+    part.total = roundCurrency(part.quantity * part.unitPrice);
   });
   
   // Calculate total parts cost
-  this.totalParts = this.partsUsed.reduce((sum, part) => sum + part.total, 0);
+  this.totalParts = sumCurrency(this.partsUsed.map(part => part.total));
   
   // Calculate total amount
-  this.totalAmount = this.totalParts + this.laborCost + this.otherCharges;
+  this.totalAmount = roundCurrency(this.totalParts + this.laborCost + this.otherCharges);
   
   // Update payment status
   if (this.payment.amountPaid === 0) {

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { roundCurrency, sumCurrency } from '../utils/currency.js';
 import { highestSuffix, nextIdentifier, yearKey } from '../utils/sequence.js';
 
 const salesOrderSchema = new mongoose.Schema(
@@ -177,29 +178,39 @@ salesOrderSchema.pre('validate', async function () {
   }
 });
 
-// Calculate totals before saving
+// Calculate totals before saving.
+//
+// Every assignment here rounds to centavos. These are not display values: the
+// stored `total` is what the `>=` below compares `amountPaid` against, and an
+// unrounded 27.215999999999998 leaves a customer who paid the 27.22 shown on
+// the screen sitting in `partial`. See utils/currency.js.
 salesOrderSchema.pre('save', function () {
   // Calculate item totals
   this.items.forEach(item => {
-    item.total = (item.quantity * item.unitPrice) - (item.discount || 0);
+    item.total = roundCurrency((item.quantity * item.unitPrice) - (item.discount || 0));
   });
   
   // Calculate subtotal
-  this.subtotal = this.items.reduce((sum, item) => sum + item.total, 0);
+  // Summed raw and rounded once, so a half-centavo cannot compound across a
+  // long receipt.
+  this.subtotal = sumCurrency(this.items.map(item => item.total));
   
   // Calculate tax
   if (this.tax && this.tax.rate) {
-    this.tax.amount = this.subtotal * (this.tax.rate / 100);
+    this.tax.amount = roundCurrency(this.subtotal * (this.tax.rate / 100));
   } else {
     this.tax = { rate: 0, amount: 0 };
   }
   
   // Calculate final total
-  this.total = this.subtotal + this.tax.amount - (this.discount || 0);
+  // Rounding also removes the negative epsilon a full-value line discount
+  // produced, which tripped the schema's `min: 0` and rejected the sale with a
+  // message describing nothing the operator did.
+  this.total = roundCurrency(this.subtotal + this.tax.amount - (this.discount || 0));
   
   // Calculate change
   if (this.payment.amountPaid > this.total) {
-    this.payment.change = this.payment.amountPaid - this.total;
+    this.payment.change = roundCurrency(this.payment.amountPaid - this.total);
   } else {
     this.payment.change = 0;
   }

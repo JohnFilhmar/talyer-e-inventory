@@ -200,6 +200,23 @@ a rename would otherwise leave cached products showing the old label. The stock 
 the New Sale picker nest-populate fitment for the same reason: offline, an unpopulated id is an
 opaque string with nothing to match against.
 
+### Money
+
+Every monetary field is a double, and doubles cannot represent most centavo amounts. Three units
+at PHP 8.10 multiply out to 24.299999999999997. That is not a display problem: the stored `total`
+is what `payment.amountPaid >= total` compares against, so an unrounded total leaves a customer
+who paid the amount on the screen sitting in `partial`, and a full-value line discount produces a
+total of about -3.55e-15 that trips the schema's `min: 0` and rejects the sale.
+
+[utils/currency.js](backend/src/utils/currency.js) exports `roundCurrency` (half away from zero,
+two decimals) and `sumCurrency` (adds raw, rounds once). **Every computed monetary assignment
+rounds at the point of assignment**, in both totals hooks and at the three `Transaction.amount`
+writes. `amountPaid` is not rounded: it is entered, not computed.
+
+Do not replace the helper with `Math.round(value * 100) / 100`. That is the bug, not the fix:
+`1.005 * 100` is `100.49999999999999` and rounds down. The helper shifts the decimal exponent
+through `toExponential`, which is exact and also survives values already in exponential notation.
+
 ### StockMovement ledger
 
 `StockMovement` is an append-only audit trail. Every quantity change follows the same three
