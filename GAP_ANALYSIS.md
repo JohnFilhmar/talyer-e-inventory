@@ -123,7 +123,15 @@ were resolved rather than dismissed. That showed the remaining alerts are mostly
 fixable, so the cleanup is engineering work rather than a human dismissal
 exercise, and it needed an entry rather than a paragraph in section 13.
 
-Remaining open: 18 of the 59 gaps now listed. Two new entries were raised on
+**GAP-033 was found already fixed on 2026-09-09** while auditing what Wave 5's
+follow-up left behind. Its code change shipped in Wave 1 and no note was written,
+so it had been counted open ever since. It is marked fixed retroactively on its
+entry, with the missing test recorded there as a residual. That is the second
+time an entry's status drifted from the code; the wave audit checks membership,
+not whether a scheduled entry was actually recorded as done, which is the hole
+both slipped through.
+
+Remaining open: 17 of the 59 gaps now listed. Two new entries were raised on
 2026-09-08 from findings surfaced while working Wave 2 and deliberately not
 fixed there: **GAP-053** (the refresh cookie repeats GAP-005's fail-open shape,
 left alone because the naive inversion breaks local HTTP login) and
@@ -4600,6 +4608,21 @@ None.
 ---
 
 ### GAP-033 [SEC] The defensive .select() in userController excludes fields that do not exist
+
+> **FIXED in Wave 1, recorded 2026-09-09.** The code change shipped in
+> `4df8f26`, the Wave 1 commit, but no note was ever written on this entry, so
+> the audit went on counting it open for five waves. Nothing here was left
+> undone in the code: `backend/src/controllers/userController.js:12` declares
+> `PUBLIC_USER_FIELDS` as
+> `-password -refreshToken -resetPasswordToken -resetPasswordExpire`, spelled to
+> match `models/User.js:77` and `:81`, and all six reads use it. A comment above
+> the constant records the old misspelling so it is not reintroduced.
+>
+> Residual: the checklist's third item, a test that temporarily selects the
+> reset fields and asserts they are absent from a user-list response, was not
+> written. `backend/tests/user.test.js` asserts only that `refreshToken` is
+> absent. The guard is therefore correct but unguarded by a test, which is worth
+> folding into GAP-044's scope rather than reopening this entry.
 
 Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |
