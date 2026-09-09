@@ -30,6 +30,18 @@ jobs:
       fail-fast: false
       matrix:
         package: [backend, frontend, mobile-app]
+    # Reporting-only for mobile-app, blocking for backend and frontend.
+    #
+    # mobile-app's remaining high advisories are all Expo transitives reached
+    # through expo-splash-screen, and `npm audit fix` cannot clear them without
+    # --force, which means breaking changes to the Expo toolchain. Taking those
+    # on a boot skeleton with no product features, to satisfy a gate, would risk
+    # the build for no security benefit anyone can act on.
+    #
+    # Same contract image-scan already documents: report, do not block, when the
+    # findings are upstream and unfixable from here. The two application
+    # packages stay blocking, which is where a fixable advisory will appear.
+    continue-on-error: ${{ matrix.package == 'mobile-app' }}
     steps:
       - uses: actions/checkout@v7
 

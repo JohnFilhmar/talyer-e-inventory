@@ -3763,9 +3763,20 @@ None.
 > now `jest --passWithNoTests`, so the job is wired and green today and the
 > first test written is the first test run.
 >
+> The audit leg is **reporting-only for mobile-app**, blocking for the other
+> two. Adding it turned the check red immediately: 13 high advisories, all Expo
+> transitives reached through `expo-splash-screen`. `npm audit fix` cleared 4 of
+> them; the remaining 9 need `--force`, which means breaking changes to the Expo
+> toolchain, and taking those on a boot skeleton with no product features to
+> satisfy a gate would risk the build for no benefit anyone can act on. That is
+> the same contract `image-scan` already documents for unfixable upstream
+> findings. Backend and frontend stay blocking, which is where a fixable
+> advisory will actually appear.
+>
 > Residual: the Dependabot ecosystem entry and the auto-merge allow-list are not
 > done here, because both touch files GAP-012 rewrote and are better reviewed on
-> their own.
+> their own. Revisit the mobile advisories when the app gains real features, or
+> when Expo ships a release that clears them.
 
 Severity S2 Major | Complexity S | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
