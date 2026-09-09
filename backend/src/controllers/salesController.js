@@ -310,14 +310,11 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
       reserved.push({ stock, quantity });
     }
 
-    // Generate order number (MVP CRITICAL - model validation requires it)
-    const count = await SalesOrder.countDocuments();
-    const year = new Date().getFullYear();
-    const orderNumber = `SO-${year}-${String(count + 1).padStart(6, '0')}`;
-
-    // Create sales order
+    // The order number is allocated by SalesOrder's validate hook, atomically.
+    // This used to build it here from a document count, which two cashiers
+    // ringing up in the same second would compute identically; the second lost
+    // on the unique index, and offline that discarded a real sale.
     order = await SalesOrder.create({
-      orderNumber,
       clientRequestId,
       branch,
       customer,

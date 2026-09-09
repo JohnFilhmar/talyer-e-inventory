@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { highestSuffix, nextIdentifier, yearKey } from '../utils/sequence.js';
 
 const stockTransferSchema = new mongoose.Schema(
   {
@@ -67,12 +68,16 @@ stockTransferSchema.index({ fromBranch: 1, toBranch: 1 });
 stockTransferSchema.index({ status: 1 });
 stockTransferSchema.index({ createdAt: -1 });
 
-// Auto-generate transfer number
-stockTransferSchema.pre('save', async function () {
+// Auto-generate transfer number, atomically. See utils/sequence.js.
+stockTransferSchema.pre('validate', async function () {
   if (this.isNew && !this.transferNumber) {
-    const year = new Date().getFullYear();
-    const count = await this.constructor.countDocuments();
-    this.transferNumber = `TR-${year}-${String(count + 1).padStart(6, '0')}`;
+    const year = yearKey();
+    const prefix = `TR-${year}-`;
+    this.transferNumber = await nextIdentifier({
+      key: `stockTransfer:${year}`,
+      prefix,
+      seed: () => highestSuffix(this.constructor, 'transferNumber', prefix),
+    });
   }
 });
 

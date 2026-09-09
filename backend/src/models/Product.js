@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { highestSuffix, nextIdentifier } from '../utils/sequence.js';
 // Imported for its side effect of registering the model, not for a binding.
 // `motorcycleModels` below declares `ref: 'MotorcycleModel'`, and Mongoose
 // resolves that name at populate time against the global model registry — so
@@ -158,16 +159,32 @@ productSchema.virtual('profitMargin').get(function() {
 const isBlankBarcode = (value) =>
   value === null || value === undefined || String(value).trim() === '';
 
-// Auto-generate SKU if not provided
+// Auto-generate SKU if not provided.
+//
+// The SKU is not `required`, so this could have stayed a save hook, but it sits
+// with the others as a validate hook so every generated identifier in this
+// codebase is allocated at the same point in the lifecycle. See
+// utils/sequence.js for why counting documents cannot allocate one safely.
+//
+// The sequence has no period: `PROD-` advertises none, and a product catalogue
+// that restarted its numbering every January would be actively confusing.
+productSchema.pre('validate', async function () {
+  // No `isNew` guard, matching the generator this replaces: a document that
+  // somehow reaches a save without a SKU gets one either way.
+  if (!this.sku) {
+    this.sku = await nextIdentifier({
+      key: 'product',
+      prefix: 'PROD-',
+      seed: () => highestSuffix(this.constructor, 'sku', 'PROD-'),
+    });
+  }
+});
+
 productSchema.pre('save', async function () {
   if (this.isModified('barcode') && isBlankBarcode(this.barcode)) {
     this.barcode = undefined;
   }
 
-  if (!this.sku) {
-    const count = await this.constructor.countDocuments();
-    this.sku = `PROD-${String(count + 1).padStart(6, '0')}`;
-  }
 
   // The fitment list is appended to the way tags are, so the same motorcycle
   // can arrive twice from a form that was edited without a reload. Duplicates

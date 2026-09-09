@@ -5277,6 +5277,52 @@ None.
 
 ### GAP-040 [CODE] Every human-readable identifier is generated with countDocuments() + 1
 
+> **FIXED 2026-09-09, Wave 6.** `models/Counter.js` holds one document per
+> sequence and `utils/sequence.js` allocates from it with a single
+> `findOneAndUpdate` using `$inc` and `upsert`, which is atomic on a standalone
+> server and needs no transaction. `nextIdentifier` formats the result, so a
+> caller states the key, the prefix and the width and nothing else.
+>
+> **The entry undercounted the sites: there are eleven, not eight.** Beyond the
+> six model hooks and the two order-number generators in the controllers, three
+> more places built transaction numbers by hand, in
+> `serviceController.js` twice and `utils/salesCompletion.js` once. All three
+> used the format `TXN-<count>-<timestamp>`, which is **not** the
+> `TXN-YYYYMM-NNNNNN` that `models/Transaction.js` and the documentation
+> describe. Because they always supplied a value, the model's own generator
+> never ran, and every transaction in the database carries the undocumented
+> format. All eleven now go through the helper, and the model hook is the single
+> generator.
+>
+> **The hooks had to move from `pre('save')` to `pre('validate')`, and that is
+> the load-bearing detail.** Mongoose runs validate hooks before save hooks, and
+> `orderNumber`, `jobNumber`, `transferNumber` and `transactionNumber` are all
+> `required`. A value assigned in `pre('save')` therefore arrives *after* the
+> check that demands it, so those generators could never have fired. That is why
+> each controller grew a generator of its own, and it is how the transaction
+> format drifted.
+>
+> Existing identifiers are untouched. A counter that does not exist yet is
+> seeded, on first use, from the highest identifier already issued under its
+> prefix, so a database that never runs the migration still cannot collide. The
+> seeding insert and the increment are separate writes because Mongo rejects
+> `$inc` and `$setOnInsert` on the same field; both tolerate losing their race,
+> and the duplicate-key path is handled rather than thrown.
+>
+> `npm run migrate:counters` pre-warms every counter. It reports by default,
+> writes under `--apply`, and only ever *raises* a counter, because lowering one
+> would reissue numbers that already exist. It carries no production guard,
+> unlike `reconcileReservations`: raising a counter is safe and production is
+> exactly where it must run.
+>
+> `backend/tests/sequence.test.js` is new: 19 tests covering twenty concurrent
+> allocations resolving to twenty distinct numbers, seeding and its
+> single-consultation rule, the no-reuse-after-delete case, the TXN format, and
+> the migration's report, apply, idempotence and never-lower behaviour.
+> `sales.test.js` gains four simultaneous order creations over HTTP asserting
+> four distinct numbers and four persisted orders. Backend suite: 25 suites,
+> 770 tests, run locally.
+
 Severity S2 Major | Complexity M | Difficulty D2 Standard | Risk R3 |
 Confidence C1 Verified | Priority score 1.25 | Agent suitability AGENT-ASSISTED |
 Depends on none | Blocks GAP-046 | Est. agent turns 6-12
@@ -5370,12 +5416,19 @@ repair is needed.
 
 **Open questions**
 
-Should the sequence reset annually, matching the `SO-YYYY-` prefix, or continue
-monotonically? Resetting matches the format's implication and is what a
-bookkeeper would expect; continuing is simpler and avoids any chance of a
-year-boundary collision. I recommend resetting per year, keyed by
-`salesOrder:2026`, but it changes the numbers customers see on invoices, so a
-human should confirm.
+Answered by implementation on 2026-09-09, and **still worth a human
+confirmation** because it changes numbers customers will see.
+
+Each sequence resets on the period its own prefix advertises: `SO-`, `JOB-`,
+`TR-` and `SM-` reset per year, `TXN-YYYYMM-` per month, and `PROD-` never
+resets because it advertises no period. There is no year-boundary collision to
+worry about, since the year is part of both the key and the identifier.
+
+What changes: on 1 January the first sales order becomes `SO-2027-000001`
+instead of continuing the all-time count. That is what the format has always
+implied and what a bookkeeper reading `SO-YYYY-` would expect, but nothing
+before today behaved that way. Say so if the shop wants numbering to keep
+climbing across years instead; it is a one-line change to the key.
 
 ---
 

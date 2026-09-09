@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { highestSuffix, nextIdentifier, yearKey } from '../utils/sequence.js';
 
 /**
  * Stock Movement Schema
@@ -121,25 +122,21 @@ stockMovementSchema.index({ performedBy: 1, createdAt: -1 });
 stockMovementSchema.index({ createdAt: -1 });
 stockMovementSchema.index({ movementId: 1 });
 
-// Auto-generate movementId before saving
-stockMovementSchema.pre('save', async function () {
+// Auto-generate movementId, atomically. See utils/sequence.js.
+//
+// The scan-for-the-last-id version this replaces raced the same way a count
+// does, and it raced at the worst possible moment: the ledger row is written
+// after the stock quantity has already been saved, so a collision left the
+// quantity changed with no audit row explaining it.
+stockMovementSchema.pre('validate', async function () {
   if (!this.movementId) {
-    const year = new Date().getFullYear();
+    const year = yearKey();
     const prefix = `SM-${year}-`;
-
-    // Find the last movement of this year
-    const lastMovement = await this.constructor
-      .findOne({ movementId: { $regex: `^${prefix}` } })
-      .sort({ movementId: -1 })
-      .select('movementId');
-
-    let nextNumber = 1;
-    if (lastMovement && lastMovement.movementId) {
-      const lastNumber = parseInt(lastMovement.movementId.split('-')[2], 10);
-      nextNumber = lastNumber + 1;
-    }
-
-    this.movementId = `${prefix}${String(nextNumber).padStart(6, '0')}`;
+    this.movementId = await nextIdentifier({
+      key: `stockMovement:${year}`,
+      prefix,
+      seed: () => highestSuffix(this.constructor, 'movementId', prefix),
+    });
   }
 });
 

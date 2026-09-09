@@ -231,8 +231,29 @@ hooks, so they must be replicated by hand in any new completion path.
 
 ### Identifiers
 
-Human-readable IDs are generated in Mongoose `pre('save')` hooks via `countDocuments`:
-`PROD-000001`, `SO-YYYY-000001`, `JOB-YYYY-000001`, `TR-YYYY-000001`, `TXN-YYYYMM-000001`.
+Human-readable IDs are allocated from a `Counter` collection, one document per sequence, by
+[utils/sequence.js](backend/src/utils/sequence.js): `PROD-000001`, `SO-YYYY-000001`,
+`JOB-YYYY-000001`, `TR-YYYY-000001`, `SM-YYYY-000001`, `TXN-YYYYMM-000001`. A single
+`findOneAndUpdate` with `$inc` and `upsert` is atomic on one document, which is why this works on
+the standalone production server with no transaction.
+
+Three things here are load-bearing:
+
+- **The hooks are `pre('validate')`, not `pre('save')`.** Mongoose runs validate hooks first, and
+  every one of these fields except `sku` and `movementId` is `required`, so a value assigned in a
+  save hook arrives after the check that demands it. The old save hooks could never fire, which is
+  why both order controllers, and three separate transaction writes, used to generate their own.
+- **Callers must not supply the number.** `Transaction.create` used to be handed a hand-built
+  `TXN-<count>-<timestamp>` from `serviceController.js` and `utils/salesCompletion.js`, a different
+  format from the one this model documents, and supplying it suppressed the hook. Pass no
+  identifier and let the model allocate.
+- **A counter seeds itself from existing data on first use.** `nextSequence(key, seed)` consults
+  the seed only when the counter document is absent, so a database that predates this cannot
+  collide even if nobody runs the migration. `npm run migrate:counters` does the same work up
+  front; it reports by default, writes under `--apply`, and only ever raises a counter.
+
+Each sequence resets on the period its prefix advertises: yearly for `SO-`/`JOB-`/`TR-`/`SM-`,
+monthly for `TXN-`, never for `PROD-`.
 
 ### Uploads
 

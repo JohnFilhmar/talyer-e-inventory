@@ -1699,3 +1699,70 @@ describe('Sales list search and sort are server-side', () => {
     expect(dates).toEqual([...dates].sort((a, b) => b - a));
   });
 });
+
+describe('order numbering under concurrency', () => {
+  // Two cashiers ringing up in the same second used to compute the same
+  // `SO-YYYY-NNNNNN` from the same document count. The unique index rejected
+  // the second one, and offline `sync.ts` treats that 4xx as permanent and
+  // discards the sale rather than retrying it.
+  it('gives simultaneous creates distinct order numbers and persists both', async () => {
+    const admin = await createTestAdmin();
+    const category = await createTestCategory();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(category);
+    await createTestStock(product, branch, { quantity: 100, sellingPrice: 150 });
+
+    const post = () => request(app)
+      .post('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({
+        branch: branch._id.toString(),
+        customer: { name: 'Walk-in', phone: '09171234567' },
+        items: [{ product: product._id.toString(), quantity: 1 }],
+        paymentMethod: 'cash',
+      });
+
+    const responses = await Promise.all([post(), post(), post(), post()]);
+
+    expect(responses.map((r) => r.status)).toEqual([201, 201, 201, 201]);
+
+    const numbers = responses.map((r) => r.body.data.orderNumber);
+    expect(new Set(numbers).size).toBe(4);
+    numbers.forEach((number) => {
+      expect(number).toMatch(/^SO-\d{4}-\d{6}$/);
+    });
+
+    expect(await SalesOrder.countDocuments()).toBe(4);
+  });
+
+  it('does not reissue the number of a deleted order', async () => {
+    const admin = await createTestAdmin();
+    const category = await createTestCategory();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(category);
+    await createTestStock(product, branch, { quantity: 100, sellingPrice: 150 });
+
+    const payload = {
+      branch: branch._id.toString(),
+      customer: { name: 'Walk-in', phone: '09171234567' },
+      items: [{ product: product._id.toString(), quantity: 1 }],
+      paymentMethod: 'cash',
+    };
+
+    const first = await request(app)
+      .post('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send(payload);
+    expect(first.status).toBe(201);
+
+    await SalesOrder.deleteOne({ _id: first.body.data._id });
+
+    const second = await request(app)
+      .post('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send(payload);
+
+    expect(second.status).toBe(201);
+    expect(second.body.data.orderNumber).not.toBe(first.body.data.orderNumber);
+  });
+});

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { PHONE_REGEX, normalizePhoneNumber } from '../utils/phoneValidation.js';
+import { highestSuffix, nextIdentifier, yearKey } from '../utils/sequence.js';
 
 const serviceOrderSchema = new mongoose.Schema(
   {
@@ -194,12 +195,17 @@ serviceOrderSchema.index({ branch: 1, createdAt: -1 });
 serviceOrderSchema.index({ 'customer.phone': 1 });
 serviceOrderSchema.index({ 'vehicle.plateNumber': 1 });
 
-// Auto-generate job number
-serviceOrderSchema.pre('save', async function () {
+// Auto-generate job number, atomically. See utils/sequence.js, and the note on
+// SalesOrder for why this is a validate hook.
+serviceOrderSchema.pre('validate', async function () {
   if (this.isNew && !this.jobNumber) {
-    const year = new Date().getFullYear();
-    const count = await this.constructor.countDocuments();
-    this.jobNumber = `JOB-${year}-${String(count + 1).padStart(6, '0')}`;
+    const year = yearKey();
+    const prefix = `JOB-${year}-`;
+    this.jobNumber = await nextIdentifier({
+      key: `serviceOrder:${year}`,
+      prefix,
+      seed: () => highestSuffix(this.constructor, 'jobNumber', prefix),
+    });
   }
 });
 

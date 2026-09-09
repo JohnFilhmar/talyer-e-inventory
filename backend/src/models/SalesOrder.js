@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { highestSuffix, nextIdentifier, yearKey } from '../utils/sequence.js';
 
 const salesOrderSchema = new mongoose.Schema(
   {
@@ -157,12 +158,22 @@ salesOrderSchema.index({ 'payment.status': 1 });
 salesOrderSchema.index({ 'customer.name': 1 });
 salesOrderSchema.index({ 'customer.phone': 1 });
 
-// Auto-generate order number
-salesOrderSchema.pre('save', async function () {
+// Auto-generate order number, atomically. See utils/sequence.js for why
+// counting documents cannot do this safely.
+//
+// pre('validate'), not pre('save'). Mongoose runs validate hooks before save
+// hooks, so a value assigned in pre('save') arrives after the check that
+// demands it. That is why the old generator here never ran for a required
+// field, and why the controller grew a second generator of its own.
+salesOrderSchema.pre('validate', async function () {
   if (this.isNew && !this.orderNumber) {
-    const year = new Date().getFullYear();
-    const count = await this.constructor.countDocuments();
-    this.orderNumber = `SO-${year}-${String(count + 1).padStart(6, '0')}`;
+    const year = yearKey();
+    const prefix = `SO-${year}-`;
+    this.orderNumber = await nextIdentifier({
+      key: `salesOrder:${year}`,
+      prefix,
+      seed: () => highestSuffix(this.constructor, 'orderNumber', prefix),
+    });
   }
 });
 

@@ -93,11 +93,10 @@ export const recordSaleTransaction = async (order, user) => {
   });
   if (existing) return false;
 
-  const txnCount = await Transaction.countDocuments();
-  const timestamp = Date.now().toString().slice(-6);
-
+  // The transaction number is allocated by Transaction's validate hook, in the
+  // documented `TXN-YYYYMM-NNNNNN` format. It was built here from a document
+  // count plus a timestamp, which raced and did not match the format.
   await Transaction.create({
-    transactionNumber: `TXN-${String(txnCount + 1).padStart(6, '0')}-${timestamp}`,
     type: 'sale',
     branch: order.branch,
     amount: order.total,
