@@ -10,6 +10,7 @@ import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMov
 import { CACHE_TTL, USER_ROLES, PAGINATION } from '../config/constants.js';
 import { resolveBranchScope, canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
+import { asObjectId } from '../utils/objectId.js';
 
 /**
  * Resolve a free-text search to the product ids it matches.
@@ -216,7 +217,18 @@ export const getBranchStock = asyncHandler(async (req, res) => {
   // only when it matched at least one product, so a category with nothing in it
   // returned the branch's entire stock list instead of nothing.
   if (category) {
-    const products = await Product.find({ category }).select('_id').lean();
+    // Through `asObjectId` rather than straight into the filter. The route's
+    // `idRule('category')` already rejects anything else, but CodeQL does not
+    // model express-validator chains, so a value that is only guarded by one
+    // still reads as user input reaching a query object. The regex test is the
+    // shape the analysis follows, and it holds for any caller that arrives
+    // without the chain.
+    const categoryId = asObjectId(category);
+    if (!categoryId) {
+      return ApiResponse.error(res, 400, 'Invalid category ID');
+    }
+
+    const products = await Product.find({ category: categoryId }).select('_id').lean();
     restrictToProducts(query, products.map((p) => p._id));
   }
 

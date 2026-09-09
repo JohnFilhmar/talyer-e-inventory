@@ -5769,6 +5769,13 @@ four, or admin figures scoped to one branch with a picker.
 > `components/ui/Pagination.tsx` is new and shared, because the products page
 > already carried two copies of the same block.
 >
+> One new CodeQL alert came out of this work and was fixed rather than
+> dismissed. The category filter goes through `utils/objectId.js` now, a regex
+> test in the data path, because CodeQL does not model express-validator chains:
+> an id guarded only by `idRule('category')` still reads as user input reaching
+> a query object. Section 13.4 records the same taxonomy, and it is the reason
+> the search itself was not flagged, since `escapeRegex` is recognised.
+>
 > **Sorting is still client-side over the fetched page**, and that is now a
 > smaller lie than it was but still a lie, so it is raised as GAP-057 rather
 > than left implied. Backend: 26 suites, 792 tests, with 8 new stock tests.
