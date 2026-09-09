@@ -7,10 +7,10 @@ import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
-import { CACHE_TTL, USER_ROLES, PAGINATION } from '../config/constants.js';
+import { CACHE_TTL, USER_ROLES, PAGINATION, STOCK_TRANSFER_STATUS } from '../config/constants.js';
 import { resolveBranchScope, canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
-import { asObjectId } from '../utils/objectId.js';
+import { asObjectId, asDate, asEnum } from '../utils/narrowing.js';
 
 /**
  * Resolve a free-text search to the product ids it matches.
@@ -138,7 +138,11 @@ export const getAllStock = asyncHandler(async (req, res) => {
   }
 
   if (product) {
-    query.product = product;
+    const productId = asObjectId(product);
+    if (!productId) {
+      return ApiResponse.error(res, 400, 'Invalid product ID');
+    }
+    query.product = productId;
   }
 
   if (search) {
@@ -409,10 +413,19 @@ export const restockProduct = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 400, 'Branch is required');
   }
 
+  // Narrowed here, not only in the route chain: these two reach a query
+  // directly, and the controller has to be safe on its own terms. See
+  // utils/narrowing.js.
+  const productId = asObjectId(product);
+  const branchId = asObjectId(targetBranch);
+  if (!productId || !branchId) {
+    return ApiResponse.error(res, 400, 'Invalid product or branch ID');
+  }
+
   // Validate product and branch exist
   const [productExists, branchExists] = await Promise.all([
-    Product.findById(product),
-    Branch.findById(targetBranch)
+    Product.findById(productId),
+    Branch.findById(branchId)
   ]);
 
   if (!productExists) {
@@ -429,7 +442,7 @@ export const restockProduct = asyncHandler(async (req, res) => {
   }
 
   // Find existing stock record or create new one
-  let stock = await Stock.findOne({ product, branch: targetBranch });
+  let stock = await Stock.findOne({ product: productId, branch: branchId });
   const isNewStock = !stock;
   const oldQuantity = stock ? stock.quantity : 0;
 
@@ -508,7 +521,13 @@ export const adjustStock = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 400, 'Reason for adjustment is required');
   }
 
-  const stock = await Stock.findOne({ product, branch });
+  const adjustProductId = asObjectId(product);
+  const adjustBranchId = asObjectId(branch);
+  if (!adjustProductId || !adjustBranchId) {
+    return ApiResponse.error(res, 400, 'Invalid product or branch ID');
+  }
+
+  const stock = await Stock.findOne({ product: adjustProductId, branch: adjustBranchId });
 
   if (!stock) {
     return ApiResponse.error(res, 404, 'Stock record not found');
@@ -517,7 +536,7 @@ export const adjustStock = asyncHandler(async (req, res) => {
   // Only upward adjustments are refused. Writing dead stock down must stay
   // possible, or archiving a product would trap its remaining units.
   if (adjustment > 0) {
-    const refusal = blockedFromIncrease(await Product.findById(product));
+    const refusal = blockedFromIncrease(await Product.findById(adjustProductId));
     if (refusal) {
       return ApiResponse.error(res, 400, refusal);
     }
@@ -738,8 +757,17 @@ export const createStockTransfer = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 400, 'Source and destination branches must be different');
   }
 
+  const transferProductId = asObjectId(product);
+  const sourceBranchId = asObjectId(fromBranch);
+  if (!transferProductId || !sourceBranchId) {
+    return ApiResponse.error(res, 400, 'Invalid product or branch ID');
+  }
+
   // Check if source branch has sufficient stock
-  const sourceStock = await Stock.findOne({ product, branch: fromBranch });
+  const sourceStock = await Stock.findOne({
+    product: transferProductId,
+    branch: sourceBranchId,
+  });
 
   if (!sourceStock) {
     return ApiResponse.error(res, 404, 'No stock found at source branch');
@@ -978,11 +1006,21 @@ export const getStockTransfers = asyncHandler(async (req, res) => {
   const andClauses = [];
 
   if (branch) {
-    andClauses.push({ $or: [{ fromBranch: branch }, { toBranch: branch }] });
+    const branchId = asObjectId(branch);
+    if (!branchId) {
+      return ApiResponse.error(res, 400, 'Invalid branch ID');
+    }
+    andClauses.push({ $or: [{ fromBranch: branchId }, { toBranch: branchId }] });
   }
 
   if (status) {
-    query.status = status;
+    // The value stored is the one from the constant, not the one that matched
+    // it, which is what makes this a barrier rather than an assertion.
+    const transferStatus = asEnum(status, Object.values(STOCK_TRANSFER_STATUS));
+    if (!transferStatus) {
+      return ApiResponse.error(res, 400, 'Invalid status filter');
+    }
+    query.status = transferStatus;
   }
 
   if (req.user.role !== USER_ROLES.ADMIN) {
@@ -1091,24 +1129,36 @@ export const getMovements = asyncHandler(async (req, res) => {
   const query = {};
 
   if (type) {
-    query.type = type;
+    const movementType = asEnum(type, Object.values(MOVEMENT_TYPES));
+    if (!movementType) {
+      return ApiResponse.error(res, 400, 'Invalid movement type filter');
+    }
+    query.type = movementType;
   }
 
   if (branch) {
-    query.branch = branch;
+    const branchId = asObjectId(branch);
+    if (!branchId) {
+      return ApiResponse.error(res, 400, 'Invalid branch ID');
+    }
+    query.branch = branchId;
   }
 
   if (product) {
-    query.product = product;
+    const productId = asObjectId(product);
+    if (!productId) {
+      return ApiResponse.error(res, 400, 'Invalid product ID');
+    }
+    query.product = productId;
   }
 
   if (startDate || endDate) {
     query.createdAt = {};
     if (startDate) {
-      query.createdAt.$gte = new Date(startDate);
+      query.createdAt.$gte = asDate(startDate);
     }
     if (endDate) {
-      query.createdAt.$lte = new Date(endDate);
+      query.createdAt.$lte = asDate(endDate);
     }
   }
 
@@ -1212,7 +1262,11 @@ export const getMovementsByProduct = asyncHandler(async (req, res) => {
   // outright. Admins keep the full cross-branch view.
   if (req.user.role === USER_ROLES.ADMIN) {
     if (branch) {
-      query.branch = branch;
+      const branchId = asObjectId(branch);
+      if (!branchId) {
+        return ApiResponse.error(res, 400, 'Invalid branch ID');
+      }
+      query.branch = branchId;
     }
   } else {
     if (!req.user.branch) {
@@ -1265,16 +1319,20 @@ export const getMovementsByBranch = asyncHandler(async (req, res) => {
   const query = { branch: branchId };
 
   if (type) {
-    query.type = type;
+    const movementType = asEnum(type, Object.values(MOVEMENT_TYPES));
+    if (!movementType) {
+      return ApiResponse.error(res, 400, 'Invalid movement type filter');
+    }
+    query.type = movementType;
   }
 
   if (startDate || endDate) {
     query.createdAt = {};
     if (startDate) {
-      query.createdAt.$gte = new Date(startDate);
+      query.createdAt.$gte = asDate(startDate);
     }
     if (endDate) {
-      query.createdAt.$lte = new Date(endDate);
+      query.createdAt.$lte = asDate(endDate);
     }
   }
 

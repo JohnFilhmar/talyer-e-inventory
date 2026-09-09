@@ -9,6 +9,7 @@ import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMov
 import { getReportingPeriodBounds } from '../utils/reportingPeriod.js';
 import { canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
+import { asDate, asObjectId } from '../utils/narrowing.js';
 // The fields a list may be ordered by. `sortBy` is used as an object key, so an
 // allow-list is what keeps an arbitrary string out of that position; anything
 // outside it is rejected by the route rather than silently ignored.
@@ -214,7 +215,20 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
   // so this can't be used to read an order from a branch the caller can't
   // access.
   if (clientRequestId) {
-    const existing = await SalesOrder.findOne({ clientRequestId, branch })
+    // Both narrowed at the sink. `branch` has passed canAccessBranch above and
+    // `clientRequestId` is an id the client generates, but neither is narrowed
+    // on the path that reaches this filter, which is what the analysis reads
+    // and what a route missing its chain would expose. See utils/narrowing.js.
+    const replayKey = asObjectId(clientRequestId);
+    const replayBranch = asObjectId(branch);
+    if (!replayKey || !replayBranch) {
+      return ApiResponse.error(res, 400, 'Invalid clientRequestId or branch');
+    }
+
+    const existing = await SalesOrder.findOne({
+      clientRequestId: replayKey,
+      branch: replayBranch,
+    })
       .populate('branch', 'name code')
       .populate('processedBy', 'name')
       .populate('items.product', 'sku name brand images');
@@ -681,14 +695,20 @@ export const getSalesStatistics = asyncHandler(async (req, res) => {
   if (req.user.role !== USER_ROLES.ADMIN) {
     query.branch = req.user.branch;
   } else if (branch) {
-    query.branch = branch;
+    const branchId = asObjectId(branch);
+    if (!branchId) {
+      return ApiResponse.error(res, 400, 'Invalid branch ID');
+    }
+    query.branch = branchId;
   }
 
-  // Date filter
+  // Date filter. An unparseable date is `Invalid Date`, which Mongoose casts
+  // into the filter as null rather than rejecting, so the range would silently
+  // stop meaning what it says.
   if (startDate || endDate) {
     query.createdAt = {};
-    if (startDate) query.createdAt.$gte = new Date(startDate);
-    if (endDate) query.createdAt.$lte = new Date(endDate);
+    if (startDate) query.createdAt.$gte = asDate(startDate);
+    if (endDate) query.createdAt.$lte = asDate(endDate);
   }
 
   // "Today" and "this month" are wall-clock concepts, so they need a timezone.
