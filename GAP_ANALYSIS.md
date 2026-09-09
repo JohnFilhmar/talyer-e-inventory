@@ -182,7 +182,14 @@ time an entry's status drifted from the code; the wave audit checks membership,
 not whether a scheduled entry was actually recorded as done, which is the hole
 both slipped through.
 
-Remaining open: 8 of the 61 gaps now listed, and all eight are Wave 8: GAP-028,
+**GAP-059 was raised and fixed on 2026-09-10**, found by auditing what was
+left behind after GAP-056's residual closed. Section 13 triaged sixty
+`js/sql-injection` alerts one at a time and nothing ever triaged the other
+CodeQL queries, so two high-severity alerts had been open on `master`
+throughout without appearing in any entry. It ships fixed, so the open count
+does not move.
+
+Remaining open: 8 of the 62 gaps now listed, and all eight are Wave 8: GAP-028,
 GAP-029, GAP-035, GAP-046, GAP-049, GAP-050, GAP-051 and GAP-052. None
 of them should be started from its checklist alone. Four change product or
 financial behaviour, three need infrastructure access or an owner decision, and
@@ -398,15 +405,16 @@ S1=8, S2=5, S3=2, S4=1; C1=1.0, C2=0.8, C3=0.5; XS=1, S=2, M=4, L=7, XL=12.
 | 50 | GAP-044 | TEST | No concurrency test exists and the StockMovement ledger is never asserted | S2 | M | D3 | R1 | C1 | 1.25 | READY |
 | 51 | GAP-045 | TEST | branch.test.js tests Mongoose directly; four branch endpoints are unverified | S2 | M | D2 | R1 | C1 | 1.25 | READY |
 | 52 | GAP-046 | CODE | No atomicity on stock quantity writes: lost updates and oversell | S1 | L | D3 | R3 | C1 | 1.14 | HUMAN-FIRST |
-| 53 | GAP-047 | CODE | Frontend types drift from the API contract at four points | S3 | S | D2 | R1 | C1 | 1.0 | READY |
-| 54 | GAP-048 | OPS | Cache invalidation uses Redis KEYS on every mutation hot path | S3 | S | D2 | R1 | C1 | 1.0 | READY |
-| 55 | GAP-049 | CONTRA | Transaction numbers never take the documented TXN-YYYYMM shape | S3 | S | D2 | R3 | C1 | 1.0 | ASSISTED |
-| 56 | GAP-050 | FEAT | There is no refund, void, or reversal path anywhere in the system | S2 | L | D4 | R3 | C1 | 0.71 | HUMAN-FIRST |
-| 57 | GAP-051 | OPS | No observability: no metrics, structured logs, tracing, or alerting | S2 | L | D2 | R1 | C1 | 0.71 | ASSISTED |
-| 58 | GAP-056 | SEC | Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible | S3 | M | D2 | R1 | C1 | 0.5 | READY |
-| 59 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
-| 60 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
-| 61 | GAP-057 | CODE | Stock list sorting orders one page, and the API's own sort key has never applied | S3 | M | D2 | R1 | C1 | 0.5 | READY |
+| 53 | GAP-059 | SEC | Every CodeQL query except js/sql-injection went untriaged | S3 | S | D2 | R1 | C1 | 1.0 | READY |
+| 54 | GAP-047 | CODE | Frontend types drift from the API contract at four points | S3 | S | D2 | R1 | C1 | 1.0 | READY |
+| 55 | GAP-048 | OPS | Cache invalidation uses Redis KEYS on every mutation hot path | S3 | S | D2 | R1 | C1 | 1.0 | READY |
+| 56 | GAP-049 | CONTRA | Transaction numbers never take the documented TXN-YYYYMM shape | S3 | S | D2 | R3 | C1 | 1.0 | ASSISTED |
+| 57 | GAP-050 | FEAT | There is no refund, void, or reversal path anywhere in the system | S2 | L | D4 | R3 | C1 | 0.71 | HUMAN-FIRST |
+| 58 | GAP-051 | OPS | No observability: no metrics, structured logs, tracing, or alerting | S2 | L | D2 | R1 | C1 | 0.71 | ASSISTED |
+| 59 | GAP-056 | SEC | Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible | S3 | M | D2 | R1 | C1 | 0.5 | READY |
+| 60 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
+| 61 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
+| 62 | GAP-057 | CODE | Stock list sorting orders one page, and the API's own sort key has never applied | S3 | M | D2 | R1 | C1 | 0.5 | READY |
 
 **Order overrides.** One was needed, and the original claim that none were was
 wrong. Three of the four dependency edges (GAP-014 -> GAP-046,
@@ -421,10 +429,10 @@ every other member of that wave.
 
 ## 6. Index by Category
 
-**SEC (19)**: GAP-001 (8.0), GAP-002 (8.0), GAP-004 (8.0), GAP-005 (5.0),
+**SEC (20)**: GAP-001 (8.0), GAP-002 (8.0), GAP-004 (8.0), GAP-005 (5.0),
 GAP-007 (5.0), GAP-008 (5.0), GAP-012 (5.0), GAP-015b (4.0), GAP-015a (2.5),
 GAP-015c (2.5), GAP-017 (2.5), GAP-058 (2.5), GAP-030 (2.0), GAP-033 (2.0),
-GAP-038 (2.0), GAP-053 (5.0), GAP-054 (2.0), GAP-015d (0.5), GAP-056 (0.5).
+GAP-038 (2.0), GAP-053 (5.0), GAP-054 (2.0), GAP-015d (0.5), GAP-056 (0.5), GAP-059 (1.0).
 
 The GAP-015 family and GAP-017 are validation-surface findings classified SEC
 rather than CODE because the reachable consequence is denial of service, silent
@@ -465,7 +473,7 @@ GAP-004, GAP-005, GAP-006, GAP-007, GAP-008, GAP-009, GAP-010, GAP-011, GAP-012,
 GAP-013, GAP-031, GAP-032, GAP-033, GAP-034, GAP-035, GAP-036, GAP-037, GAP-038,
 GAP-039, GAP-053, GAP-054.
 
-**S: 23 gaps, one module, under 200 lines.** GAP-014, GAP-015a, GAP-015b,
+**S: 24 gaps, one module, under 200 lines.** GAP-059, GAP-014, GAP-015a, GAP-015b,
 GAP-055,
 GAP-015c, GAP-016, GAP-017,
 GAP-018, GAP-019, GAP-020, GAP-021, GAP-022, GAP-023, GAP-024, GAP-025, GAP-026,
@@ -7729,6 +7737,141 @@ None.
 
 ---
 
+### GAP-059 [SEC] Every CodeQL query except js/sql-injection went untriaged
+
+> **FIXED 2026-09-10.** Seven of the eight alerts are closed by narrowing or by
+> deleting dead code; the eighth is recorded below as a standing false positive
+> with the reason it stands, which is what this document requires of a survivor.
+>
+> `backend/src/utils/logSafe.js` is new and holds `forLog`, moved out of
+> `utils/cache.js` where it was private. It was never only about cache keys: the
+> request logger in `server.js` writes `req.url`, and `middleware/cache.js`
+> writes a key built from `req.originalUrl`. A private copy in one module left
+> the other two open, which is the same "single home" argument
+> `utils/narrowing.js` was created for.
+>
+> The four log sites now pass the sanitised value as a **`%s` argument against a
+> literal format string** rather than interpolating it, so a value containing
+> `%s` or `%d` cannot reshuffle the rest of the message.
+>
+> `PRODUCT_SORT_FIELDS` moved from `productRoutes.js` into
+> `productController.js` and is imported back by the route, the arrangement
+> `STOCK_SORT_FIELDS` already uses. The controller now narrows with
+> `asEnum(sortBy, PRODUCT_SORT_FIELDS)` before the value is used as a property
+> name. The allow-list existed the whole time; it lived only in the route chain,
+> which is precisely the arrangement this repository has already decided is not
+> enough.
+
+Severity S3 Moderate | Complexity S | Difficulty D2 Standard | Risk R1 |
+Confidence C1 Verified | Priority score 1.0 | Agent suitability AGENT-READY |
+Depends on none | Blocks none | Est. agent turns 4-8
+
+**Location**
+- `backend/src/utils/logSafe.js` (new)
+- `backend/src/utils/cache.js`, `backend/src/middleware/cache.js`, `backend/src/server.js`
+- `backend/src/controllers/productController.js`, `backend/src/routes/productRoutes.js`
+- `backend/src/middleware/auth.js`, `backend/src/config/constants.js`
+- `frontend/src/hooks/useAuth.ts`
+
+**Evidence**
+
+Section 13 triaged sixty `js/sql-injection` alerts one by one. Nothing triaged
+the other queries. Read from `refs/heads/master` at `f6d0838`, after GAP-056 and
+its residual had closed every reachable NoSQL flow:
+
+```
+#70  js/remote-property-injection  high    productController.js:188
+#69  js/user-controlled-bypass     high    middleware/auth.js:8
+#65  js/log-injection              medium  server.js:74
+#64  js/log-injection              medium  server.js:63
+#63  js/log-injection              medium  middleware/cache.js:44
+#62  js/log-injection              medium  middleware/cache.js:40
+#71  js/automatic-semicolon-insertion note constants.js:105
+#168 js/useless-assignment-to-local warning useAuth.ts:84
+```
+
+**What is wrong**
+
+Two of them are high severity and neither appeared in any entry, so nothing in
+the queue would ever have reached them. `CLAUDE.md` describes `forLog` as
+covering "every current and future caller", which was true of `CacheUtil` and
+untrue of the other two files that log user-controlled text.
+
+`productController.js:188` read `sort[sortBy] = ...` with `sortBy` straight from
+`req.query`. `productRoutes.js` carried an allow-list and a comment saying an
+allow-list "is what keeps an arbitrary string out of that position", but the
+list was applied only in the route chain.
+
+**Why it matters**
+
+A log line an attacker can forge is a log line nobody can trust afterwards, and
+these two files are the request logger and the cache path, so they cover
+essentially every request. The property-injection one is narrower: the route
+chain does reject an unknown `sortBy` today, so this is defence in depth rather
+than an open door, and the entry is scored accordingly.
+
+**Intended behavior**
+
+Every CodeQL query that can reach production code has a verdict, and a survivor
+carries the reason it survives.
+
+**Proposed fix**
+
+Move `forLog` to a shared util and use it at all four log sites with a literal
+format string. Narrow the product sort key at the sink with `asEnum`. Delete the
+dead assignment and terminate the unterminated statement. Record the bypass
+alert as a false positive with its reason.
+
+**Implementation checklist**
+
+- [x] `forLog` extracted to `backend/src/utils/logSafe.js` and imported by its three callers.
+- [x] Four log sites pass user text as a `%s` argument, not interpolated.
+- [x] `PRODUCT_SORT_FIELDS` owned by the controller, imported by the route.
+- [x] `asEnum` applied before `sortBy` is used as a property name.
+- [x] `constants.js` CORS export terminated; `useAuth.ts` redundant reassignment removed.
+- [x] `#69` recorded as a false positive with its reason.
+
+**Acceptance criteria**
+
+- [ ] `js/log-injection`, `js/remote-property-injection`, `js/automatic-semicolon-insertion` and `js/useless-assignment-to-local` are all zero open on `refs/heads/master`.
+- [ ] `js/user-controlled-bypass` remains at one, and this entry says why.
+- [ ] The backend suite and the frontend checks pass unchanged.
+
+**Verification commands**
+
+```bash
+gh api "repos/JohnFilhmar/talyer-e-inventory/code-scanning/alerts?state=open&ref=refs/heads/master&per_page=100" \
+  --jq '[.[] | select(.rule.id | startswith("CVE") | not)] | group_by(.rule.id) | map({rule:.[0].rule.id, n:length})'
+cd backend && npm test
+cd frontend && npx tsc --noEmit && npm run lint && npm test
+```
+
+**Do not**
+
+Do not combine the CR and LF replacements into one `[\r\n]` class, and do not
+replace them with a space. Both are equally safe at runtime and neither is the
+shape the analysis recognises, so the alerts reopen. Do not interpolate the
+sanitised value into the format string.
+
+**Rollback**
+
+Revert the commit. `logSafe.js` is additive and `utils/cache.js` keeps the same
+four call sites it had.
+
+**Open questions**
+
+`#69 js/user-controlled-bypass` at `middleware/auth.js:8` is a **FALSE
+POSITIVE** and is left open rather than fixed. The condition it flags is
+`req.headers.authorization.startsWith('Bearer')`, which decides only whether to
+attempt verification. The value that actually guards the sensitive action is the
+result of `jwt.verify`, one line later, and a request that skips the branch
+gets a 401 rather than access. There is no rewrite that satisfies the query
+without pretending the Authorization header is not user-supplied, which it
+always is. Dismissing it in the Security tab is a human action and is the only
+thing left here.
+
+---
+
 ## 11. Deferred and Rejected
 
 Things considered and consciously not listed as gaps, with the reason.
@@ -7894,7 +8037,8 @@ lines, no empty catch blocks, and no page importing axios directly.
 {"id":"GAP-055","cat":"OPS","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C2","pri":2.0,"agent":"AGENT-ASSISTED","depends_on":["GAP-014"],"blocks":[],"files":["backend/src/utils/reconcileReservations.js","backend/tests/reconcileReservations.test.js"],"title":"Stock reservations leaked before GAP-014 are still stranded in the data"},
 {"id":"GAP-056","cat":"SEC","sev":"S3","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/controllers/stockController.js","backend/src/controllers/userController.js","backend/src/controllers/salesController.js","backend/src/controllers/serviceController.js","backend/src/controllers/productController.js","backend/src/utils/branchScope.js"],"title":"Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible"},
 {"id":"GAP-057","cat":"CODE","sev":"S3","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/controllers/stockController.js","frontend/src/app/(protected)/stock/page.tsx"],"title":"Stock list sorting orders one page, and the API own sort key has never applied"},
-{"id":"GAP-058","cat":"SEC","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C1","pri":2.5,"agent":"AGENT-READY","depends_on":["GAP-001"],"blocks":[],"files":["backend/src/middleware/auth.js","backend/src/utils/jwt.js","backend/src/models/User.js"],"title":"A password reset leaves every issued access token valid for its full seven days"}
+{"id":"GAP-058","cat":"SEC","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C1","pri":2.5,"agent":"AGENT-READY","depends_on":["GAP-001"],"blocks":[],"files":["backend/src/middleware/auth.js","backend/src/utils/jwt.js","backend/src/models/User.js"],"title":"A password reset leaves every issued access token valid for its full seven days"},
+{"id":"GAP-059","cat":"SEC","sev":"S3","cplx":"S","diff":"D2","risk":"R1","conf":"C1","pri":1.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/utils/logSafe.js","backend/src/utils/cache.js","backend/src/middleware/cache.js","backend/src/server.js","backend/src/controllers/productController.js","backend/src/routes/productRoutes.js","backend/src/config/constants.js","frontend/src/hooks/useAuth.ts"],"title":"Every CodeQL query except js/sql-injection went untriaged"}
 ]
 ```
 
@@ -8145,9 +8289,9 @@ single unit test against `isURL`.
 - [x] Every checklist item is a single action naming the file it touches.
 - [x] Every AGENT-READY entry has `Open questions: None`. The five HUMAN-FIRST entries and the eight AGENT-ASSISTED entries each carry a real question.
 - [x] Every CONTRA entry names both positions with quoted evidence and states who decides.
-- [x] The JSON appendix has 61 objects whose ids, scores, dependencies and titles match the prose entries.
-- [x] Counts in the metadata block match the actual entries: 61 total; S1 8, S2 36, S3 17, S4 0; CODE 21, SEC 19, OPS 10, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
-- [x] S1 findings are 8 of 61, or 13.1%, inside the 15% calibration ceiling.
+- [x] The JSON appendix has 62 objects whose ids, scores, dependencies and titles match the prose entries.
+- [x] Counts in the metadata block match the actual entries: 62 total; S1 8, S2 36, S3 18, S4 0; CODE 21, SEC 20, OPS 10, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
+- [x] S1 findings are 8 of 62, or 12.9%, inside the 15% calibration ceiling.
 
 **One caveat on my own confidence.** I read about 62% of the source and executed
 none of it. The largest unread surface is the frontend, which also has no tests,

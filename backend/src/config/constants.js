@@ -102,4 +102,4 @@ export const CORS = {
   ],
   CREDENTIALS: true,
   MAX_AGE: 86400 // 24 hours
-}
+};

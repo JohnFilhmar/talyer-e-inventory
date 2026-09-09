@@ -5,9 +5,24 @@ import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { escapeRegex } from '../utils/regex.js';
-import { asObjectId } from '../utils/narrowing.js';
+import { asObjectId, asEnum } from '../utils/narrowing.js';
 import { pickFields } from '../utils/pickFields.js';
 import { CACHE_TTL, PAGINATION } from '../config/constants.js';
+
+/**
+ * The sort fields `GET /api/products` accepts.
+ *
+ * Exported because the route's `enumRule` and the controller both need it and
+ * two copies would drift, the same arrangement `STOCK_SORT_FIELDS` uses.
+ * Matches `ProductListParams` in `frontend/src/types/product.ts`.
+ */
+export const PRODUCT_SORT_FIELDS = [
+  'name',
+  'sellingPrice',
+  'costPrice',
+  'createdAt',
+  'updatedAt'
+];
 
 /** Fields of a motorcycle model a product read needs to render a fitment chip. */
 const MOTORCYCLE_MODEL_SELECT = 'make model yearFrom yearTo code';
@@ -183,9 +198,12 @@ export const getProducts = asyncHandler(async (req, res) => {
   const limitNum = Math.min(parseInt(limit), PAGINATION.MAX_LIMIT);
   const skip = (pageNum - 1) * limitNum;
 
-  // Sort
-  const sort = {};
-  sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+  // Sort. `sortBy` lands in a property *name*, which is what CodeQL's
+  // remote-property-injection query reports: the route's allow-list lives in
+  // another module, so the controller was writing a key it had not checked.
+  // Narrowed here, the key can only be one of five strings this file owns.
+  const sortField = asEnum(sortBy, PRODUCT_SORT_FIELDS) ?? 'createdAt';
+  const sort = { [sortField]: sortOrder === 'asc' ? 1 : -1 };
 
   // Execute query
   const [products, total] = await Promise.all([

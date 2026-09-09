@@ -1,4 +1,5 @@
 import CacheUtil from '../utils/cache.js';
+import { forLog } from '../utils/logSafe.js';
 import { CACHE_TTL } from '../config/constants.js';
 
 /**
@@ -37,11 +38,11 @@ const cacheMiddleware = (keyPrefix, ttl = CACHE_TTL.MEDIUM) => {
       const cachedData = await CacheUtil.get(cacheKey);
 
       if (cachedData) {
-        console.log(`Cache HIT: ${cacheKey}`);
+        console.log('Cache HIT: %s', forLog(cacheKey));
         return res.json(cachedData);
       }
 
-      console.log(`Cache MISS: ${cacheKey}`);
+      console.log('Cache MISS: %s', forLog(cacheKey));
 
       // Store original res.json
       const originalJson = res.json.bind(res);
