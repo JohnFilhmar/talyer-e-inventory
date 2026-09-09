@@ -6213,11 +6213,32 @@ None.
 > followed by a write, and the unique index then rejects the second insert with
 > a duplicate key that surfaces as a **500 rather than the documented 200 with
 > the existing order**. Measured, not inferred: exactly one order is created,
-> the stock is committed once, and the losing request's reservation is rolled
-> back rather than stranded, and `sync.ts` retries the 5xx so nothing is lost.
+> the stock is committed once, and `sync.ts` retries the 5xx so nothing is lost.
 > It is in this entry's scope rather than its own because answering 200 there
 > means deciding what the losing request does with its reservation, which is the
 > same decision this entry has to make.
+>
+> **Correction, 2026-09-10: the losing request's reservation is not always
+> rolled back.** This note previously said it was rolled back rather than
+> stranded, and the test asserts that with
+> `expect(after.reservedQuantity).toBe(0)`. Both were written from runs where
+> it held. It does not always hold. Running the full suite on a loaded machine,
+> where the whole run took 514 and 753 seconds rather than the usual 340, the
+> assertion failed with `Expected: 0, Received: 1` on two consecutive runs, and
+> the same suite passed in isolation on the same checkout minutes later. So the
+> outcome depends on how the two requests interleave, which is what an
+> unsynchronised read-then-write means.
+>
+> **The test is right and the code is wrong.** A stranded reservation is
+> exactly the leak GAP-014 closed on the ordinary failure paths and GAP-055
+> reconciles historically: it permanently reduces `availableQuantity` for a
+> product that was never sold. Do not loosen the assertion to make the suite
+> green. It is the only thing in the repository that has ever caught this, and
+> it will fail intermittently in CI until this entry is done.
+>
+> This also sharpens the decision this entry has to make. It is not only what
+> a losing replay should answer, but that the compensating release cannot be a
+> best-effort cleanup racing the failure it is compensating for.
 
 Severity S1 Critical | Complexity L | Difficulty D3 Specialist | Risk R3 |
 Confidence C1 Verified | Priority score 1.14 | Agent suitability HUMAN-FIRST |
@@ -7335,6 +7356,33 @@ is over-reserved.
 > `CodeQL` check run on the pull request is green with no new alerts; the count
 > on `refs/heads/master` is what the acceptance criteria measure and it is read
 > after the merge, since alerts are keyed per ref.
+>
+> **Measured on 2026-09-10, after PR #53 merged as `2fe85a8`.** The
+> `js/sql-injection` count on `refs/heads/master` is **25**, down from **53**.
+> The 28 alerts that closed all carry `fixed_at` of `2026-09-09T17:03Z`, the
+> analysis that ran on the merge commit, which is what separates them from the
+> Wave 6 merge earlier the same day: that one closed exactly one.
+>
+> **The "twenty-six" in this entry's title is a count of sinks, not of open
+> alerts**, and reading it as the baseline turns a met criterion into a failed
+> one: it predicts 26 down to 1 rather than 53 down to 25. The figure to
+> compare is the one measured on the ref before and after. This is recorded
+> because a handoff carried the wrong baseline forward and the next session
+> re-derived the whole measurement to find out which number was wrong.
+>
+> **Residual, found by that check and fixed on 2026-09-10.** Cross-checking
+> the 25 survivors against section 13.3 showed four still carrying a TRUE
+> POSITIVE verdict: **#26, #29, #33 and #34**, all in `serviceController.js`
+> (`body.assignedTo` at the create path, `body.mechanicId` at
+> `PUT /:id/assign`, and `body.partsUsed[].product` at both reads in
+> `PUT /:id/parts`). They were outside this entry's twenty-six because its
+> Location field never listed them. The acceptance criterion admits a survivor
+> only when it is dismissed with a cited barrier or has an entry saying why it
+> stands, and a TRUE POSITIVE with a route chain in front of it is neither:
+> GAP-017 gave those routes their chains, and this document's own rule is that
+> a chain in another module is not a substitute for narrowing at the sink. All
+> four now go through `asObjectId`. The other 21 survivors are FALSE POSITIVE
+> or LATENT in 13.3 and stand on those rows.
 
 Severity S3 Moderate | Complexity M | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 0.5 | Agent suitability AGENT-READY |
@@ -7965,6 +8013,12 @@ relative to `backend/src/routes/`.
 | 42 | `userController.js:74` | `query.search (regex)` | GET /users: full chain, query('search').trim() userRoutes.js:18-45 | FALSE POSITIVE | FP-A |
 | 45 | `userController.js:128` | `body.branch` | POST /users: body('branch').optional().isMongoId() userRoutes.js:69-71 | FALSE POSITIVE | FP-A |
 | 46 | `userController.js:212` | `body.branch` | PUT /users/:id: body('branch').optional({values:'null'}).isMongoId() userRoutes.js:94-96 | FALSE POSITIVE | FP-A |
+
+**Four rows are superseded.** #26, #29, #33 and #34 were still TRUE POSITIVE
+and still open on `refs/heads/master` when the count was measured on
+2026-09-10. Their sinks now narrow through `asObjectId`, so the verdicts above
+describe the code as triaged on 2026-09-07 rather than the code today. See
+GAP-056's note.
 
 ### 13.4 What CodeQL actually accepts as a barrier
 

@@ -260,9 +260,11 @@ export const createServiceOrder = asyncHandler(async (req, res) => {
     }
   }
 
-  // Validate mechanic if assigned
+  // Validate mechanic if assigned. Narrowed at the sink: the route's chain is
+  // in another module, and a value that is not an id cannot name a mechanic.
   if (assignedTo) {
-    const mechanic = await User.findById(assignedTo);
+    const assignedToId = asObjectId(assignedTo);
+    const mechanic = assignedToId ? await User.findById(assignedToId) : null;
     if (!mechanic) {
       return ApiResponse.error(res, 404, 'Assigned mechanic not found');
     }
@@ -327,8 +329,10 @@ export const assignMechanic = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 403, 'Access denied to this order');
   }
 
-  // Validate mechanic
-  const mechanic = await User.findById(mechanicId);
+  // Validate mechanic. Narrowed at the sink: this route reached the controller
+  // with no chain at all before GAP-017, which is the assumption being removed.
+  const mechanicRef = asObjectId(mechanicId);
+  const mechanic = mechanicRef ? await User.findById(mechanicRef) : null;
   if (!mechanic) {
     return ApiResponse.error(res, 404, 'Mechanic not found');
   }
@@ -532,12 +536,16 @@ export const updatePartsUsed = asyncHandler(async (req, res) => {
   // Validate and prepare parts
   const preparedParts = [];
   for (const part of partsUsed) {
-    const product = await Product.findById(part.product);
+    // Narrowed at the sink. `partsUsed` is an array of objects, so each element
+    // is a body value the route chain reaches only by validating a wildcard
+    // path, and both reads below take the id straight into a filter.
+    const partProductId = asObjectId(part.product);
+    const product = partProductId ? await Product.findById(partProductId) : null;
     if (!product) {
       return ApiResponse.error(res, 404, `Product ${part.product} not found`);
     }
 
-    const stock = await Stock.findOne({ product: part.product, branch: order.branch });
+    const stock = await Stock.findOne({ product: partProductId, branch: order.branch });
     if (!stock) {
       return ApiResponse.error(
         res,
