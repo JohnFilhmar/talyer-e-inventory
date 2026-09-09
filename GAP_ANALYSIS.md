@@ -6977,7 +6977,26 @@ relative to `backend/src/routes/`.
 | 45 | `userController.js:128` | `body.branch` | POST /users: body('branch').optional().isMongoId() userRoutes.js:69-71 | FALSE POSITIVE | FP-A |
 | 46 | `userController.js:212` | `body.branch` | PUT /users/:id: body('branch').optional({values:'null'}).isMongoId() userRoutes.js:94-96 | FALSE POSITIVE | FP-A |
 
-### 13.4 What the triage does not cover
+### 13.4 Alerts raised after the triage
+
+**2026-09-09, two new `js/sql-injection` alerts on `stockController.js:278` and
+`:285`, from the GAP-026 fix.** They are **FP-A**, not a regression, and the
+code is better constrained than the version that preceded them.
+
+`getLowStock` previously had one sink, `Stock.find(query)`, carrying alert 47,
+classified LATENT because the route declared no chain at all. Pagination added a
+second sink, `Stock.countDocuments(query)`, and moved the first, so CodeQL
+attributes both to the PR that introduced them. The only request value in that
+query is `branch`, and the route now declares
+`idRule('branch')` plus `paginationRules()`, so a non-MongoId or an array is
+rejected before the controller runs. That is the same barrier that makes the
+other 24 FP-A alerts false positives.
+
+The general shape is worth remembering: **adding pagination to an endpoint adds
+a `countDocuments` sink, so it will always look like a new alert**, and a fix
+that improves validation can still raise the alert count.
+
+### 13.5 What the triage does not cover
 
 The alert list is not a complete list of the unconstrained sites. Five of the
 eight unescaped `$regex` sites in GAP-015a carry no alert at all: CodeQL
