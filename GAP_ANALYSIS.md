@@ -45,6 +45,17 @@ bringing reality back in line with `docs/DEPLOYMENT.md:46`, which had said
 "public" throughout. No documentation change is needed; the code and the deploy
 guidance were right and the setting had drifted.
 
+**Wave 5 is closed as of 2026-09-09, with one half-item.** GAP-021, GAP-023,
+GAP-024, GAP-025, GAP-030, GAP-034, GAP-038, GAP-048 and GAP-055 are fixed.
+**GAP-027 is only partially fixed**: log rotation is in, memory and CPU limits
+are not, because they need VPS figures that are not in the repository and a
+guessed limit can OOM-kill production. It stays open.
+
+Three entries understated their scope again, and the notes say how: GAP-034's
+`EXPOSED_HEADERS` was consumed in `server.js`, GAP-025's mobile test script
+would have failed CI on an empty suite, and GAP-030's acceptance grep cannot
+pass because the string it looks for also appears in a Serwist error code.
+
 **Wave 4 is closed** as of 2026-09-09: GAP-016, GAP-018, GAP-020, GAP-026,
 GAP-031 and GAP-032 are fixed, each with a note on its entry. Two of them carry
 open questions that are still open and still need an owner's answer, recorded on
@@ -105,7 +116,12 @@ else in this document tracked the residue: the fix stopped new leaks and
 repaired none of the existing ones, and stock stranded by them is still
 invisible to every availability check. It is scheduled in Wave 5.
 
-Remaining open: 27 of the 58 gaps now listed. Two new entries were raised on
+**GAP-056 was raised on 2026-09-09** once the two alerts from the GAP-026 fix
+were resolved rather than dismissed. That showed the remaining alerts are mostly
+fixable, so the cleanup is engineering work rather than a human dismissal
+exercise, and it needed an entry rather than a paragraph in section 13.
+
+Remaining open: 19 of the 59 gaps now listed. Two new entries were raised on
 2026-09-08 from findings surfaced while working Wave 2 and deliberately not
 fixed there: **GAP-053** (the refresh cookie repeats GAP-005's fail-open shape,
 left alone because the naive inversion breaks local HTTP login) and
@@ -321,8 +337,9 @@ S1=8, S2=5, S3=2, S4=1; C1=1.0, C2=0.8, C3=0.5; XS=1, S=2, M=4, L=7, XL=12.
 | 54 | GAP-049 | CONTRA | Transaction numbers never take the documented TXN-YYYYMM shape | S3 | S | D2 | R3 | C1 | 1.0 | ASSISTED |
 | 55 | GAP-050 | FEAT | There is no refund, void, or reversal path anywhere in the system | S2 | L | D4 | R3 | C1 | 0.71 | HUMAN-FIRST |
 | 56 | GAP-051 | OPS | No observability: no metrics, structured logs, tracing, or alerting | S2 | L | D2 | R1 | C1 | 0.71 | ASSISTED |
-| 57 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
-| 58 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
+| 57 | GAP-056 | SEC | Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible | S3 | M | D2 | R1 | C1 | 0.5 | READY |
+| 58 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
+| 59 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
 
 **Order overrides.** One was needed, and the original claim that none were was
 wrong. Three of the four dependency edges (GAP-014 -> GAP-046,
@@ -337,10 +354,10 @@ every other member of that wave.
 
 ## 6. Index by Category
 
-**SEC (17)**: GAP-001 (8.0), GAP-002 (8.0), GAP-004 (8.0), GAP-005 (5.0),
+**SEC (18)**: GAP-001 (8.0), GAP-002 (8.0), GAP-004 (8.0), GAP-005 (5.0),
 GAP-007 (5.0), GAP-008 (5.0), GAP-012 (5.0), GAP-015b (4.0), GAP-015a (2.5),
 GAP-015c (2.5), GAP-017 (2.5), GAP-030 (2.0), GAP-033 (2.0), GAP-038 (2.0),
-GAP-053 (5.0), GAP-054 (2.0), GAP-015d (0.5).
+GAP-053 (5.0), GAP-054 (2.0), GAP-015d (0.5), GAP-056 (0.5).
 
 The GAP-015 family and GAP-017 are validation-surface findings classified SEC
 rather than CODE because the reachable consequence is denial of service, silent
@@ -387,7 +404,8 @@ GAP-015c, GAP-016, GAP-017,
 GAP-018, GAP-019, GAP-020, GAP-021, GAP-022, GAP-023, GAP-024, GAP-025, GAP-026,
 GAP-027, GAP-029, GAP-030, GAP-047, GAP-048, GAP-049.
 
-**M: 9 gaps, several modules, one design choice each.** GAP-015d, GAP-028,
+**M: 10 gaps, several modules, one design choice each.** GAP-015d, GAP-056,
+GAP-028,
 GAP-040, GAP-041, GAP-042, GAP-043, GAP-044, GAP-045, GAP-052.
 
 **L: 3 gaps, cross-cutting, plan before code.** GAP-046, GAP-050, GAP-051.
@@ -510,10 +528,13 @@ GAP-040, GAP-041, GAP-042, GAP-043, GAP-047. GAP-040 and GAP-041 both touch
 `SalesOrder.js` and `ServiceOrder.js`, so serialise them: GAP-040 first.
 GAP-042, GAP-043 and GAP-047 are frontend-only and disjoint from each other.
 
-### Wave 7: verification (2 gaps, parallel)
+### Wave 7: verification and alert cleanup (3 gaps, parallel)
 
-GAP-044 and GAP-045. Both add test files only. GAP-044 creates new suites;
-GAP-045 rewrites `backend/tests/branch.test.js`. Disjoint.
+GAP-044, GAP-045 and GAP-056. GAP-044 and GAP-045 add test files only: GAP-044
+creates new suites, GAP-045 rewrites `backend/tests/branch.test.js`. GAP-056
+edits five controllers and is disjoint from both. It sits this late because it
+is cleanup of alerts whose exploitability was already closed in earlier waves,
+not because it is optional.
 
 ### Wave 8: requires a human decision first
 
@@ -3331,6 +3352,18 @@ None.
 
 ### GAP-021 [FEAT] Sales and service list search and sort are silently dropped by the API
 
+> **FIXED 2026-09-09, Wave 5.** `search`, `sortBy` and `sortOrder` are
+> implemented in both list controllers, with the search escaped through the
+> shared `escapeRegex` and `sortBy` checked against an exported allow-list that
+> the route validators also use, so an unknown field 400s rather than being
+> ignored. The client-side `filteredOrders` fallback is gone: it only ever
+> searched the page already fetched.
+>
+> The open question below stands. The fields covered are order number, customer
+> name and phone for sales, plus vehicle plate for services, which is the
+> smallest set that makes the existing UI honest. Widening it is still a product
+> call.
+
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-ASSISTED |
 Depends on none | Blocks none | Est. agent turns 5-9
@@ -3528,6 +3561,14 @@ None.
 
 ### GAP-023 [OPS] /health is a static 200, so a deploy is declared green on a dead application
 
+> **FIXED 2026-09-09, Wave 5.** `/health` returns 503 when
+> `mongoose.connection.readyState` is not connected, and reports both
+> dependencies in a `dependencies` object. Redis is reported but never fails the
+> check, because `CacheUtil` treats a missing client as "no cache" on every
+> path. The response stays additive, so the CI and deploy polls that read only
+> the status code are unaffected. `backend/tests/health.test.js` covers all four
+> readyStates and needs no database.
+
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
 Depends on none | Blocks GAP-024 | Est. agent turns 3-6
@@ -3615,6 +3656,20 @@ None.
 
 ### GAP-024 [OPS] No SIGTERM handler; every deploy severs in-flight writes and can break the ledger
 
+> **FIXED 2026-09-09, Wave 5.** `server.js` keeps the `app.listen` handle,
+> registers SIGTERM and SIGINT, and drains in order: stop accepting
+> connections, then close Redis and Mongo. An unref'd force-exit timer bounds
+> the wait so a hung request cannot hold a deploy open. An `error` listener
+> means `EADDRINUSE` reaches the failure path instead of surfacing as an
+> unhandled event.
+>
+> The two per-module SIGINT handlers in `config/database.js` and
+> `config/redis.js` are gone. They were the actual hazard: the database one
+> called `process.exit(0)` directly, so Mongo closed while a request was midway
+> through the quantity-save then StockMovement-write sequence, which is the
+> audit trail. `docker-compose.yml` gains a `stop_grace_period` longer than the
+> drain timeout so Compose does not SIGKILL through it.
+
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
 Depends on GAP-023 | Blocks none | Est. agent turns 3-6
@@ -3697,6 +3752,20 @@ None.
 ---
 
 ### GAP-025 [PROJ] mobile-app is absent from every CI, security and Dependabot workflow
+
+> **FIXED 2026-09-09, Wave 5.** `ci.yml` gains a `mobile-check` job running
+> lint, typecheck and test; `security.yml`'s dependency-audit matrix gains
+> `mobile-app`. The image-scan matrix deliberately does not: there is no mobile
+> container image.
+>
+> One thing the entry did not anticipate: `mobile-app` has the scripts but no
+> test files, and bare `jest` exits 1 on "No tests found". Its `test` script is
+> now `jest --passWithNoTests`, so the job is wired and green today and the
+> first test written is the first test run.
+>
+> Residual: the Dependabot ecosystem entry and the auto-merge allow-list are not
+> done here, because both touch files GAP-012 rewrote and are better reviewed on
+> their own.
 
 Severity S2 Major | Complexity S | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
@@ -3898,6 +3967,16 @@ None.
 ---
 
 ### GAP-027 [OPS] No resource limits or log rotation; staging and production share one box
+
+> **PARTIALLY FIXED 2026-09-09, Wave 5.** Log rotation is done: all four
+> services in `docker-compose.yml` now cap the json-file driver at
+> `max-size: 10m` and `max-file: 3`, which the overlays inherit. That closes the
+> unbounded-log third of the problem.
+>
+> **Memory and CPU limits are still open and still need the operator.** The open
+> question below is unchanged: without the VPS figures any limit is a guess that
+> could OOM-kill production, so none was written. The image-prune item is also
+> outstanding.
 
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-ASSISTED |
@@ -4185,6 +4264,21 @@ commissioned; and the answer determines whether a migration is needed at all.
 ---
 
 ### GAP-030 [SEC] The service worker caches cross-origin API responses in a shared bucket
+
+> **FIXED 2026-09-09, Wave 5.** `sw.ts` no longer uses Serwist's
+> `defaultCache`, whose `cross-origin` and `apis` rules cached API responses
+> keyed by URL alone. On a shared counter tablet that is a shared bucket: the
+> service worker sits below the Authorization header and cannot tell two
+> sessions apart. Runtime caching is now an explicit three-rule array covering
+> fonts, same-origin images and the build's own static output. `clearOfflineCache()`
+> also deletes every Cache Storage bucket on logout, as defence in depth.
+>
+> Verified on the built worker: the only `cacheName` values emitted are
+> `static-font-assets`, `static-image-assets` and `static-build-assets`, and
+> there is no `apis` rule. Note the entry's acceptance check,
+> `grep -c 'cross-origin' public/sw.js` expecting 0, cannot pass: the string
+> also appears in Serwist's internal `cross-origin-copy-response` error code.
+> Grep the emitted `cacheName` values instead.
 
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C2 Strong | Priority score 2.0 | Agent suitability AGENT-ASSISTED |
@@ -4543,6 +4637,15 @@ None.
 ---
 
 ### GAP-034 [CODE] Dead configuration: unused constants, unused CORS headers, divergent upload limits
+
+> **FIXED 2026-09-09, Wave 5.** `UPLOAD` in `config/constants.js` is the single
+> source for upload policy and gained `image/webp` to match what the middleware
+> already accepted; `imageUpload.js` reads it and keeps only its own output
+> settings, which describe processing rather than what the API accepts.
+> `X-Refresh-Token` and `EXPOSED_HEADERS` are removed, along with the
+> `Access-Control-Expose-Headers` line in `server.js` that consumed the latter,
+> which the entry did not mention. The four unused enums are deleted.
+> `X-XSRF-TOKEN` is untouched.
 
 Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |
@@ -4913,6 +5016,12 @@ None.
 ---
 
 ### GAP-038 [SEC] Image processing returns the raw internal error message and path on 500
+
+> **FIXED 2026-09-09, Wave 5.** The catch in `processImage` calls
+> `next(error)` instead of answering 500 directly, so `errorHandler` applies its
+> production redaction and the `ApiResponse` envelope. A sharp or filesystem
+> failure no longer returns the container's absolute upload path and errno to
+> the client.
 
 Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |
@@ -5876,6 +5985,15 @@ None.
 
 ### GAP-048 [OPS] Cache invalidation uses Redis KEYS on every mutation hot path
 
+> **FIXED 2026-09-09, Wave 5.** `delPattern` iterates with `SCAN` and a cursor
+> and deletes with `UNLINK`, falling back to `DEL`. It accepts both the node-redis
+> v4 `{ cursor, keys }` reply and the older `[cursor, keys]` tuple, so a client
+> upgrade cannot silently turn invalidation into a no-op that leaves stale
+> entries being served. The null-client contract and the `forLog` sanitisation
+> are unchanged. `backend/tests/cache.test.js` covers the cursor loop, an empty
+> page mid-iteration, the DEL fallback and a SCAN failure, against a mocked
+> client.
+
 Severity S3 Moderate | Complexity S | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 1.0 | Agent suitability AGENT-READY |
 Depends on none | Blocks none | Est. agent turns 3-6
@@ -6594,6 +6712,18 @@ None.
 
 ### GAP-055 [OPS] Stock reservations leaked before GAP-014 are still stranded in the data
 
+> **FIXED 2026-09-09, Wave 5.** `backend/src/utils/reconcileReservations.js`
+> reports every `Stock` row whose `reservedQuantity` differs from what open
+> sales orders and in-flight transfers justify. Reporting is the default; the
+> `--apply` path needs `--confirm`, refuses `NODE_ENV=production` without
+> `--force-production`, prints the target with credentials redacted, and only
+> ever *lowers* a reservation. Importing the module does nothing, verified.
+>
+> Under-reservations are reported too, as a negative difference, but never
+> corrected: raising one could make real stock unsellable on a script's
+> inference. The open question about service orders stands and should be
+> confirmed against real data before the numbers are trusted.
+
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C2 Likely | Priority score 2.0 | Agent suitability AGENT-ASSISTED |
 Depends on GAP-014 | Blocks none | Est. agent turns 4-8
@@ -6705,6 +6835,116 @@ completion rather than reserving them at creation, so on a reading of the
 current code they hold no reservation and are correctly out of scope. That
 should be confirmed against real data before the script is trusted to say a row
 is over-reserved.
+
+---
+
+### GAP-056 [SEC] Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible
+
+Severity S3 Moderate | Complexity M | Difficulty D2 Standard | Risk R1 |
+Confidence C1 Verified | Priority score 0.5 | Agent suitability AGENT-READY |
+Depends on none | Blocks none | Est. agent turns 10-20
+
+**Location**
+- `backend/src/controllers/stockController.js` (18 alerts, the bulk of them)
+- `backend/src/controllers/userController.js` (4)
+- `backend/src/controllers/salesController.js` (2)
+- `backend/src/controllers/serviceController.js` (1), `productController.js` (1)
+- `backend/src/utils/branchScope.js:13-27` (the worked example of the fix)
+
+**Evidence**
+
+Counted on master's own ref, which is the number that matters:
+
+```bash
+gh api "repos/JohnFilhmar/talyer-e-inventory/code-scanning/alerts?state=open&ref=refs/heads/master" \
+  --jq '.[] | select(.rule.id=="js/sql-injection") | .most_recent_instance.location.path'
+```
+
+Section 13.4 records what the analysis accepts as a barrier and what it ignores,
+established by clearing two alerts on 2026-09-09.
+
+**What is wrong**
+
+The triage in section 13 classified 24 alerts as false positives on the grounds
+that a route validator rejects the payload before the controller runs. That
+reasoning is correct about exploitability and wrong about what to do next: the
+constraint lives in a different module from the sink, so nothing on the dataflow
+path is narrowed, and the analysis is right that the controller itself trusts
+whatever it is handed.
+
+`resolveBranchScope` was the proof. It sat behind a route chain on all three of
+its callers and still put an admin's requested branch straight into a filter
+with no format check. Moving the check into the util fixed a real hole *and*
+cleared the alerts.
+
+**Why it matters**
+
+Twenty-six standing high-severity alerts train people to ignore the Security
+tab, which is where a genuinely new finding will appear. More concretely, each
+one marks a controller that trusts its caller: correct only for as long as every
+route in front of it keeps its chain, which is exactly the assumption that
+failed for `resolveBranchScope`, for GAP-017's four service routes, and for the
+twelve read routes in GAP-015d.
+
+**Intended behavior**
+
+A value reaching a Mongo filter has been narrowed on the path that reaches it,
+so the controller is safe on its own terms and the analysis can see it.
+
+**Proposed fix**
+
+Work the files in descending count, `stockController.js` first. For each alert,
+identify the request value and narrow it where the controller uses it, not only
+at the route: an id through a shared ObjectId guard like the one now in
+`branchScope.js`, an enumeration through a membership test against the
+constants, a number through `Number.isFinite` after coercion.
+
+Prefer a shared helper over a repeated inline check, and reuse
+`utils/branchScope.js`'s `OBJECT_ID` rather than declaring a third copy of that
+regex. Where an alert survives a genuine narrowing, dismiss that one in the
+Security tab with the barrier cited; dismissal is the residue, not the method.
+
+**Implementation checklist**
+
+- [ ] Extract the ObjectId guard from `backend/src/utils/branchScope.js` into a shared util so it is not copied per call site.
+- [ ] In `backend/src/controllers/stockController.js`, narrow each request value that reaches a filter, working from the alert list.
+- [ ] Apply the same to `userController.js`, `salesController.js`, `serviceController.js` and `productController.js`.
+- [ ] Re-run the security workflow and recount on master's ref, not the unfiltered listing.
+- [ ] For any alert still open after a real narrowing, dismiss it citing the barrier, and record which in section 13.
+- [ ] Run `npm test` from `backend/`.
+
+**Acceptance criteria**
+
+- [ ] The `js/sql-injection` count on `refs/heads/master` is materially lower, and every remaining one is either dismissed with a cited barrier or has an entry explaining why it stands.
+- [ ] No controller reaches a Mongo filter with a value it has not narrowed itself.
+- [ ] The full backend suite passes.
+- [ ] The `CodeQL` check run is green on the PR.
+
+**Verification commands**
+
+```bash
+cd backend && npm test
+gh api "repos/JohnFilhmar/talyer-e-inventory/code-scanning/alerts?state=open&ref=refs/heads/master" \
+  --jq '[.[] | select(.rule.id=="js/sql-injection")] | length'
+```
+
+**Do not**
+
+Do not dismiss an alert before trying to narrow the value: dismissal hides the
+fact that the controller trusts its caller, which is the thing worth fixing. Do
+not remove any route validation chain on the grounds that the controller now
+checks too; both layers are wanted. Do not count alerts from the unfiltered
+listing, which spans every branch and overstates master, as this document did
+until 2026-09-09.
+
+**Rollback**
+
+Revert the controller guards. The alerts return, and the controllers return to
+trusting their routes.
+
+**Open questions**
+
+None.
 
 ---
 
@@ -6870,7 +7110,8 @@ lines, no empty catch blocks, and no page importing axios directly.
 {"id":"GAP-052","cat":"CONTRA","sev":"S3","cplx":"M","diff":"D1","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":[],"files":["README.md","frontend/docs/Frontend-Guidelines.md","CLAUDE.md","backend/src/server.js","frontend/src/lib/apiClient.ts","backend/package.json","frontend/package.json"],"title":"Documentation contradicts the code at eight independent points"}
 {"id":"GAP-053","cat":"SEC","sev":"S2","cplx":"XS","diff":"D2","risk":"R2","conf":"C1","pri":5.0,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":[],"files":["backend/src/controllers/authController.js","backend/src/utils/environment.js"],"title":"The refresh cookie's secure and sameSite fail open on NODE_ENV"},
 {"id":"GAP-054","cat":"SEC","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/middleware/validate.js","frontend/src/types/api.ts"],"title":"Validation errors echo the submitted value, including passwords"},
-{"id":"GAP-055","cat":"OPS","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C2","pri":2.0,"agent":"AGENT-ASSISTED","depends_on":["GAP-014"],"blocks":[],"files":["backend/src/utils/reconcileReservations.js","backend/tests/reconcileReservations.test.js"],"title":"Stock reservations leaked before GAP-014 are still stranded in the data"}
+{"id":"GAP-055","cat":"OPS","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C2","pri":2.0,"agent":"AGENT-ASSISTED","depends_on":["GAP-014"],"blocks":[],"files":["backend/src/utils/reconcileReservations.js","backend/tests/reconcileReservations.test.js"],"title":"Stock reservations leaked before GAP-014 are still stranded in the data"},
+{"id":"GAP-056","cat":"SEC","sev":"S3","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/controllers/stockController.js","backend/src/controllers/userController.js","backend/src/controllers/salesController.js","backend/src/controllers/serviceController.js","backend/src/controllers/productController.js","backend/src/utils/branchScope.js"],"title":"Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible"}
 ]
 ```
 
@@ -7046,11 +7287,11 @@ eight unescaped `$regex` sites in GAP-015a carry no alert at all: CodeQL
 reports at the query sink, and the `getBranches` and `getSuppliers` sinks were
 not flagged. Fixing only what the Security tab lists would leave them open.
 
-Dismissing the remaining FP-A alerts in the Security tab is a human action and
-is not part of any gap. Prefer the approach in section 13.4 first: several of
-them can be resolved outright by moving the constraint into the controller or a
-shared util, which is both a real hardening and a barrier the analysis
-recognises. Dismissal is for what is left after that.
+The remaining alerts now have an entry: **GAP-056**, scheduled in Wave 7. It
+follows section 13.4: narrow the value in the controller or a shared util first,
+which is both a real hardening and a barrier the analysis recognises, and
+dismiss only what survives that, citing the barrier. Dismissal is the residue,
+not the method, and it is no longer an unqueued human action.
 
 ---
 ## 14. Self-Audit Note
@@ -7115,9 +7356,9 @@ single unit test against `isURL`.
 - [x] Every checklist item is a single action naming the file it touches.
 - [x] Every AGENT-READY entry has `Open questions: None`. The five HUMAN-FIRST entries and the eight AGENT-ASSISTED entries each carry a real question.
 - [x] Every CONTRA entry names both positions with quoted evidence and states who decides.
-- [x] The JSON appendix has 58 objects whose ids, scores, dependencies and titles match the prose entries.
-- [x] Counts in the metadata block match the actual entries: 58 total; S1 8, S2 35, S3 15, S4 0; CODE 20, SEC 17, OPS 10, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
-- [x] S1 findings are 8 of 58, or 13.8%, inside the 15% calibration ceiling.
+- [x] The JSON appendix has 59 objects whose ids, scores, dependencies and titles match the prose entries.
+- [x] Counts in the metadata block match the actual entries: 59 total; S1 8, S2 35, S3 16, S4 0; CODE 20, SEC 18, OPS 10, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
+- [x] S1 findings are 8 of 59, or 13.6%, inside the 15% calibration ceiling.
 
 **One caveat on my own confidence.** I read about 62% of the source and executed
 none of it. The largest unread surface is the frontend, which also has no tests,

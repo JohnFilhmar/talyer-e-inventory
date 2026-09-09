@@ -77,12 +77,21 @@ const getRedisClient = () => {
   return redisClient;
 };
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  if (redisClient) {
+/**
+ * Close the Redis connection, if one was ever established.
+ *
+ * Called by server.js's shutdown sequence rather than from a SIGINT handler
+ * here: two independent handlers raced, and the database one exited the process
+ * before this one could finish.
+ */
+const disconnectRedis = async () => {
+  if (!redisClient) return;
+  try {
     await redisClient.quit();
-    console.log('Redis connection closed through app termination');
+    console.log('Redis connection closed');
+  } catch (error) {
+    console.error('Error closing Redis connection:', error.message);
   }
-});
+};
 
-export { connectRedis, getRedisClient };
+export { connectRedis, getRedisClient, disconnectRedis };

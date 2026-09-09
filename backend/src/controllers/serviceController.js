@@ -9,6 +9,11 @@ import CacheUtil from '../utils/cache.js';
 import { PAGINATION, USER_ROLES } from '../config/constants.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
 import { canAccessBranch } from '../utils/branchScope.js';
+import { escapeRegex } from '../utils/regex.js';
+// The fields a list may be ordered by. `sortBy` is used as an object key, so an
+// allow-list is what keeps an arbitrary string out of that position; anything
+// outside it is rejected by the route rather than silently ignored.
+export const SERVICE_SORT_FIELDS = ['createdAt', 'jobNumber', 'totalAmount', 'status', 'priority'];
 
 /**
  * Normalize a branch reference that may be a populated Branch document or a
@@ -29,6 +34,9 @@ export const getServiceOrders = asyncHandler(async (req, res) => {
     priority,
     assignedTo,
     paymentStatus,
+    search,
+    sortBy = 'createdAt',
+    sortOrder = 'desc',
     startDate,
     endDate,
     page = 1,
@@ -74,10 +82,26 @@ export const getServiceOrders = asyncHandler(async (req, res) => {
     if (endDate) query.createdAt.$lte = new Date(endDate);
   }
 
+  // Same server-side search as the sales list, over the fields a service order
+  // is actually looked up by: its job number, the customer, and the vehicle a
+  // counter operator has in front of them.
+  if (search) {
+    const pattern = { $regex: escapeRegex(search), $options: 'i' };
+    query.$or = [
+      { jobNumber: pattern },
+      { 'customer.name': pattern },
+      { 'customer.phone': pattern },
+      { 'vehicle.plateNumber': pattern }
+    ];
+  }
+
   // Pagination
   const pageNum = parseInt(page);
   const limitNum = Math.min(parseInt(limit), PAGINATION.MAX_LIMIT);
   const skip = (pageNum - 1) * limitNum;
+
+  const sort = { [SERVICE_SORT_FIELDS.includes(sortBy) ? sortBy : 'createdAt']:
+    sortOrder === 'asc' ? 1 : -1 };
 
   const [orders, total] = await Promise.all([
     ServiceOrder.find(query)
@@ -87,7 +111,7 @@ export const getServiceOrders = asyncHandler(async (req, res) => {
       .populate('partsUsed.product', 'sku name')
       .skip(skip)
       .limit(limitNum)
-      .sort({ createdAt: -1 }),
+      .sort(sort),
     ServiceOrder.countDocuments(query)
   ]);
 

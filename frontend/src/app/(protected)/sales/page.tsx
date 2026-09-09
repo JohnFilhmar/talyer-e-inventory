@@ -96,20 +96,10 @@ export default function SalesPage() {
 
   const pagination = ordersData?.pagination;
 
-  // Client-side search filtering (if search is entered)
-  const filteredOrders = useMemo(() => {
-    if (!search) return orders;
-
-    const searchLower = search.toLowerCase();
-    return orders.filter((order) => {
-      return (
-        order.orderNumber.toLowerCase().includes(searchLower) ||
-        order.customer.name.toLowerCase().includes(searchLower) ||
-        (order.customer.phone && order.customer.phone.includes(searchLower)) ||
-        (order.customer.email && order.customer.email.toLowerCase().includes(searchLower))
-      );
-    });
-  }, [orders, search]);
+  // Search is server-side now. Filtering here only ever searched the page
+  // already fetched, so an order number on page three was invisible from page
+  // one and the UI gave no sign it was looking at a subset. `search` is already
+  // part of `filters`, so the query refetches when it changes.
 
   // Handle sort
   const handleSortChange = useCallback((field: string) => {
@@ -224,7 +214,7 @@ export default function SalesPage() {
 
       {/* Orders Table */}
       <SalesOrderTable
-        orders={filteredOrders}
+        orders={orders}
         isLoading={ordersLoading}
         sortField={sortField}
         sortOrder={sortOrder}
@@ -259,7 +249,7 @@ export default function SalesPage() {
       {/* Results Summary */}
       {!ordersLoading && (
         <div className="text-center text-sm text-gray-500 dark:text-gray-400">
-          Showing {filteredOrders.length} of {pagination?.total || orders.length} orders
+          Showing {orders.length} of {pagination?.total || orders.length} orders
         </div>
       )}
     </div>

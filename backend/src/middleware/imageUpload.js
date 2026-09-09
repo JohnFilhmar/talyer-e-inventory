@@ -4,11 +4,14 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { PRODUCT_UPLOADS_DIR } from '../utils/uploadsPath.js';
+import { UPLOAD } from '../config/constants.js';
 
-// Configuration constants
+// Upload policy comes from config/constants.js, so there is one list to edit.
+// Output settings stay here: they describe how this middleware processes an
+// accepted file, not what the API accepts.
 const IMAGE_CONFIG = {
-  MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB
-  ALLOWED_TYPES: ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'],
+  MAX_FILE_SIZE: UPLOAD.MAX_FILE_SIZE,
+  ALLOWED_TYPES: UPLOAD.ALLOWED_IMAGE_TYPES,
   OUTPUT_WIDTH: 800,
   OUTPUT_HEIGHT: 800,
   OUTPUT_QUALITY: 80,
@@ -120,11 +123,13 @@ const processImage = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Image processing error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to process image',
-      error: error.message,
-    });
+    // Forwarded rather than answered here. Writing the 500 directly bypassed
+    // errorHandler, so `error.message` reached the client verbatim in every
+    // environment: a sharp or filesystem failure returns the container's
+    // absolute upload path and the errno. errorHandler already collapses 5xx
+    // messages outside development and produces the ApiResponse envelope the
+    // frontend types expect.
+    return next(error);
   }
 };
 

@@ -103,10 +103,37 @@ class CacheUtil {
       const client = getRedisClient();
       if (!client) return false;
 
-      const keys = await client.keys(pattern);
-      if (keys.length > 0) {
-        await client.del(keys);
-      }
+      // SCAN, not KEYS. KEYS walks the entire keyspace in one blocking call, and
+      // this runs on every mutation hot path: a restock, a sale and a product
+      // edit each trigger one. On a shared Redis that stalls every other client
+      // for the duration, and the cost grows with total keys rather than with
+      // the number actually matching.
+      //
+      // COUNT is a hint, not a page size: a SCAN cursor can return more or
+      // fewer, and only a zero cursor means the iteration is finished.
+      let cursor = '0';
+      do {
+        const reply = await client.scan(cursor, { MATCH: pattern, COUNT: 100 });
+
+        // node-redis v4 returns { cursor, keys }; older shapes returned a
+        // [cursor, keys] tuple. Accept both so a client upgrade cannot silently
+        // turn this into a no-op that leaves stale entries served.
+        const nextCursor = Array.isArray(reply) ? reply[0] : reply?.cursor;
+        const keys = Array.isArray(reply) ? reply[1] : reply?.keys;
+
+        if (keys && keys.length > 0) {
+          // UNLINK reclaims memory on a background thread; DEL blocks. Fall
+          // back for a server or client without it.
+          if (typeof client.unlink === 'function') {
+            await client.unlink(keys);
+          } else {
+            await client.del(keys);
+          }
+        }
+
+        cursor = String(nextCursor ?? '0');
+      } while (cursor !== '0');
+
       return true;
     } catch (error) {
       console.error('Cache delete pattern error for %s:', forLog(pattern), error);

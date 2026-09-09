@@ -80,4 +80,28 @@ export async function clearOfflineCache(): Promise<void> {
   // customer details attached to them survived into the next person's session
   // and replayed under their token.
   await clearOutboxStore();
+  await clearCacheStorage();
+}
+
+/**
+ * Delete the Cache Storage buckets the service worker owns.
+ *
+ * Only assets are cached at runtime now, so this is defence in depth rather
+ * than the primary control: a shared tablet should not hand the next person
+ * anything the previous session put on disk, and a bucket added later should
+ * not silently outlive a logout because nobody remembered to clear it.
+ *
+ * Guarded because `caches` is absent in SSR and in a browser with storage
+ * disabled, and a failure here must not block logout.
+ */
+async function clearCacheStorage(): Promise<void> {
+  if (typeof caches === 'undefined') return;
+
+  try {
+    const names = await caches.keys();
+    await Promise.all(names.map((name) => caches.delete(name)));
+  } catch {
+    // Logout proceeds regardless; the alternative is stranding the user in a
+    // session they asked to end.
+  }
 }

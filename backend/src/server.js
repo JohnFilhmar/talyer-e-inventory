@@ -3,7 +3,11 @@ import express from 'express';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import connectDB from './config/database.js';
-import { connectRedis } from './config/redis.js';
+import mongoose from 'mongoose';
+import { connectRedis, getRedisClient, disconnectRedis } from './config/redis.js';
+
+/** readyState numbers, for a health body a human can read. */
+const MONGO_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
 import errorHandler from './middleware/errorHandler.js';
 import sanitizeRequest from './middleware/sanitizeRequest.js';
 import { apiLimiter } from './middleware/rateLimit.js';
@@ -92,7 +96,6 @@ app.use((req, res, next) => {
   
   res.header('Access-Control-Allow-Methods', CORS.ALLOWED_METHODS.join(', '));
   res.header('Access-Control-Allow-Headers', CORS.ALLOWED_HEADERS.join(', '));
-  res.header('Access-Control-Expose-Headers', CORS.EXPOSED_HEADERS.join(', '));
   res.header('Access-Control-Allow-Credentials', String(CORS.CREDENTIALS));
   res.header('Access-Control-Max-Age', String(CORS.MAX_AGE));
   
@@ -126,13 +129,33 @@ app.use('/api/suppliers', apiLimiter, supplierRoutes);
 app.use('/api/sales', apiLimiter, salesRoutes);
 app.use('/api/services', apiLimiter, serviceRoutes);
 
-// Health check endpoint
+// Health check endpoint.
+//
+// This used to be a static 200, so Docker's HEALTHCHECK kept the container
+// marked healthy after Mongo became unreachable, `restart: unless-stopped`
+// never fired, and the deploy workflow reported "Backend is healthy" on a stack
+// where every request 500s. A deploy could be declared successful on a dead
+// application.
+//
+// Redis is optional by design: CacheUtil treats a missing client as "no cache"
+// on every path, so its state is reported but never fails the check. The
+// response stays additive, so the existing CI and deploy polls, which read only
+// the status code, are unaffected.
 app.get('/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Server is running',
+  const mongoConnected = mongoose.connection.readyState === 1;
+  const redisClient = getRedisClient();
+
+  const body = {
+    success: mongoConnected,
+    message: mongoConnected ? 'Server is running' : 'Server is not ready',
+    dependencies: {
+      mongo: MONGO_STATES[mongoose.connection.readyState] || 'unknown',
+      redis: redisClient ? 'available' : 'unavailable',
+    },
     timestamp: new Date().toISOString(),
-  });
+  };
+
+  return res.status(mongoConnected ? 200 : 503).json(body);
 });
 
 // Root endpoint
@@ -208,13 +231,75 @@ const startServer = async () => {
       });
 
     // Start server
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
     });
+
+    // Without this an EADDRINUSE surfaces as an unhandled 'error' event rather
+    // than reaching the failure path below, so the process dies with no useful
+    // log line.
+    server.on('error', (error) => {
+      console.error('HTTP server error:', error);
+      process.exit(1);
+    });
+
+    registerShutdownHandlers(server);
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
   }
+};
+
+/**
+ * Stop accepting connections, let in-flight requests finish, then close the
+ * connections they depend on.
+ *
+ * Order matters. Closing Mongo first, which is what the old per-module SIGINT
+ * handlers effectively did, cuts off a request that is midway through the
+ * three-step stock write: quantity saved, StockMovement not yet written. That
+ * sequence is the audit trail, so a deploy during business hours could punch
+ * holes in the ledger with nothing detecting the divergence.
+ *
+ * The force-exit timer is the backstop for a connection that never drains, so a
+ * hung request cannot hold the deploy open indefinitely. It is unref'd so it
+ * never itself keeps the process alive.
+ */
+const SHUTDOWN_GRACE_MS = Number(process.env.SHUTDOWN_GRACE_MS) || 10000;
+
+let shuttingDown = false;
+
+const registerShutdownHandlers = (server) => {
+  const shutdown = async (signal) => {
+    // A second signal during shutdown must not start a second sequence.
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    console.log(`${signal} received, shutting down.`);
+
+    const forceExit = setTimeout(() => {
+      console.error(`Did not drain within ${SHUTDOWN_GRACE_MS}ms, exiting anyway.`);
+      process.exit(1);
+    }, SHUTDOWN_GRACE_MS);
+    forceExit.unref();
+
+    try {
+      await new Promise((resolve) => server.close(resolve));
+      console.log('HTTP server closed, no longer accepting connections.');
+
+      await disconnectRedis();
+      await mongoose.connection.close();
+      console.log('Database connection closed.');
+
+      clearTimeout(forceExit);
+      process.exit(0);
+    } catch (error) {
+      console.error('Error during shutdown:', error);
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 };
 
 startServer();

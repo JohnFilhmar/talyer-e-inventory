@@ -1587,3 +1587,115 @@ describe('Sales API - an on-account sale can still be paid', () => {
     expect(stored.payment.status).toBe('paid');
   });
 });
+
+// GAP-021. `search`, `sortBy` and `sortOrder` were sent by the list page and
+// silently ignored by the API, so the page filtered client-side over whatever
+// one page it had already fetched: an order number on page three was invisible
+// from page one, with nothing in the UI saying so.
+describe('Sales list search and sort are server-side', () => {
+  const seed = async () => {
+    const admin = await createTestAdmin();
+    const category = await createTestCategory();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(category);
+    await createTestStock(product, branch, { quantity: 500, sellingPrice: 100 });
+    return { admin, branch, product };
+  };
+
+  const orderWith = async (branch, product, user, overrides) =>
+    createTestSalesOrder(branch, product, user, overrides);
+
+  it('finds an order that is not on the first page', async () => {
+    const { admin, branch, product } = await seed();
+
+    // 25 orders, so the needle is past a default page of 20.
+    for (let i = 0; i < 25; i += 1) {
+      await orderWith(branch, product, admin.user, {
+        customer: { name: `Filler ${i}`, phone: '09171234567' }
+      });
+    }
+    const needle = await orderWith(branch, product, admin.user, {
+      customer: { name: 'Zenaida Needle', phone: '09991234567' }
+    });
+
+    const res = await request(app)
+      .get('/api/sales?search=Zenaida')
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.map((o) => String(o._id))).toContain(String(needle._id));
+  });
+
+  it('matches on order number', async () => {
+    const { admin, branch, product } = await seed();
+    const order = await orderWith(branch, product, admin.user, {});
+
+    const res = await request(app)
+      .get(`/api/sales?search=${encodeURIComponent(order.orderNumber)}`)
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+  });
+
+  it('treats a regex metacharacter as a literal, not a pattern', async () => {
+    const { admin, branch, product } = await seed();
+    await orderWith(branch, product, admin.user, {});
+
+    const res = await request(app)
+      .get('/api/sales?search=' + encodeURIComponent('(a+)+$'))
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(0);
+  });
+
+  it('sorts by total ascending when asked', async () => {
+    const { admin, branch, product } = await seed();
+    await orderWith(branch, product, admin.user, { total: 300 });
+    await orderWith(branch, product, admin.user, { total: 100 });
+    await orderWith(branch, product, admin.user, { total: 200 });
+
+    const res = await request(app)
+      .get('/api/sales?sortBy=total&sortOrder=asc')
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.status).toBe(200);
+    const totals = res.body.data.map((o) => o.total);
+    expect(totals).toEqual([...totals].sort((a, b) => a - b));
+  });
+
+  it('rejects an unknown sortBy rather than ignoring it', async () => {
+    const { admin } = await seed();
+
+    const res = await request(app)
+      .get('/api/sales?sortBy=__proto__')
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects an unknown sortOrder', async () => {
+    const { admin } = await seed();
+
+    const res = await request(app)
+      .get('/api/sales?sortOrder=sideways')
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('still defaults to newest first', async () => {
+    const { admin, branch, product } = await seed();
+    await orderWith(branch, product, admin.user, {});
+    await orderWith(branch, product, admin.user, {});
+
+    const res = await request(app)
+      .get('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.status).toBe(200);
+    const dates = res.body.data.map((o) => new Date(o.createdAt).getTime());
+    expect(dates).toEqual([...dates].sort((a, b) => b - a));
+  });
+});

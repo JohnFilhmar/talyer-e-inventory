@@ -18,12 +18,10 @@ const connectDB = async () => {
       console.log('MongoDB disconnected');
     });
 
-    // Graceful shutdown
-    process.on('SIGINT', async () => {
-      await mongoose.connection.close();
-      console.log('MongoDB connection closed through app termination');
-      process.exit(0);
-    });
+    // Shutdown is owned by server.js, which closes the HTTP server first so
+    // in-flight requests finish before the connections they depend on go away.
+    // This handler used to call process.exit(0) from here, which cut those
+    // requests off mid-write.
 
     return conn;
   } catch (error) {
