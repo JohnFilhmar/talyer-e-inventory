@@ -8,6 +8,11 @@ import { PAGINATION, USER_ROLES } from '../config/constants.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
 import { getReportingPeriodBounds } from '../utils/reportingPeriod.js';
 import { canAccessBranch } from '../utils/branchScope.js';
+import { escapeRegex } from '../utils/regex.js';
+// The fields a list may be ordered by. `sortBy` is used as an object key, so an
+// allow-list is what keeps an arbitrary string out of that position; anything
+// outside it is rejected by the route rather than silently ignored.
+export const SALES_SORT_FIELDS = ['createdAt', 'orderNumber', 'total', 'status'];
 import { completeSalesOrder, recordSaleTransaction } from '../utils/salesCompletion.js';
 
 /**
@@ -27,6 +32,9 @@ export const getSalesOrders = asyncHandler(async (req, res) => {
     branch,
     status,
     paymentStatus,
+    search,
+    sortBy = 'createdAt',
+    sortOrder = 'desc',
     startDate,
     endDate,
     page = 1,
@@ -56,10 +64,26 @@ export const getSalesOrders = asyncHandler(async (req, res) => {
     if (endDate) query.createdAt.$lte = new Date(endDate);
   }
 
+  // Server-side search. The list page filtered client-side, which only ever
+  // searched the page already fetched: an order number on page three was
+  // invisible from page one, and the UI gave no sign it was looking at a
+  // subset. Escaped, because this reaches a $regex.
+  if (search) {
+    const pattern = { $regex: escapeRegex(search), $options: 'i' };
+    query.$or = [
+      { orderNumber: pattern },
+      { 'customer.name': pattern },
+      { 'customer.phone': pattern }
+    ];
+  }
+
   // Pagination
   const pageNum = parseInt(page);
   const limitNum = Math.min(parseInt(limit), PAGINATION.MAX_LIMIT);
   const skip = (pageNum - 1) * limitNum;
+
+  const sort = { [SALES_SORT_FIELDS.includes(sortBy) ? sortBy : 'createdAt']:
+    sortOrder === 'asc' ? 1 : -1 };
 
   const [orders, total] = await Promise.all([
     SalesOrder.find(query)
@@ -68,7 +92,7 @@ export const getSalesOrders = asyncHandler(async (req, res) => {
       .populate('items.product', 'sku name brand')
       .skip(skip)
       .limit(limitNum)
-      .sort({ createdAt: -1 }),
+      .sort(sort),
     SalesOrder.countDocuments(query)
   ]);
 

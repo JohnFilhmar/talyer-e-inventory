@@ -49,36 +49,6 @@ export const SERVICE_PRIORITY = {
   URGENT: 'urgent'
 };
 
-export const NOTIFICATION_TYPES = {
-  INFO: 'info',
-  WARNING: 'warning',
-  ERROR: 'error',
-  SUCCESS: 'success'
-};
-
-export const NOTIFICATION_CATEGORIES = {
-  STOCK: 'stock',
-  ORDER: 'order',
-  TRANSFER: 'transfer',
-  SYSTEM: 'system'
-};
-
-export const EXPENSE_CATEGORIES = {
-  RENT: 'rent',
-  UTILITIES: 'utilities',
-  SALARIES: 'salaries',
-  SUPPLIES: 'supplies',
-  MAINTENANCE: 'maintenance',
-  OTHER: 'other'
-};
-
-export const TRANSACTION_TYPES = {
-  SALE: 'sale',
-  REFUND: 'refund',
-  EXPENSE: 'expense',
-  TRANSFER: 'transfer'
-};
-
 export const CACHE_TTL = {
   SHORT: 300,        // 5 minutes
   MEDIUM: 1800,      // 30 minutes
@@ -92,9 +62,14 @@ export const PAGINATION = {
   MAX_LIMIT: 100
 };
 
+// The single source for upload policy. middleware/imageUpload.js declared its
+// own copy and the two had already diverged: this list was missing image/webp,
+// which the middleware accepted. Someone tightening the accepted types here,
+// the obvious place given every other cross-cutting value lives in this file,
+// would have changed nothing and believed the restriction shipped.
 export const UPLOAD = {
   MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB
-  ALLOWED_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/jpg'],
+  ALLOWED_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'],
   ALLOWED_DOCUMENT_TYPES: ['application/pdf', 'image/jpeg', 'image/png']
 };
 
@@ -117,12 +92,14 @@ export const CORS = {
     'Content-Type',
     'Accept',
     'Authorization',
-    'X-Refresh-Token',
+    // X-Refresh-Token was listed and never sent or read by anything: the
+    // refresh token travels in an httpOnly cookie. Allowing it only widened
+    // the preflight surface.
+    //
     // Without this the preflight for the refresh call fails and the SPA can
     // never renew a token — the header is rejected before the route is reached.
     'X-XSRF-TOKEN'
   ],
-  EXPOSED_HEADERS: ['X-Total-Count', 'X-Total-Pages'],
   CREDENTIALS: true,
   MAX_AGE: 86400 // 24 hours
 }

@@ -18,9 +18,11 @@ import { USER_ROLES, ORDER_STATUS, PAYMENT_STATUS } from '../config/constants.js
 import {
   idRule,
   enumRule,
+  textRule,
   paginationRules,
   dateRangeRules,
 } from '../utils/queryRules.js';
+import { SALES_SORT_FIELDS } from '../controllers/salesController.js';
 
 const router = express.Router();
 
@@ -79,6 +81,9 @@ const listOrdersValidation = [
   idRule('branch'),
   enumRule('status', Object.values(ORDER_STATUS)),
   enumRule('paymentStatus', Object.values(PAYMENT_STATUS)),
+  textRule('search'),
+  enumRule('sortBy', SALES_SORT_FIELDS),
+  enumRule('sortOrder', ['asc', 'desc']),
   ...dateRangeRules(),
   ...paginationRules(),
   validate

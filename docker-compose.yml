@@ -1,5 +1,17 @@
 services:
   mongo:
+    # Capped and rotated. The default json-file driver has no limit, the
+    # backend writes two log lines per request, and staging and production
+    # share one VPS: three unbounded disk consumers compound on one box.
+    #
+    # Memory and CPU limits are the other half of GAP-027 and are deliberately
+    # absent: they depend on the VPS specification, which is not in the
+    # repository, and a guessed limit can OOM-kill production.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     image: mongo:7
     restart: unless-stopped
     environment:
@@ -14,6 +26,18 @@ services:
       retries: 10
 
   redis:
+    # Capped and rotated. The default json-file driver has no limit, the
+    # backend writes two log lines per request, and staging and production
+    # share one VPS: three unbounded disk consumers compound on one box.
+    #
+    # Memory and CPU limits are the other half of GAP-027 and are deliberately
+    # absent: they depend on the VPS specification, which is not in the
+    # repository, and a guessed limit can OOM-kill production.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
@@ -26,9 +50,25 @@ services:
       retries: 10
 
   backend:
+    # Capped and rotated. The default json-file driver has no limit, the
+    # backend writes two log lines per request, and staging and production
+    # share one VPS: three unbounded disk consumers compound on one box.
+    #
+    # Memory and CPU limits are the other half of GAP-027 and are deliberately
+    # absent: they depend on the VPS specification, which is not in the
+    # repository, and a guessed limit can OOM-kill production.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     build:
       context: ./backend
     restart: unless-stopped
+    # Longer than SHUTDOWN_GRACE_MS in server.js, so Compose does not SIGKILL
+    # the process midway through draining. A request cut off between the stock
+    # save and its StockMovement leaves a hole in the audit trail.
+    stop_grace_period: 20s
     depends_on:
       mongo:
         condition: service_healthy
@@ -54,6 +94,18 @@ services:
       - backend-uploads:/app/uploads
 
   frontend:
+    # Capped and rotated. The default json-file driver has no limit, the
+    # backend writes two log lines per request, and staging and production
+    # share one VPS: three unbounded disk consumers compound on one box.
+    #
+    # Memory and CPU limits are the other half of GAP-027 and are deliberately
+    # absent: they depend on the VPS specification, which is not in the
+    # repository, and a guessed limit can OOM-kill production.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     build:
       context: ./frontend
       args:

@@ -60,6 +60,37 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:5000/api
         run: npm run build
 
+  mobile-check:
+    name: mobile-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile-app/package-lock.json
+
+      - name: Install
+        working-directory: mobile-app
+        run: npm ci
+
+      - name: Lint
+        working-directory: mobile-app
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: mobile-app
+        run: npm run typecheck
+
+      # The suite is empty today, so this passes with no tests rather than
+      # failing on "No tests found". It is wired now so the first test written
+      # is the first test run.
+      - name: Test
+        working-directory: mobile-app
+        run: npm test
+
   docker-build:
     name: docker-build
     runs-on: ubuntu-latest

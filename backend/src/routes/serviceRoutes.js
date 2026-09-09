@@ -14,9 +14,11 @@ import {
 import {
   idRule,
   enumRule,
+  textRule,
   paginationRules,
   dateRangeRules,
 } from '../utils/queryRules.js';
+import { SERVICE_SORT_FIELDS } from '../controllers/serviceController.js';
 
 // Custom phone number validator
 const phoneValidator = body('customer.phone')
@@ -81,6 +83,9 @@ const statusValidation = [
 const listServicesValidation = [
   idRule('branch'),
   idRule('assignedTo'),
+  textRule('search'),
+  enumRule('sortBy', SERVICE_SORT_FIELDS),
+  enumRule('sortOrder', ['asc', 'desc']),
   enumRule('status', Object.values(SERVICE_STATUS)),
   enumRule('priority', Object.values(SERVICE_PRIORITY)),
   enumRule('paymentStatus', Object.values(PAYMENT_STATUS)),
