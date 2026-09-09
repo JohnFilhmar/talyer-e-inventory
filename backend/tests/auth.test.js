@@ -998,3 +998,106 @@ describe('refresh cookie attributes fail closed on NODE_ENV', () => {
     expect(cleared).toMatch(/SameSite=Strict/i);
   });
 });
+
+describe('password change ends existing sessions', () => {
+  // Clearing the stored refresh token stops an attacker minting new tokens. It
+  // does nothing about an access token already in their hands, which stays
+  // valid for its full 7 days, and the reset flow exists precisely to remediate
+  // a compromise.
+  const resetPasswordFor = async (email, newPassword = 'brandnewpass123') => {
+    const forgot = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email });
+
+    return request(app)
+      .post('/api/auth/reset-password')
+      .send({ resetToken: forgot.body.data.resetToken, newPassword });
+  };
+
+  it('rejects an access token minted before a password reset', async () => {
+    const { token } = await createTestUser({
+      email: 'session@example.com',
+      password: 'oldpassword123',
+    });
+
+    const before = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+    expect(before.statusCode).toBe(200);
+
+    const reset = await resetPasswordFor('session@example.com');
+    expect(reset.statusCode).toBe(200);
+
+    const after = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(after.statusCode).toBe(401);
+    expect(after.body.message).toMatch(/log in again/i);
+  });
+
+  it('stamps passwordChangedAt on a reset and not at creation', async () => {
+    const { user } = await createTestUser({
+      email: 'stamp@example.com',
+      password: 'oldpassword123',
+    });
+
+    // A brand-new user has no outstanding tokens to invalidate, so "never
+    // changed" stays distinct from "changed at signup".
+    expect((await User.findById(user._id)).passwordChangedAt).toBeUndefined();
+
+    await resetPasswordFor('stamp@example.com');
+
+    const updated = await User.findById(user._id);
+    expect(updated.passwordChangedAt).toBeInstanceOf(Date);
+    expect(updated.passwordChangedAt.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('accepts a token minted after the reset', async () => {
+    await createTestUser({
+      email: 'after@example.com',
+      password: 'oldpassword123',
+    });
+    await resetPasswordFor('after@example.com');
+
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'after@example.com', password: 'brandnewpass123' });
+    expect(login.statusCode).toBe(200);
+
+    const me = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${login.body.data.accessToken}`);
+
+    expect(me.statusCode).toBe(200);
+  });
+
+  it('leaves a user who has never changed their password alone', async () => {
+    const { token } = await createTestUser({ email: 'untouched@example.com' });
+
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('ends sessions when an admin changes the password too', async () => {
+    // Same hook, so every path that writes a password is covered, including
+    // ones added later.
+    const { user, token } = await createTestUser({
+      email: 'adminchanged@example.com',
+      password: 'oldpassword123',
+    });
+
+    const target = await User.findById(user._id);
+    target.password = 'anotherpassword123';
+    await target.save();
+
+    const after = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(after.statusCode).toBe(401);
+  });
+});

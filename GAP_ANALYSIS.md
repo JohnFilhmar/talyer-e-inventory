@@ -45,6 +45,15 @@ bringing reality back in line with `docs/DEPLOYMENT.md:46`, which had said
 "public" throughout. No documentation change is needed; the code and the deploy
 guidance were right and the setting had drifted.
 
+**GAP-058 was raised and fixed on 2026-09-09**, found while auditing what Wave
+6 left behind. GAP-001's note had recorded the remainder in its own words,
+"access tokens already issued stay valid for their 7-day life", and no entry was
+ever raised for it, so the one flow whose purpose is remediating a compromise
+left an attacker seven more days of access and nothing in section 8 would ever
+have picked it up. This is the third status-drift of the same family: a
+membership audit catches an entry in no wave, but not work that an entry
+mentions and no entry owns.
+
 **Wave 6 is closed as of 2026-09-09.** GAP-040, GAP-041, GAP-042, GAP-043 and
 GAP-047 are fixed. Two of the five needed more than the entry described, and the
 notes say so on each: GAP-040 listed eight identifier-generation sites and there
@@ -151,7 +160,7 @@ time an entry's status drifted from the code; the wave audit checks membership,
 not whether a scheduled entry was actually recorded as done, which is the hole
 both slipped through.
 
-Remaining open: 13 of the 60 gaps now listed. Two new entries were raised on
+Remaining open: 13 of the 61 gaps now listed. Two new entries were raised on
 2026-09-08 from findings surfaced while working Wave 2 and deliberately not
 fixed there: **GAP-053** (the refresh cookie repeats GAP-005's fail-open shape,
 left alone because the naive inversion breaks local HTTP login) and
@@ -327,50 +336,51 @@ S1=8, S2=5, S3=2, S4=1; C1=1.0, C2=0.8, C3=0.5; XS=1, S=2, M=4, L=7, XL=12.
 | 14 | GAP-053 | SEC | The refresh cookie's secure and sameSite fail open on NODE_ENV | S2 | XS | D2 | R2 | C1 | 5.0 | ASSISTED |
 | 15 | GAP-014 | CODE | Stock reservations leak on every order-creation failure path | S1 | S | D2 | R2 | C1 | 4.0 | READY |
 | 16 | GAP-015b | SEC | JSON request bodies reach Mongo as query operators; there is no request-shape guard | S1 | S | D2 | R2 | C1 | 4.0 | READY |
-| 17 | GAP-015a | SEC | User-supplied text reaches MongoDB $regex unescaped at eight sites | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 18 | GAP-015c | SEC | Four update paths pass the whole request body to findByIdAndUpdate | S2 | S | D2 | R2 | C1 | 2.5 | READY |
-| 19 | GAP-016 | CODE | A completed-but-unpaid sale can never be paid; on-account revenue is unrecordable | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
-| 20 | GAP-017 | SEC | Four mutating service routes have no validation chain | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 21 | GAP-018 | CODE | Stock adjustments ignore reservedQuantity and can strand pending orders | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
-| 22 | GAP-019 | CODE | Transfer completion credits the destination when the source Stock row is missing | S2 | S | D2 | R2 | C1 | 2.5 | READY |
-| 23 | GAP-020 | CODE | user.branch shape drift breaks BranchProvider, roleGuard and hasBranchAccess | S2 | S | D2 | R2 | C1 | 2.5 | READY |
-| 24 | GAP-021 | FEAT | Sales and service list search and sort are silently dropped by the API | S2 | S | D2 | R1 | C1 | 2.5 | ASSISTED |
-| 25 | GAP-022 | CODE | The offline replay queue can stall indefinitely with no user-visible retry | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 26 | GAP-023 | OPS | /health is a static 200, so a deploy is declared green on a dead application | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 27 | GAP-024 | OPS | No SIGTERM handler; every deploy severs in-flight writes and can break the ledger | S2 | S | D2 | R2 | C1 | 2.5 | READY |
-| 28 | GAP-025 | PROJ | mobile-app is absent from every CI, security and Dependabot workflow | S2 | S | D1 | R1 | C1 | 2.5 | READY |
-| 29 | GAP-026 | CODE | Five read endpoints have no pagination or no upper bound on limit | S2 | S | D2 | R1 | C1 | 2.5 | READY |
-| 30 | GAP-027 | OPS | No resource limits or log rotation; staging and production share one box | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
-| 31 | GAP-028 | OPS | No backup or restore path for the MongoDB data or the uploads volume | S1 | M | D2 | R1 | C1 | 2.0 | HUMAN-FIRST |
-| 32 | GAP-029 | CODE | Tax is charged on the pre-discount subtotal and the discount has no ceiling | S2 | S | D4 | R3 | C2 | 2.0 | HUMAN-FIRST |
-| 33 | GAP-030 | SEC | The service worker caches cross-origin API responses in a shared bucket | S2 | S | D2 | R2 | C2 | 2.0 | ASSISTED |
-| 34 | GAP-031 | CODE | Cache invalidation is incomplete and one cache key omits a request parameter | S3 | XS | D2 | R1 | C1 | 2.0 | READY |
-| 35 | GAP-032 | CODE | CORS_ALLOWED_ORIGINS is split without trimming and no Vary: Origin is sent | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 36 | GAP-033 | SEC | The defensive .select() in userController excludes fields that do not exist | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 37 | GAP-034 | CODE | Dead configuration: unused constants, unused CORS headers, divergent upload limits | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 38 | GAP-035 | PROJ | Branch and workspace hygiene: staging is 94 commits behind master | S3 | XS | D1 | R2 | C1 | 2.0 | HUMAN-FIRST |
-| 39 | GAP-036 | OPS | seedBranches.js self-executes on import with no main-module guard | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 40 | GAP-037 | OPS | The repo-root uploads/ directory is neither gitignored nor mounted | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 41 | GAP-038 | SEC | Image processing returns the raw internal error message and path on 500 | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 42 | GAP-039 | CONTRA | apiLimiter is documented as 300/IP and implemented as 3000/user | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 43 | GAP-054 | SEC | Validation errors echo the submitted value, including passwords | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 44 | GAP-055 | OPS | Stock reservations leaked before GAP-014 are still stranded in the data | S2 | S | D2 | R2 | C2 | 2.0 | ASSISTED |
-| 45 | GAP-040 | CODE | Every human-readable identifier is generated with countDocuments() + 1 | S2 | M | D2 | R3 | C1 | 1.25 | ASSISTED |
-| 46 | GAP-041 | CODE | All money is IEEE-754 floating point with no rounding at any boundary | S2 | M | D3 | R3 | C1 | 1.25 | ASSISTED |
-| 47 | GAP-042 | FEAT | The dashboard, the post-login landing page, is entirely non-functional | S2 | M | D2 | R1 | C1 | 1.25 | ASSISTED |
-| 48 | GAP-043 | FEAT | Stock lists are silently truncated to one unpaginated page | S2 | M | D2 | R1 | C1 | 1.25 | READY |
-| 49 | GAP-044 | TEST | No concurrency test exists and the StockMovement ledger is never asserted | S2 | M | D3 | R1 | C1 | 1.25 | READY |
-| 50 | GAP-045 | TEST | branch.test.js tests Mongoose directly; four branch endpoints are unverified | S2 | M | D2 | R1 | C1 | 1.25 | READY |
-| 51 | GAP-046 | CODE | No atomicity on stock quantity writes: lost updates and oversell | S1 | L | D3 | R3 | C1 | 1.14 | HUMAN-FIRST |
-| 52 | GAP-047 | CODE | Frontend types drift from the API contract at four points | S3 | S | D2 | R1 | C1 | 1.0 | READY |
-| 53 | GAP-048 | OPS | Cache invalidation uses Redis KEYS on every mutation hot path | S3 | S | D2 | R1 | C1 | 1.0 | READY |
-| 54 | GAP-049 | CONTRA | Transaction numbers never take the documented TXN-YYYYMM shape | S3 | S | D2 | R3 | C1 | 1.0 | ASSISTED |
-| 55 | GAP-050 | FEAT | There is no refund, void, or reversal path anywhere in the system | S2 | L | D4 | R3 | C1 | 0.71 | HUMAN-FIRST |
-| 56 | GAP-051 | OPS | No observability: no metrics, structured logs, tracing, or alerting | S2 | L | D2 | R1 | C1 | 0.71 | ASSISTED |
-| 57 | GAP-056 | SEC | Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible | S3 | M | D2 | R1 | C1 | 0.5 | READY |
-| 58 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
-| 59 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
-| 60 | GAP-057 | CODE | Stock list sorting orders one page, and the API's own sort key has never applied | S3 | M | D2 | R1 | C1 | 0.5 | READY |
+| 17 | GAP-058 | SEC | A password reset leaves every issued access token valid for its full seven days | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 18 | GAP-015a | SEC | User-supplied text reaches MongoDB $regex unescaped at eight sites | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 19 | GAP-015c | SEC | Four update paths pass the whole request body to findByIdAndUpdate | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 20 | GAP-016 | CODE | A completed-but-unpaid sale can never be paid; on-account revenue is unrecordable | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
+| 21 | GAP-017 | SEC | Four mutating service routes have no validation chain | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 22 | GAP-018 | CODE | Stock adjustments ignore reservedQuantity and can strand pending orders | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
+| 23 | GAP-019 | CODE | Transfer completion credits the destination when the source Stock row is missing | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 24 | GAP-020 | CODE | user.branch shape drift breaks BranchProvider, roleGuard and hasBranchAccess | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 25 | GAP-021 | FEAT | Sales and service list search and sort are silently dropped by the API | S2 | S | D2 | R1 | C1 | 2.5 | ASSISTED |
+| 26 | GAP-022 | CODE | The offline replay queue can stall indefinitely with no user-visible retry | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 27 | GAP-023 | OPS | /health is a static 200, so a deploy is declared green on a dead application | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 28 | GAP-024 | OPS | No SIGTERM handler; every deploy severs in-flight writes and can break the ledger | S2 | S | D2 | R2 | C1 | 2.5 | READY |
+| 29 | GAP-025 | PROJ | mobile-app is absent from every CI, security and Dependabot workflow | S2 | S | D1 | R1 | C1 | 2.5 | READY |
+| 30 | GAP-026 | CODE | Five read endpoints have no pagination or no upper bound on limit | S2 | S | D2 | R1 | C1 | 2.5 | READY |
+| 31 | GAP-027 | OPS | No resource limits or log rotation; staging and production share one box | S2 | S | D2 | R2 | C1 | 2.5 | ASSISTED |
+| 32 | GAP-028 | OPS | No backup or restore path for the MongoDB data or the uploads volume | S1 | M | D2 | R1 | C1 | 2.0 | HUMAN-FIRST |
+| 33 | GAP-029 | CODE | Tax is charged on the pre-discount subtotal and the discount has no ceiling | S2 | S | D4 | R3 | C2 | 2.0 | HUMAN-FIRST |
+| 34 | GAP-030 | SEC | The service worker caches cross-origin API responses in a shared bucket | S2 | S | D2 | R2 | C2 | 2.0 | ASSISTED |
+| 35 | GAP-031 | CODE | Cache invalidation is incomplete and one cache key omits a request parameter | S3 | XS | D2 | R1 | C1 | 2.0 | READY |
+| 36 | GAP-032 | CODE | CORS_ALLOWED_ORIGINS is split without trimming and no Vary: Origin is sent | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 37 | GAP-033 | SEC | The defensive .select() in userController excludes fields that do not exist | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 38 | GAP-034 | CODE | Dead configuration: unused constants, unused CORS headers, divergent upload limits | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 39 | GAP-035 | PROJ | Branch and workspace hygiene: staging is 94 commits behind master | S3 | XS | D1 | R2 | C1 | 2.0 | HUMAN-FIRST |
+| 40 | GAP-036 | OPS | seedBranches.js self-executes on import with no main-module guard | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 41 | GAP-037 | OPS | The repo-root uploads/ directory is neither gitignored nor mounted | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 42 | GAP-038 | SEC | Image processing returns the raw internal error message and path on 500 | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 43 | GAP-039 | CONTRA | apiLimiter is documented as 300/IP and implemented as 3000/user | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 44 | GAP-054 | SEC | Validation errors echo the submitted value, including passwords | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
+| 45 | GAP-055 | OPS | Stock reservations leaked before GAP-014 are still stranded in the data | S2 | S | D2 | R2 | C2 | 2.0 | ASSISTED |
+| 46 | GAP-040 | CODE | Every human-readable identifier is generated with countDocuments() + 1 | S2 | M | D2 | R3 | C1 | 1.25 | ASSISTED |
+| 47 | GAP-041 | CODE | All money is IEEE-754 floating point with no rounding at any boundary | S2 | M | D3 | R3 | C1 | 1.25 | ASSISTED |
+| 48 | GAP-042 | FEAT | The dashboard, the post-login landing page, is entirely non-functional | S2 | M | D2 | R1 | C1 | 1.25 | ASSISTED |
+| 49 | GAP-043 | FEAT | Stock lists are silently truncated to one unpaginated page | S2 | M | D2 | R1 | C1 | 1.25 | READY |
+| 50 | GAP-044 | TEST | No concurrency test exists and the StockMovement ledger is never asserted | S2 | M | D3 | R1 | C1 | 1.25 | READY |
+| 51 | GAP-045 | TEST | branch.test.js tests Mongoose directly; four branch endpoints are unverified | S2 | M | D2 | R1 | C1 | 1.25 | READY |
+| 52 | GAP-046 | CODE | No atomicity on stock quantity writes: lost updates and oversell | S1 | L | D3 | R3 | C1 | 1.14 | HUMAN-FIRST |
+| 53 | GAP-047 | CODE | Frontend types drift from the API contract at four points | S3 | S | D2 | R1 | C1 | 1.0 | READY |
+| 54 | GAP-048 | OPS | Cache invalidation uses Redis KEYS on every mutation hot path | S3 | S | D2 | R1 | C1 | 1.0 | READY |
+| 55 | GAP-049 | CONTRA | Transaction numbers never take the documented TXN-YYYYMM shape | S3 | S | D2 | R3 | C1 | 1.0 | ASSISTED |
+| 56 | GAP-050 | FEAT | There is no refund, void, or reversal path anywhere in the system | S2 | L | D4 | R3 | C1 | 0.71 | HUMAN-FIRST |
+| 57 | GAP-051 | OPS | No observability: no metrics, structured logs, tracing, or alerting | S2 | L | D2 | R1 | C1 | 0.71 | ASSISTED |
+| 58 | GAP-056 | SEC | Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible | S3 | M | D2 | R1 | C1 | 0.5 | READY |
+| 59 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
+| 60 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
+| 61 | GAP-057 | CODE | Stock list sorting orders one page, and the API's own sort key has never applied | S3 | M | D2 | R1 | C1 | 0.5 | READY |
 
 **Order overrides.** One was needed, and the original claim that none were was
 wrong. Three of the four dependency edges (GAP-014 -> GAP-046,
@@ -385,10 +395,10 @@ every other member of that wave.
 
 ## 6. Index by Category
 
-**SEC (18)**: GAP-001 (8.0), GAP-002 (8.0), GAP-004 (8.0), GAP-005 (5.0),
+**SEC (19)**: GAP-001 (8.0), GAP-002 (8.0), GAP-004 (8.0), GAP-005 (5.0),
 GAP-007 (5.0), GAP-008 (5.0), GAP-012 (5.0), GAP-015b (4.0), GAP-015a (2.5),
-GAP-015c (2.5), GAP-017 (2.5), GAP-030 (2.0), GAP-033 (2.0), GAP-038 (2.0),
-GAP-053 (5.0), GAP-054 (2.0), GAP-015d (0.5), GAP-056 (0.5).
+GAP-015c (2.5), GAP-017 (2.5), GAP-058 (2.5), GAP-030 (2.0), GAP-033 (2.0),
+GAP-038 (2.0), GAP-053 (5.0), GAP-054 (2.0), GAP-015d (0.5), GAP-056 (0.5).
 
 The GAP-015 family and GAP-017 are validation-surface findings classified SEC
 rather than CODE because the reachable consequence is denial of service, silent
@@ -429,11 +439,11 @@ GAP-004, GAP-005, GAP-006, GAP-007, GAP-008, GAP-009, GAP-010, GAP-011, GAP-012,
 GAP-013, GAP-031, GAP-032, GAP-033, GAP-034, GAP-035, GAP-036, GAP-037, GAP-038,
 GAP-039, GAP-053, GAP-054.
 
-**S: 22 gaps, one module, under 200 lines.** GAP-014, GAP-015a, GAP-015b,
+**S: 23 gaps, one module, under 200 lines.** GAP-014, GAP-015a, GAP-015b,
 GAP-055,
 GAP-015c, GAP-016, GAP-017,
 GAP-018, GAP-019, GAP-020, GAP-021, GAP-022, GAP-023, GAP-024, GAP-025, GAP-026,
-GAP-027, GAP-029, GAP-030, GAP-047, GAP-048, GAP-049.
+GAP-027, GAP-029, GAP-030, GAP-047, GAP-048, GAP-049, GAP-058.
 
 **M: 11 gaps, several modules, one design choice each.** GAP-015d, GAP-056,
 GAP-028,
@@ -559,9 +569,12 @@ GAP-040, GAP-041, GAP-042, GAP-043, GAP-047. GAP-040 and GAP-041 both touch
 `SalesOrder.js` and `ServiceOrder.js`, so serialise them: GAP-040 first.
 GAP-042, GAP-043 and GAP-047 are frontend-only and disjoint from each other.
 
-### Wave 7: verification and alert cleanup (4 gaps, one pair serialised)
+### Wave 7: verification and alert cleanup (5 gaps, one pair serialised)
 
-GAP-044, GAP-045, GAP-056 and GAP-057. GAP-044 and GAP-045 add test files
+GAP-044, GAP-045, GAP-056, GAP-057 and GAP-058. **GAP-058 goes first**: at
+2.5 it outscores every other member, it was raised out of GAP-001's own residual
+rather than planned, and it touches `middleware/auth.js` and `utils/jwt.js`,
+which nothing else in this wave goes near. GAP-044 and GAP-045 add test files
 only: GAP-044 creates new suites, GAP-045 rewrites
 `backend/tests/branch.test.js`. GAP-056 edits five controllers and is disjoint
 from both. **GAP-057 also edits `stockController.js`, so it and GAP-056 are
@@ -7353,6 +7366,120 @@ None.
 
 ---
 
+### GAP-058 [SEC] A password reset leaves every issued access token valid for its full seven days
+
+> **FIXED 2026-09-09, Wave 7.** Access tokens carry a `pwd` claim holding the
+> moment the user's password last changed, and `protect` rejects a token whose
+> claim does not match the stored value. `models/User.js` stamps
+> `passwordChangedAt` in the same `pre('save')` hook that hashes the password,
+> so every path that changes one is covered, including any added later.
+>
+> The claim is deliberate rather than a comparison against the token's own
+> `iat`. `iat` has one-second resolution, and a reset and the login that follows
+> it land in the same second, so no `iat` comparison can both reject the old
+> token and accept the new one. Verified: the first implementation did exactly
+> that, accepting the pre-reset token and rejecting the post-reset one.
+>
+> A token with no `pwd` claim decodes to 0, which matches a user who has never
+> changed their password. That is the migration allowance, the same shape the
+> CSRF cookie already uses: sessions established before this shipped keep
+> working until their owner changes their password, rather than every logged-in
+> user being signed out on deploy.
+>
+> `generateToken` takes the user document rather than an id and throws
+> otherwise, because a caller passing a bare id would mint a token claiming
+> "never changed", which would stay valid across a password change for exactly
+> the users this protects.
+>
+> `backend/tests/auth.test.js` gains five tests: a pre-reset token rejected, the
+> stamp written on reset and absent at creation, a post-reset login accepted, an
+> untouched user unaffected, and an admin-initiated change ending the target's
+> session.
+
+Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
+Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
+Depends on GAP-001 | Blocks none | Est. agent turns 4-8
+
+**Location**
+- `backend/src/middleware/auth.js:13-16` (verifies signature and `isActive`, nothing else)
+- `backend/src/utils/jwt.js:5` (the payload was `{ id }`)
+- `backend/src/models/User.js` (no `passwordChangedAt`)
+- `backend/src/controllers/authController.js:305-314` (`resetPassword`)
+
+**Evidence**
+
+GAP-001's own note, written when it shipped: "Residual and deliberately out of
+scope: access tokens already issued stay valid for their 7-day life, which needs
+a `passwordChangedAt` claim checked in `protect`." No entry was ever raised for
+it, so it was unreachable by anyone following section 8.
+
+**What is wrong**
+
+`resetPassword` clears the stored refresh token, so an attacker cannot mint new
+tokens. The access token already in their hands keeps working until it expires,
+because `protect` checks only the signature and `isActive`.
+
+**Why it matters**
+
+This is the one flow whose entire purpose is remediating a compromise. A shop
+owner who notices someone else placing orders, resets their password, and is
+told "Password reset successful" still has an attacker inside the account for up
+to seven more days. The only way to end it was to deactivate the account, which
+locks out the owner too.
+
+**Intended behavior**
+
+Changing a password ends every session for that user, including sessions holding
+an access token that has not expired.
+
+**Proposed fix**
+
+Stamp `passwordChangedAt` in the password-hashing hook so every path is covered,
+bind each access token to that value with a claim, and reject a mismatch in
+`protect`. Treat a missing claim as "never changed" so existing sessions are not
+all invalidated on deploy.
+
+**Implementation checklist**
+
+- [ ] Add `passwordChangedAt` to `backend/src/models/User.js`, not `select: false`, since `protect` loads the user with `.select('-password')`.
+- [ ] Stamp it in the existing `pre('save')` password hook, skipping `isNew`.
+- [ ] Add the `pwd` claim in `backend/src/utils/jwt.js` and export the helper that derives it.
+- [ ] Compare the claim in `backend/src/middleware/auth.js`, treating a missing claim as 0.
+- [ ] Update every `generateToken` caller to pass the user document.
+- [ ] Add tests in `backend/tests/auth.test.js` for the reject, the accept, and the migration case.
+
+**Acceptance criteria**
+
+- [ ] An access token captured before a password reset returns 401 afterwards.
+- [ ] A token minted by the login immediately after the reset works.
+- [ ] A user who has never changed their password is unaffected.
+- [ ] An admin changing a user's password ends that user's sessions.
+
+**Verification commands**
+
+```bash
+cd backend && npm test -- auth.test.js user.test.js
+```
+
+**Do not**
+
+Do not compare against the token's `iat`; its one-second resolution cannot
+separate the reset from the login that follows it. Do not make
+`passwordChangedAt` `select: false`, or the check silently never fires. Do not
+invalidate tokens that carry no claim, which would sign out every live session
+on deploy.
+
+**Rollback**
+
+Revert the middleware and the jwt helper. Tokens stop being checked against the
+claim; the stored field is inert.
+
+**Open questions**
+
+None.
+
+---
+
 ## 11. Deferred and Rejected
 
 Things considered and consciously not listed as gaps, with the reason.
@@ -7517,7 +7644,8 @@ lines, no empty catch blocks, and no page importing axios directly.
 {"id":"GAP-054","cat":"SEC","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/middleware/validate.js","frontend/src/types/api.ts"],"title":"Validation errors echo the submitted value, including passwords"},
 {"id":"GAP-055","cat":"OPS","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C2","pri":2.0,"agent":"AGENT-ASSISTED","depends_on":["GAP-014"],"blocks":[],"files":["backend/src/utils/reconcileReservations.js","backend/tests/reconcileReservations.test.js"],"title":"Stock reservations leaked before GAP-014 are still stranded in the data"},
 {"id":"GAP-056","cat":"SEC","sev":"S3","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/controllers/stockController.js","backend/src/controllers/userController.js","backend/src/controllers/salesController.js","backend/src/controllers/serviceController.js","backend/src/controllers/productController.js","backend/src/utils/branchScope.js"],"title":"Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible"},
-{"id":"GAP-057","cat":"CODE","sev":"S3","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/controllers/stockController.js","frontend/src/app/(protected)/stock/page.tsx"],"title":"Stock list sorting orders one page, and the API own sort key has never applied"}
+{"id":"GAP-057","cat":"CODE","sev":"S3","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/controllers/stockController.js","frontend/src/app/(protected)/stock/page.tsx"],"title":"Stock list sorting orders one page, and the API own sort key has never applied"},
+{"id":"GAP-058","cat":"SEC","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C1","pri":2.5,"agent":"AGENT-READY","depends_on":["GAP-001"],"blocks":[],"files":["backend/src/middleware/auth.js","backend/src/utils/jwt.js","backend/src/models/User.js"],"title":"A password reset leaves every issued access token valid for its full seven days"}
 ]
 ```
 
@@ -7762,9 +7890,9 @@ single unit test against `isURL`.
 - [x] Every checklist item is a single action naming the file it touches.
 - [x] Every AGENT-READY entry has `Open questions: None`. The five HUMAN-FIRST entries and the eight AGENT-ASSISTED entries each carry a real question.
 - [x] Every CONTRA entry names both positions with quoted evidence and states who decides.
-- [x] The JSON appendix has 60 objects whose ids, scores, dependencies and titles match the prose entries.
-- [x] Counts in the metadata block match the actual entries: 60 total; S1 8, S2 35, S3 17, S4 0; CODE 21, SEC 18, OPS 10, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
-- [x] S1 findings are 8 of 60, or 13.3%, inside the 15% calibration ceiling.
+- [x] The JSON appendix has 61 objects whose ids, scores, dependencies and titles match the prose entries.
+- [x] Counts in the metadata block match the actual entries: 61 total; S1 8, S2 36, S3 17, S4 0; CODE 21, SEC 19, OPS 10, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
+- [x] S1 findings are 8 of 61, or 13.1%, inside the 15% calibration ceiling.
 
 **One caveat on my own confidence.** I read about 62% of the source and executed
 none of it. The largest unread surface is the frontend, which also has no tests,

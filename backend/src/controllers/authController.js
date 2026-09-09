@@ -81,7 +81,7 @@ const register = asyncHandler(async (req, res) => {
 
   if (user) {
     // Generate tokens
-    const accessToken = generateToken(user._id);
+    const accessToken = generateToken(user);
     const refreshToken = generateRefreshToken(user._id);
 
     // Save refresh token to user
@@ -136,7 +136,7 @@ const login = asyncHandler(async (req, res) => {
   }
 
   // Generate tokens
-  const accessToken = generateToken(user._id);
+  const accessToken = generateToken(user);
   const refreshToken = generateRefreshToken(user._id);
 
   // Save refresh token to user
@@ -187,7 +187,7 @@ const refreshToken = asyncHandler(async (req, res) => {
     }
 
     // Generate new access token
-    const newAccessToken = generateToken(user._id);
+    const newAccessToken = generateToken(user);
 
     // A successful refresh does not re-issue the refresh cookie, so this is the
     // only place a session established before CSRF protection shipped can pick
@@ -346,7 +346,7 @@ const registerCustomer = asyncHandler(async (req, res) => {
 
   if (user) {
     // Generate tokens
-    const accessToken = generateToken(user._id);
+    const accessToken = generateToken(user);
     const refreshToken = generateRefreshToken(user._id);
 
     // Save refresh token to user

@@ -141,6 +141,21 @@ Two things are load-bearing:
   token, so each such session becomes protected after one refresh. Once every live session
   predates the deploy by more than the 30-day refresh lifetime, this branch can become a rejection.
 
+**A password change ends every session.** Access tokens carry a `pwd` claim holding the moment the
+user's password last changed ([utils/jwt.js](backend/src/utils/jwt.js)), `models/User.js` stamps
+`passwordChangedAt` in the same `pre('save')` hook that hashes the password, and `protect` rejects a
+token whose claim does not match. Three details are load-bearing:
+
+- **`generateToken` takes the user document, not an id, and throws otherwise.** A caller passing a
+  bare id would mint a token claiming "never changed", which stays valid across a password change
+  for exactly the users this protects.
+- **The claim is not the token's `iat`.** `iat` has one-second resolution and a reset lands in the
+  same second as the login that follows it, so no `iat` comparison can both reject the old token
+  and accept the new one. That was tried first and did the opposite of what it should.
+- **A token with no `pwd` claim decodes to 0, which matches a user who has never changed their
+  password.** That is the migration allowance, the same shape the CSRF cookie uses: sessions
+  predating the deploy keep working until their owner changes their password.
+
 [middleware/errorHandler.js](backend/src/middleware/errorHandler.js) collapses every 5xx message
 to `'Server Error'` when `NODE_ENV === 'production'` — internal failures can otherwise leak
 connection strings or file paths — while 4xx messages always pass through unchanged so clients

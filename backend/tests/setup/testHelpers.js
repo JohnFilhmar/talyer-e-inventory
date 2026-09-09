@@ -21,7 +21,7 @@ const createTestUser = async (userData = {}) => {
   });
 
   // Generate JWT tokens
-  const accessToken = generateToken(user._id);
+  const accessToken = generateToken(user);
   const refreshToken = generateRefreshToken(user._id);
 
   // Save refresh token to user
