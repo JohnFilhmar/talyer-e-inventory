@@ -72,10 +72,13 @@ const createBranchValidation = [
     .trim()
     .notEmpty().withMessage('Phone number is required')
     .matches(/^[\d\s\-\+\(\)]+$/).withMessage('Invalid phone number format'),
+  // Not normalised: validator.js strips Gmail dots and +subaddressing by
+  // default, so a manager's contact address was silently rewritten on save.
+  // Same policy as userRoutes.js, where the same call also locked staff
+  // accounts out of login. The schema handles case.
   body('contact.email')
     .optional()
-    .isEmail({ allow_utf8_local_part: false }).withMessage('Invalid email format')
-    .normalizeEmail(),
+    .isEmail({ allow_utf8_local_part: false }).withMessage('Invalid email format'),
   body('manager')
     .optional()
     .isMongoId().withMessage('Invalid manager ID'),
@@ -100,8 +103,7 @@ const updateBranchValidation = [
     .matches(/^[A-Z0-9-]+$/).withMessage('Branch code must be uppercase alphanumeric with hyphens only'),
   body('contact.email')
     .optional()
-    .isEmail({ allow_utf8_local_part: false }).withMessage('Invalid email format')
-    .normalizeEmail(),
+    .isEmail({ allow_utf8_local_part: false }).withMessage('Invalid email format'),
   body('manager')
     .optional()
     .isMongoId().withMessage('Invalid manager ID'),

@@ -1624,3 +1624,107 @@ describe('Stock API - read route query validation', () => {
     expect(res.status).toBe(200);
   });
 });
+
+
+// GAP-019. The source debit sat inside `if (sourceStock)` while the destination
+// credit was unconditional, so completing a transfer whose source row had been
+// deleted either invented inventory outright, when the destination row already
+// existed, or threw a TypeError dereferencing sourceStock.costPrice on the very
+// null the guard had just skipped.
+//
+// Self-seeding: this block sits outside the main `Stock API Tests` describe, so
+// it cannot see that block's shared fixtures.
+describe('Transfer completion refuses a missing source row', () => {
+  const seed = async () => {
+    const from = await createTestBranch({ name: 'Transfer Source', code: 'TR-SRC' });
+    const to = await createTestBranch({ name: 'Transfer Dest', code: 'TR-DST' });
+    const admin = await createTestAdmin();
+    const cat = await createTestCategory({ name: 'Transfer Cat', code: 'TR-CAT' });
+    const prod = await createTestProduct({ name: 'Transfer Product', category: cat._id });
+
+    const sourceStock = await createTestStock({
+      product: prod._id,
+      branch: from._id,
+      quantity: 100,
+      reservedQuantity: 20,
+      costPrice: 200,
+      sellingPrice: 250
+    });
+    const transfer = await StockTransfer.create({
+      product: prod._id,
+      fromBranch: from._id,
+      toBranch: to._id,
+      quantity: 20,
+      initiatedBy: admin.user._id,
+      status: 'in-transit'
+    });
+
+    return { from, to, admin, prod, sourceStock, transfer };
+  };
+
+  const complete = (transfer, token) =>
+    request(app)
+      .put(`/api/stock/transfers/${transfer._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'completed' });
+
+  it('does not credit an existing destination row when the source is gone', async () => {
+    const { to, admin, prod, sourceStock, transfer } = await seed();
+    const destStock = await createTestStock({
+      product: prod._id,
+      branch: to._id,
+      quantity: 5,
+      costPrice: 200,
+      sellingPrice: 250
+    });
+    await Stock.findByIdAndDelete(sourceStock._id);
+
+    const res = await complete(transfer, admin.token);
+
+    expect(res.statusCode).toBe(400);
+    // The 20 units must not have appeared from nowhere.
+    expect((await Stock.findById(destStock._id)).quantity).toBe(5);
+  });
+
+  it('does not create a destination row when the source is gone', async () => {
+    const { to, admin, prod, sourceStock, transfer } = await seed();
+    await Stock.findByIdAndDelete(sourceStock._id);
+
+    const res = await complete(transfer, admin.token);
+
+    expect(res.statusCode).toBe(400);
+    expect(await Stock.findOne({ product: prod._id, branch: to._id })).toBeNull();
+  });
+
+  it('writes no movement rows for a refused transfer', async () => {
+    const { admin, sourceStock, transfer } = await seed();
+    await Stock.findByIdAndDelete(sourceStock._id);
+
+    await complete(transfer, admin.token);
+
+    const movements = await StockMovement.find({
+      'reference.type': 'StockTransfer',
+      'reference.id': transfer._id
+    });
+    expect(movements).toHaveLength(0);
+  });
+
+  it('leaves the transfer un-completed so it can be retried', async () => {
+    const { admin, sourceStock, transfer } = await seed();
+    await Stock.findByIdAndDelete(sourceStock._id);
+
+    await complete(transfer, admin.token);
+
+    expect((await StockTransfer.findById(transfer._id)).status).not.toBe('completed');
+  });
+
+  it('still completes normally when the source row is present', async () => {
+    const { from, to, admin, prod, transfer } = await seed();
+
+    const res = await complete(transfer, admin.token);
+
+    expect(res.statusCode).toBe(200);
+    expect((await Stock.findOne({ product: prod._id, branch: from._id })).quantity).toBe(80);
+    expect((await Stock.findOne({ product: prod._id, branch: to._id })).quantity).toBe(20);
+  });
+});

@@ -199,10 +199,17 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
     }
   }
 
-  // Validate and prepare items
+  // Pass one: resolve and validate every item, writing nothing.
+  //
+  // The reservation used to happen inside this loop, so any later item that was
+  // missing, inactive, unstocked or short returned early with the earlier items
+  // already reserved in the database. Nothing released them: availableQuantity
+  // is `quantity - reservedQuantity`, so those units became permanently
+  // unsellable with no endpoint to clear them and no sign in the UI. Validating
+  // first means the common failures never reserve at all.
   const preparedItems = [];
+  const resolvedStocks = [];
   for (const item of items) {
-    // Check if product exists
     const product = await Product.findById(item.product);
     if (!product) {
       return ApiResponse.error(res, 404, `Product ${item.product} not found`);
@@ -212,7 +219,6 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
       return ApiResponse.error(res, 400, `Product ${product.name} is not active`);
     }
 
-    // Check stock availability
     const stock = await Stock.findOne({ product: item.product, branch });
     if (!stock) {
       return ApiResponse.error(
@@ -241,39 +247,92 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
       total: 0 // Will be calculated in pre-save hook
     });
 
-    // Reserve stock
-    await stock.reserveStock(item.quantity);
+    resolvedStocks.push({ stock, quantity: item.quantity });
   }
 
-  // Generate order number (MVP CRITICAL - model validation requires it)
-  const count = await SalesOrder.countDocuments();
-  const year = new Date().getFullYear();
-  const orderNumber = `SO-${year}-${String(count + 1).padStart(6, '0')}`;
-
-  // Create sales order
-  const order = await SalesOrder.create({
-    orderNumber,
-    clientRequestId,
-    branch,
-    customer,
-    items: preparedItems,
-    tax: {
-      rate: taxRate,
-      amount: 0 // Will be calculated in pre-save hook
-    },
-    discount,
-    subtotal: 0, // Will be calculated in pre-save hook
-    total: 0, // Will be calculated in pre-save hook
-    payment: {
-      method: paymentMethod,
-      amountPaid,
-      change: 0, // Will be calculated in pre-save hook
-      status: 'pending' // Will be calculated in pre-save hook
-    },
-    status: 'pending',
-    processedBy: req.user._id,
-    notes
+  // Two items in one order can name the same product, and the per-item
+  // hasSufficientStock check above passes each on its own. Sum them and check
+  // the total against one row, or an order for 6 + 6 of a product with 8 in
+  // stock reserves 12 and drives availableQuantity negative.
+  const totalsByStock = new Map();
+  resolvedStocks.forEach(({ stock, quantity }, index) => {
+    const key = String(stock._id);
+    const seen = totalsByStock.get(key);
+    totalsByStock.set(key, {
+      stock,
+      name: seen ? seen.name : preparedItems[index].name,
+      quantity: (seen ? seen.quantity : 0) + quantity
+    });
   });
+  for (const { stock, name, quantity } of totalsByStock.values()) {
+    if (!stock.hasSufficientStock(quantity)) {
+      return ApiResponse.error(
+        res,
+        400,
+        `Insufficient stock for ${name}. Available: ${stock.availableQuantity}, Requested: ${quantity}`
+      );
+    }
+  }
+
+  // Pass two: reserve, then create. Anything that throws from here on must put
+  // back exactly what it took. This is a compensating action, not a
+  // transaction: production Mongo is standalone, so sessions are unavailable.
+  // GAP-046 owns the real atomicity fix.
+  const reserved = [];
+  let order;
+  try {
+    for (const { stock, quantity } of resolvedStocks) {
+      await stock.reserveStock(quantity);
+      reserved.push({ stock, quantity });
+    }
+
+    // Generate order number (MVP CRITICAL - model validation requires it)
+    const count = await SalesOrder.countDocuments();
+    const year = new Date().getFullYear();
+    const orderNumber = `SO-${year}-${String(count + 1).padStart(6, '0')}`;
+
+    // Create sales order
+    order = await SalesOrder.create({
+      orderNumber,
+      clientRequestId,
+      branch,
+      customer,
+      items: preparedItems,
+      tax: {
+        rate: taxRate,
+        amount: 0 // Will be calculated in pre-save hook
+      },
+      discount,
+      subtotal: 0, // Will be calculated in pre-save hook
+      total: 0, // Will be calculated in pre-save hook
+      payment: {
+        method: paymentMethod,
+        amountPaid,
+        change: 0, // Will be calculated in pre-save hook
+        status: 'pending' // Will be calculated in pre-save hook
+      },
+      status: 'pending',
+      processedBy: req.user._id,
+      notes
+    });
+  } catch (error) {
+    // Release in reverse so a partially-applied release is still consistent.
+    for (const { stock, quantity } of reserved.reverse()) {
+      try {
+        await stock.releaseReservedStock(quantity);
+      } catch (releaseError) {
+        // A failed release is worse than the original error, because it is the
+        // leak this block exists to prevent. Log it with enough to reconcile by
+        // hand and keep releasing the rest.
+        console.error(
+          'Failed to release reserved stock after order-creation failure:',
+          { stockId: String(stock._id), quantity },
+          releaseError
+        );
+      }
+    }
+    throw error;
+  }
 
   // A counter sale paid in full is finished the moment it is rung up: the cash
   // is in the drawer and the goods have left with the customer. Leaving it

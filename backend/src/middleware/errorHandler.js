@@ -14,9 +14,20 @@ const errorHandler = (err, req, res, next) => {
     error = { message, statusCode: 404 };
   }
 
-  // Mongoose/MongoDB duplicate key error
-  // Check both err.code (for MongoServerError) and err.name
-  if (err.code === 11000 || err.name === 'MongoServerError') {
+  // Mongoose/MongoDB duplicate key error.
+  //
+  // Keyed on code 11000 alone. The previous condition also matched any
+  // `err.name === 'MongoServerError'`, which is the name the driver gives
+  // *every* server-side failure: a failover, a stepdown, a write concern
+  // timeout, an exhausted connection pool. All of those were answered 400 with
+  // the message "Field already exists".
+  //
+  // That is not merely a wrong message. The offline outbox classifies a 4xx as
+  // permanent and marks the entry `rejected`, while a 5xx leaves it `pending`
+  // to retry (see frontend/src/lib/offline/sync.ts). So a Mongo failover during
+  // replay silently discarded real sales that would have succeeded a second
+  // later. A transient server error must reach the client as 5xx.
+  if (err.code === 11000) {
     const keyPattern = err.keyPattern || err.keyValue || {};
     const field = Object.keys(keyPattern)[0] || 'field';
     const message = `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`;

@@ -27,14 +27,31 @@ export const completeSalesOrder = async (order, user) => {
   // callers, a double call is a question of when, not whether.
   if (order.status === 'completed') return false;
 
+  // Resolve every row before deducting any. A missing row used to be skipped
+  // silently, so an order completed, was marked paid and wrote a Transaction
+  // while deducting nothing: revenue booked for goods that never left the
+  // shelf, with a ledger that looks internally consistent. Refuse instead, and
+  // refuse before the first deduction so a later missing row cannot leave the
+  // order half-deducted.
+  const deductions = [];
   for (const item of order.items) {
     const stock = await Stock.findOne({ product: item.product, branch: order.branch });
-    if (!stock) continue;
+    if (!stock) {
+      throw Object.assign(
+        new Error(
+          `Cannot complete order ${order.orderNumber}: no stock record for product ${item.product} at this branch`
+        ),
+        { statusCode: 400 }
+      );
+    }
+    deductions.push({ stock, quantity: item.quantity });
+  }
 
+  for (const { stock, quantity: itemQuantity } of deductions) {
     const oldQuantity = stock.quantity;
     // deductStock also releases the reservation taken at order creation, so
     // the reserved count does not leak.
-    await stock.deductStock(item.quantity);
+    await stock.deductStock(itemQuantity);
 
     await createMovementWithOldQuantity(stock, oldQuantity, {
       type: MOVEMENT_TYPES.SALE,

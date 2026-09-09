@@ -1294,3 +1294,115 @@ describe('Service API - read route query validation and scoping', () => {
     expect(res.body.data).toHaveLength(1);
   });
 });
+
+// GAP-017. POST / was the only route in serviceRoutes with a validator; the
+// four mutating PUTs and the DELETE went straight from authorize to the
+// controller. `updatePartsUsed` fed partsUsed to `for...of` with no check, so
+// {} threw and surfaced as a 500; `updatePayment` assigned amountPaid with no
+// numeric check, so "abc" persisted as NaN in a document no later save repairs.
+describe('Service API - mutating routes validate their input', () => {
+  const seed = async () => {
+    const admin = await createTestAdmin();
+    const branch = await createTestBranch();
+    const mechanic = await createTestMechanic(branch._id);
+    const order = await createTestServiceOrder(branch, mechanic.user, admin.user, {
+      status: 'in-progress'
+    });
+    return { admin, branch, mechanic, order };
+  };
+
+  it('answers 400, not 500, for an empty parts body', async () => {
+    const { admin, order } = await seed();
+
+    const res = await request(app)
+      .put(`/api/services/${order._id}/parts`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('rejects a non-array partsUsed', async () => {
+    const { admin, order } = await seed();
+
+    const res = await request(app)
+      .put(`/api/services/${order._id}/parts`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ partsUsed: 'not an array' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a part quantity below one', async () => {
+    const { admin, branch, order } = await seed();
+    const category = await createTestCategory();
+    const product = await createTestProduct(category);
+    await createTestStock(product, branch, { quantity: 10 });
+
+    const res = await request(app)
+      .put(`/api/services/${order._id}/parts`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ partsUsed: [{ product: product._id.toString(), quantity: 0 }] });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a non-numeric amountPaid rather than persisting NaN', async () => {
+    const { admin, order } = await seed();
+
+    const res = await request(app)
+      .put(`/api/services/${order._id}/payment`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ amountPaid: 'abc' });
+
+    expect(res.status).toBe(400);
+
+    const stored = await ServiceOrder.findById(order._id);
+    expect(Number.isNaN(stored.payment.amountPaid)).toBe(false);
+  });
+
+  it('rejects a malformed :id with 400 rather than 404 or 500', async () => {
+    const { admin } = await seed();
+
+    const res = await request(app)
+      .put('/api/services/not-an-id/status')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ status: 'completed' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects an out-of-enum status', async () => {
+    const { admin, order } = await seed();
+
+    const res = await request(app)
+      .put(`/api/services/${order._id}/status`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ status: 'teleported' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a non-MongoId mechanicId on assign', async () => {
+    const { admin, order } = await seed();
+
+    const res = await request(app)
+      .put(`/api/services/${order._id}/assign`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ mechanicId: 'nope' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('still accepts a well-formed status change', async () => {
+    const { admin, order } = await seed();
+
+    const res = await request(app)
+      .put(`/api/services/${order._id}/status`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ status: 'cancelled' });
+
+    expect(res.status).toBe(200);
+  });
+});

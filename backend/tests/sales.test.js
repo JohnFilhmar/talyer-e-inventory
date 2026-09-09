@@ -1385,3 +1385,121 @@ describe('Sales Order Management', () => {
     });
   });
 });
+
+// GAP-014 and GAP-019. Reservation used to happen inside the item loop, so a
+// later bad item returned early with the earlier items reserved forever:
+// availableQuantity is `quantity - reservedQuantity`, and nothing releases an
+// orphan reservation. GAP-019: a missing stock row on completion used to be
+// skipped, so revenue was booked for goods never deducted.
+describe('Sales order creation is all-or-nothing for reservations', () => {
+  const orderBody = (branch, items, extra = {}) => ({
+    branch: branch._id.toString(),
+    customer: { name: 'Walk In', phone: '09171234567' },
+    items,
+    paymentMethod: 'cash',
+    ...extra
+  });
+
+  it('reserves nothing when a later item is not stocked at the branch', async () => {
+    const admin = await createTestAdmin();
+    const category = await createTestCategory();
+    const branch = await createTestBranch();
+    const stocked = await createTestProduct(category, { sku: 'SKU-OK-1', barcode: 'BC-OK-1' });
+    const unstocked = await createTestProduct(category, { sku: 'SKU-NO-1', barcode: 'BC-NO-1' });
+    const stock = await createTestStock(stocked, branch, { quantity: 50, sellingPrice: 100 });
+
+    const res = await request(app)
+      .post('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send(
+        orderBody(branch, [
+          { product: stocked._id.toString(), quantity: 2 },
+          { product: unstocked._id.toString(), quantity: 1 }
+        ])
+      );
+
+    expect(res.status).toBe(404);
+
+    const after = await Stock.findById(stock._id);
+    expect(after.reservedQuantity).toBe(0);
+    expect(after.quantity).toBe(50);
+  });
+
+  it('reserves nothing when a later item is short', async () => {
+    const admin = await createTestAdmin();
+    const category = await createTestCategory();
+    const branch = await createTestBranch();
+    const plenty = await createTestProduct(category, { sku: 'SKU-OK-2', barcode: 'BC-OK-2' });
+    const scarce = await createTestProduct(category, { sku: 'SKU-LOW-2', barcode: 'BC-LOW-2' });
+    const plentyStock = await createTestStock(plenty, branch, { quantity: 50, sellingPrice: 100 });
+    const scarceStock = await createTestStock(scarce, branch, { quantity: 1, sellingPrice: 100 });
+
+    const res = await request(app)
+      .post('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send(
+        orderBody(branch, [
+          { product: plenty._id.toString(), quantity: 3 },
+          { product: scarce._id.toString(), quantity: 9 }
+        ])
+      );
+
+    expect(res.status).toBe(400);
+
+    expect((await Stock.findById(plentyStock._id)).reservedQuantity).toBe(0);
+    expect((await Stock.findById(scarceStock._id)).reservedQuantity).toBe(0);
+  });
+
+  it('rejects an order whose repeated lines exceed stock in total', async () => {
+    const admin = await createTestAdmin();
+    const category = await createTestCategory();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(category, { sku: 'SKU-DUP-3', barcode: 'BC-DUP-3' });
+    const stock = await createTestStock(product, branch, { quantity: 8, sellingPrice: 100 });
+
+    // Each line passes on its own; together they want 12 of 8.
+    const res = await request(app)
+      .post('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send(
+        orderBody(branch, [
+          { product: product._id.toString(), quantity: 6 },
+          { product: product._id.toString(), quantity: 6 }
+        ])
+      );
+
+    expect(res.status).toBe(400);
+
+    const after = await Stock.findById(stock._id);
+    expect(after.reservedQuantity).toBe(0);
+    expect(after.availableQuantity).toBe(8);
+  });
+
+  it('still reserves every item exactly once on a successful unpaid order', async () => {
+    const admin = await createTestAdmin();
+    const category = await createTestCategory();
+    const branch = await createTestBranch();
+    const a = await createTestProduct(category, { sku: 'SKU-A-4', barcode: 'BC-A-4' });
+    const b = await createTestProduct(category, { sku: 'SKU-B-4', barcode: 'BC-B-4' });
+    const stockA = await createTestStock(a, branch, { quantity: 20, sellingPrice: 100 });
+    const stockB = await createTestStock(b, branch, { quantity: 20, sellingPrice: 100 });
+
+    const res = await request(app)
+      .post('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send(
+        orderBody(
+          branch,
+          [
+            { product: a._id.toString(), quantity: 2 },
+            { product: b._id.toString(), quantity: 3 }
+          ],
+          { amountPaid: 0 }
+        )
+      );
+
+    expect(res.status).toBe(201);
+    expect((await Stock.findById(stockA._id)).reservedQuantity).toBe(2);
+    expect((await Stock.findById(stockB._id)).reservedQuantity).toBe(3);
+  });
+});

@@ -864,3 +864,94 @@ describe('User Management API', () => {
     // deactivated"), so no coverage is lost by leaving it out of this file.
   });
 });
+
+// GAP-009. normalizeEmail() on the admin user routes stripped Gmail dots and
+// +subaddressing, so an admin creating `maria.santos+branch2@gmail.com` stored
+// `mariasantos@gmail.com`. Login does not normalise, so the credentials the
+// admin handed over could never sign in, and editing an unrelated field on a
+// working account rewrote its email retroactively.
+//
+// Self-seeding: this block sits outside the suite that owns adminToken and
+// testBranch.
+describe('User API - the stored email is the one that was typed', () => {
+  const DOTTED = 'maria.santos+branch2@gmail.com';
+
+  const seed = async (code) => {
+    const branch = await Branch.create({
+      name: `Norm Branch ${code}`,
+      code,
+      address: {
+        street: '1 Norm St',
+        city: 'Norm City',
+        province: 'Norm Province',
+        postalCode: '12345',
+      },
+      contact: { phone: '555-0101', email: 'norm@test.com' },
+      isActive: true,
+    });
+    const admin = await createTestUser({
+      name: 'Norm Admin',
+      email: `norm-admin-${code}@test.com`,
+      password: 'admin123',
+      role: 'admin',
+      isActive: true,
+    });
+    return { branch, token: admin.token };
+  };
+
+  const createSalesperson = (token, branch, email, name = 'Maria Santos') =>
+    request(app)
+      .post('/api/users')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name,
+        email,
+        password: 'password123',
+        role: 'salesperson',
+        branch: branch._id.toString(),
+      });
+
+  it('stores a dotted, subaddressed Gmail address unchanged', async () => {
+    const { branch, token } = await seed('NRM1');
+
+    const res = await createSalesperson(token, branch, DOTTED);
+
+    expect(res.status).toBe(201);
+
+    const stored = await User.findOne({ email: DOTTED });
+    expect(stored).not.toBeNull();
+    expect(stored.email).toBe(DOTTED);
+  });
+
+  it('does not rewrite the email when an unrelated field is edited', async () => {
+    const { branch, token } = await seed('NRM2');
+    const created = await createSalesperson(token, branch, DOTTED);
+    expect(created.status).toBe(201);
+
+    const res = await request(app)
+      .put(`/api/users/${created.body.data._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Maria S. Santos' });
+
+    expect(res.status).toBe(200);
+
+    const stored = await User.findById(created.body.data._id);
+    expect(stored.email).toBe(DOTTED);
+  });
+
+  it('still lowercases, which the schema handles on its own', async () => {
+    const { branch, token } = await seed('NRM3');
+
+    const res = await createSalesperson(
+      token,
+      branch,
+      'Upper.Case+Tag@Gmail.com',
+      'Upper Case'
+    );
+
+    expect(res.status).toBe(201);
+
+    const stored = await User.findById(res.body.data._id);
+    expect(stored.email).toBe('upper.case+tag@gmail.com');
+  });
+});

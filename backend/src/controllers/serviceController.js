@@ -385,25 +385,40 @@ export const updateServiceOrderStatus = asyncHandler(async (req, res) => {
   }
 
   if (status === 'completed') {
-    // Deduct parts from stock
+    // Resolve every part's stock row before deducting any. A missing row used
+    // to be skipped silently, so the job completed and was billed while the
+    // parts were never taken off the shelf. Refusing up front also stops a
+    // later missing row leaving the order half-deducted.
+    const partDeductions = [];
     for (const part of order.partsUsed) {
       const stock = await Stock.findOne({
         product: part.product,
         branch: order.branch
       });
-      
-      if (stock) {
-        const oldQuantity = stock.quantity;
-        await stock.deductStock(part.quantity);
-        
-        // Log stock movement for service parts usage
-        await createMovementWithOldQuantity(stock, oldQuantity, {
-          type: MOVEMENT_TYPES.SERVICE_USE,
-          reference: { type: 'ServiceOrder', id: order._id },
-          notes: `Service order ${order.jobNumber} - parts used`,
-          performedBy: req.user._id,
-        });
+
+      if (!stock) {
+        return ApiResponse.error(
+          res,
+          400,
+          `Cannot complete job ${order.jobNumber}: no stock record for product ${part.product} at this branch`
+        );
       }
+
+      partDeductions.push({ stock, quantity: part.quantity });
+    }
+
+    // Deduct parts from stock
+    for (const { stock, quantity } of partDeductions) {
+      const oldQuantity = stock.quantity;
+      await stock.deductStock(quantity);
+
+      // Log stock movement for service parts usage
+      await createMovementWithOldQuantity(stock, oldQuantity, {
+        type: MOVEMENT_TYPES.SERVICE_USE,
+        reference: { type: 'ServiceOrder', id: order._id },
+        notes: `Service order ${order.jobNumber} - parts used`,
+        performedBy: req.user._id,
+      });
     }
 
     // Create transaction record if paid

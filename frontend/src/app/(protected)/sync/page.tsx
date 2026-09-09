@@ -165,6 +165,22 @@ export default function SyncPage() {
   const { entries, discard, retry, busyId } = useOutboxQueue();
   const [discardTarget, setDiscardTarget] = useState<OutboxEntry | null>(null);
 
+  // Retry was reachable only from the Rejected section, so a queue stalled by a
+  // 5xx while the device stayed online had no control anywhere: no `online`
+  // event fires when the interface never dropped, and useOutboxQueue only polls
+  // for display. The only recoveries were a page reload or toggling wifi.
+  const renderRetry = (entry: OutboxEntry) => (
+    <Button
+      size="sm"
+      variant="primary"
+      leftIcon={<RefreshCw className="w-4 h-4" />}
+      isLoading={busyId === entry.id}
+      onClick={() => retry(entry)}
+    >
+      Retry
+    </Button>
+  );
+
   const grouped = useMemo(() => {
     const rejected: OutboxEntry[] = [];
     const syncing: OutboxEntry[] = [];
@@ -256,15 +272,17 @@ export default function SyncPage() {
           />
           <Section
             title="Syncing"
-            hint="Currently being sent to the server."
+            hint="Currently being sent to the server. If one is stuck, Retry pushes the queue again; replay is idempotent, so a request that did reach the server will not be duplicated."
             badgeVariant="secondary"
             entries={grouped.syncing}
+            renderActions={renderRetry}
           />
           <Section
             title="Pending"
-            hint="Waiting for a connection to sync, oldest first."
+            hint="Waiting to sync, oldest first. Retry pushes the queue now, for when the server was down rather than the connection."
             badgeVariant="secondary"
             entries={grouped.pending}
+            renderActions={renderRetry}
           />
         </div>
       )}
