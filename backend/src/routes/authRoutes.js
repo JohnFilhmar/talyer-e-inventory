@@ -94,11 +94,13 @@ const resetPasswordValidation = [
 router.use(ensureCsrfToken);
 
 // Public routes
-// authLimiter (10 req/15 min) guards only the credential-and-token-issuing
-// endpoints below. /refresh-token, /logout, and /me are deliberately left to
-// the router-level apiLimiter (300 req/15 min) — they are called
-// automatically by the SPA on every protected-page mount / 401, so a strict
-// limiter there locks out normal users, not attackers.
+// authLimiter (10 req/15 min, keyed by IP alone: these are the routes reached
+// without a token) guards only the credential-and-token-issuing endpoints
+// below. /refresh-token, /logout, and /me are deliberately left to the
+// router-level apiLimiter (3000 req/15 min, keyed by the authenticated user
+// with an IP fallback) — they are called automatically by the SPA on every
+// protected-page mount / 401, so a strict limiter there locks out normal
+// users, not attackers.
 router.post('/register', authLimiter, registerValidation, register);
 router.post('/register-customer', authLimiter, customerRegisterValidation, registerCustomer);
 router.post('/login', authLimiter, loginValidation, login);

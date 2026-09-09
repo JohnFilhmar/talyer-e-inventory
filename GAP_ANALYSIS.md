@@ -47,8 +47,11 @@ guidance were right and the setting had drifted.
 
 **Wave 7 is closed as of 2026-09-10.** GAP-044, GAP-045, GAP-056 and GAP-057
 are fixed, along with GAP-058 which was raised into this wave. **Every wave in
-section 8 is now closed except Wave 8**, whose nine entries each need a decision
-from the owner before any code is written.
+section 8 is now closed except Wave 8.** Eight of its nine entries need a
+decision from the owner before any code is written. The ninth needed none:
+**GAP-039 was fixed on 2026-09-10**, a documentation correction its own Open
+questions field had recorded as requiring no decision, and which section 9's
+CONTRA-1 had already resolved in favour of the code.
 
 Three of the four turned up something their entry did not describe, and each
 note says what. GAP-056's shared guard had the same `String(x)` weakness the
@@ -179,8 +182,8 @@ time an entry's status drifted from the code; the wave audit checks membership,
 not whether a scheduled entry was actually recorded as done, which is the hole
 both slipped through.
 
-Remaining open: 9 of the 61 gaps now listed, and all nine are Wave 8: GAP-028,
-GAP-029, GAP-035, GAP-039, GAP-046, GAP-049, GAP-050, GAP-051 and GAP-052. None
+Remaining open: 8 of the 61 gaps now listed, and all eight are Wave 8: GAP-028,
+GAP-029, GAP-035, GAP-046, GAP-049, GAP-050, GAP-051 and GAP-052. None
 of them should be started from its checklist alone. Four change product or
 financial behaviour, three need infrastructure access or an owner decision, and
 the decision briefs are in section 9 and in each entry's Open questions. Two new entries were raised on
@@ -609,7 +612,10 @@ not because it is optional.
 ### Wave 8: requires a human decision first
 
 GAP-028, GAP-029, GAP-035, GAP-039, GAP-046, GAP-049, GAP-050, GAP-051, GAP-052.
-Do not start any of these from a checklist alone. GAP-029, GAP-046, GAP-049 and
+**GAP-039 closed on 2026-09-10, leaving eight.** It was the one member with no
+open question at all: a documentation correction to match the code, which
+CONTRA-1 had already adjudicated. Do not start any of the other eight from a
+checklist alone. GAP-029, GAP-046, GAP-049 and
 GAP-050 change product or financial behaviour; GAP-028, GAP-035 and GAP-051
 require infrastructure access or an owner decision. Their decision briefs are in
 section 9 and in each entry's Open questions field.
@@ -645,7 +651,11 @@ competing decision.
   `TRUST_PROXY` still matters for `authLimiter` and unauthenticated traffic, but
   no longer for authenticated requests.
 - **Decision required: none.** An agent may resolve this autonomously by editing
-  the two documentation sites to match the code. Do not change `rateLimit.js`.
+  the documentation sites to match the code. Do not change `rateLimit.js`.
+- **Resolved 2026-09-10** in favour of Position B, at four sites rather than the
+  two this register listed: `CLAUDE.md` under both *Security middleware* and
+  *Environment*, `backend/src/routes/authRoutes.js:98-100`, and
+  `mobile-app/docs/FEATURES.md:62`. `rateLimit.js` is unchanged. See GAP-039.
 
 ### CONTRA-2 (GAP-049): transaction numbers have two incompatible formats
 
@@ -5250,6 +5260,30 @@ None.
 
 ### GAP-039 [CONTRA] apiLimiter is documented as 300/IP and implemented as 3000/user
 
+> **FIXED 2026-09-10, Wave 8.** The documentation now states what
+> `rateLimit.js` implements: 3000 requests per 15 minutes on `apiLimiter`, keyed
+> by the verified JWT subject with an IP fallback for unauthenticated traffic,
+> and 10 per 15 minutes on `authLimiter`, keyed by IP alone because its routes
+> are the ones reached without a token. `rateLimit.js` is untouched, as this
+> entry required, and `git diff --stat` shows it absent from the change.
+>
+> **A fourth stale site the checklist did not list** was found by grepping for
+> the figure rather than trusting the entry's Location field:
+> `mobile-app/docs/FEATURES.md:62` also said "the general 300/15min limiter".
+> It is corrected too. Leaving it would have reproduced this contradiction in
+> the mobile client's own guide, which is where the next reader of that number
+> would have gone.
+>
+> The `TRUST_PROXY` paragraph under *Environment* needed the same correction as
+> the one under *Security middleware*. It said `express-rate-limit` "keys every
+> client by the direct TCP peer", which is now true only on the IP path;
+> authenticated requests key by user id and `TRUST_PROXY` does not reach them.
+>
+> The remaining "300" strings in this file are the evidence quotes in CONTRA-1
+> and in this entry's own Evidence field. They are the record of what was stale
+> and stay in place. The verification command below greps `CLAUDE.md` and
+> `backend/src/` only, and returns nothing.
+
 Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |
 Depends on none | Blocks none | Est. agent turns 2-3
@@ -6179,11 +6213,32 @@ None.
 > followed by a write, and the unique index then rejects the second insert with
 > a duplicate key that surfaces as a **500 rather than the documented 200 with
 > the existing order**. Measured, not inferred: exactly one order is created,
-> the stock is committed once, and the losing request's reservation is rolled
-> back rather than stranded, and `sync.ts` retries the 5xx so nothing is lost.
+> the stock is committed once, and `sync.ts` retries the 5xx so nothing is lost.
 > It is in this entry's scope rather than its own because answering 200 there
 > means deciding what the losing request does with its reservation, which is the
 > same decision this entry has to make.
+>
+> **Correction, 2026-09-10: the losing request's reservation is not always
+> rolled back.** This note previously said it was rolled back rather than
+> stranded, and the test asserts that with
+> `expect(after.reservedQuantity).toBe(0)`. Both were written from runs where
+> it held. It does not always hold. Running the full suite on a loaded machine,
+> where the whole run took 514 and 753 seconds rather than the usual 340, the
+> assertion failed with `Expected: 0, Received: 1` on two consecutive runs, and
+> the same suite passed in isolation on the same checkout minutes later. So the
+> outcome depends on how the two requests interleave, which is what an
+> unsynchronised read-then-write means.
+>
+> **The test is right and the code is wrong.** A stranded reservation is
+> exactly the leak GAP-014 closed on the ordinary failure paths and GAP-055
+> reconciles historically: it permanently reduces `availableQuantity` for a
+> product that was never sold. Do not loosen the assertion to make the suite
+> green. It is the only thing in the repository that has ever caught this, and
+> it will fail intermittently in CI until this entry is done.
+>
+> This also sharpens the decision this entry has to make. It is not only what
+> a losing replay should answer, but that the compensating release cannot be a
+> best-effort cleanup racing the failure it is compensating for.
 
 Severity S1 Critical | Complexity L | Difficulty D3 Specialist | Risk R3 |
 Confidence C1 Verified | Priority score 1.14 | Agent suitability HUMAN-FIRST |
@@ -7301,6 +7356,33 @@ is over-reserved.
 > `CodeQL` check run on the pull request is green with no new alerts; the count
 > on `refs/heads/master` is what the acceptance criteria measure and it is read
 > after the merge, since alerts are keyed per ref.
+>
+> **Measured on 2026-09-10, after PR #53 merged as `2fe85a8`.** The
+> `js/sql-injection` count on `refs/heads/master` is **25**, down from **53**.
+> The 28 alerts that closed all carry `fixed_at` of `2026-09-09T17:03Z`, the
+> analysis that ran on the merge commit, which is what separates them from the
+> Wave 6 merge earlier the same day: that one closed exactly one.
+>
+> **The "twenty-six" in this entry's title is a count of sinks, not of open
+> alerts**, and reading it as the baseline turns a met criterion into a failed
+> one: it predicts 26 down to 1 rather than 53 down to 25. The figure to
+> compare is the one measured on the ref before and after. This is recorded
+> because a handoff carried the wrong baseline forward and the next session
+> re-derived the whole measurement to find out which number was wrong.
+>
+> **Residual, found by that check and fixed on 2026-09-10.** Cross-checking
+> the 25 survivors against section 13.3 showed four still carrying a TRUE
+> POSITIVE verdict: **#26, #29, #33 and #34**, all in `serviceController.js`
+> (`body.assignedTo` at the create path, `body.mechanicId` at
+> `PUT /:id/assign`, and `body.partsUsed[].product` at both reads in
+> `PUT /:id/parts`). They were outside this entry's twenty-six because its
+> Location field never listed them. The acceptance criterion admits a survivor
+> only when it is dismissed with a cited barrier or has an entry saying why it
+> stands, and a TRUE POSITIVE with a route chain in front of it is neither:
+> GAP-017 gave those routes their chains, and this document's own rule is that
+> a chain in another module is not a substitute for narrowing at the sink. All
+> four now go through `asObjectId`. The other 21 survivors are FALSE POSITIVE
+> or LATENT in 13.3 and stand on those rows.
 
 Severity S3 Moderate | Complexity M | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 0.5 | Agent suitability AGENT-READY |
@@ -7793,7 +7875,7 @@ lines, no empty catch blocks, and no page importing axios directly.
 {"id":"GAP-036","cat":"OPS","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/utils/seedBranches.js","CLAUDE.md"],"title":"seedBranches.js self-executes on import with no main-module guard"},
 {"id":"GAP-037","cat":"OPS","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":[".gitignore","backend/src/middleware/imageUpload.js","backend/src/server.js"],"title":"The repo-root uploads directory is neither gitignored nor mounted"},
 {"id":"GAP-038","cat":"SEC","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/middleware/imageUpload.js"],"title":"Image processing returns the raw internal error message and path on 500"},
-{"id":"GAP-039","cat":"CONTRA","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["CLAUDE.md","backend/src/routes/authRoutes.js"],"title":"apiLimiter is documented as 300 per IP and implemented as 3000 per user"},
+{"id":"GAP-039","cat":"CONTRA","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["CLAUDE.md","backend/src/routes/authRoutes.js","mobile-app/docs/FEATURES.md"],"title":"apiLimiter is documented as 300 per IP and implemented as 3000 per user"},
 {"id":"GAP-040","cat":"CODE","sev":"S2","cplx":"M","diff":"D2","risk":"R3","conf":"C1","pri":1.25,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":["GAP-046","GAP-049"],"files":["backend/src/models/Counter.js","backend/src/utils/sequence.js","backend/src/controllers/salesController.js","backend/src/controllers/serviceController.js","backend/src/models/SalesOrder.js","backend/src/models/ServiceOrder.js","backend/src/models/StockTransfer.js","backend/src/models/Transaction.js","backend/src/models/Product.js","backend/src/models/StockMovement.js"],"title":"Every human-readable identifier is generated with countDocuments plus one"},
 {"id":"GAP-041","cat":"CODE","sev":"S2","cplx":"M","diff":"D3","risk":"R3","conf":"C1","pri":1.25,"agent":"AGENT-ASSISTED","depends_on":["GAP-040"],"blocks":[],"files":["backend/src/utils/currency.js","backend/src/models/SalesOrder.js","backend/src/models/ServiceOrder.js","backend/src/utils/salesCompletion.js"],"title":"All money is IEEE-754 floating point with no rounding at any boundary"},
 {"id":"GAP-042","cat":"FEAT","sev":"S2","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":1.25,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":[],"files":["frontend/src/app/(protected)/dashboard/page.tsx"],"title":"The dashboard, the post-login landing page, is entirely non-functional"},
@@ -7931,6 +8013,12 @@ relative to `backend/src/routes/`.
 | 42 | `userController.js:74` | `query.search (regex)` | GET /users: full chain, query('search').trim() userRoutes.js:18-45 | FALSE POSITIVE | FP-A |
 | 45 | `userController.js:128` | `body.branch` | POST /users: body('branch').optional().isMongoId() userRoutes.js:69-71 | FALSE POSITIVE | FP-A |
 | 46 | `userController.js:212` | `body.branch` | PUT /users/:id: body('branch').optional({values:'null'}).isMongoId() userRoutes.js:94-96 | FALSE POSITIVE | FP-A |
+
+**Four rows are superseded.** #26, #29, #33 and #34 were still TRUE POSITIVE
+and still open on `refs/heads/master` when the count was measured on
+2026-09-10. Their sinks now narrow through `asObjectId`, so the verdicts above
+describe the code as triaged on 2026-09-07 rather than the code today. See
+GAP-056's note.
 
 ### 13.4 What CodeQL actually accepts as a barrier
 

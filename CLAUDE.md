@@ -105,15 +105,33 @@ same file already use.
 'cross-origin' } })` globally — the relaxed CORP is required so the frontend, on a different
 origin, can still load product images from `/uploads`.
 
-`authLimiter` (10 requests/15 min) and `apiLimiter` (300 requests/15 min) live in
+`authLimiter` (10 requests/15 min) and `apiLimiter` (3000 requests/15 min) live in
 [middleware/rateLimit.js](backend/src/middleware/rateLimit.js). `apiLimiter` is mounted on every
 router including `/api/auth`; `authLimiter` is applied per-route in
 [authRoutes.js](backend/src/routes/authRoutes.js) to the five credential endpoints only —
 `/register`, `/register-customer`, `/login`, `/forgot-password`, `/reset-password`. Do not move it
 back onto the whole router: `/me` and `/refresh-token` are called on every protected page mount
 and on every token expiry, so a strict limiter there locks out a whole office sharing one IP.
-Both `skip` whenever `NODE_ENV === 'test'`, so the Jest suites never see rate limiting. Both key
-clients by `req.ip`, which is why `TRUST_PROXY` (see Environment) matters behind any reverse proxy.
+Both `skip` whenever `NODE_ENV === 'test'`, so the Jest suites never see rate limiting.
+
+**The two key differently.** `authLimiter` keys by IP alone: its routes are the ones reached
+without a token, so there is no user to key by, and bounding guessing from one source is the whole
+point. `apiLimiter` keys through `userOrIpKey`, which prefers the authenticated user (`user:<id>`)
+and falls back to the client IP (`ip:<address>`) only for unauthenticated traffic. Two details are
+load-bearing. The token is **verified**, not merely decoded: an unverified token used as a key
+lets anyone mint arbitrary strings and take a fresh bucket per request, which removes rate
+limiting rather than scoping it, and a token that fails verification falls through to the IP
+bucket without that being an auth decision, since `protect` still runs and still rejects it. And
+the fallback goes through `ipKeyGenerator` rather than raw `req.ip`, which is what truncates IPv6:
+an untruncated v6 address gives one client a fresh bucket per request, because it can vary the low
+bits at will.
+
+`TRUST_PROXY` (see Environment) therefore governs the IP path only. It matters for `authLimiter`
+and for unauthenticated traffic on `apiLimiter`; authenticated requests key by user id and are
+unaffected by it. The 3000 ceiling is sized for staff doing sustained bulk work rather than for an
+anonymous public API: saving one product also invalidates and refetches the detail and the list,
+so real work costs roughly ten requests per edit, and the old shared 300 ran out after about
+thirty edits and then locked the user out for the rest of a fixed fifteen-minute window.
 
 **Narrow request values where they are used.** Every value that reaches a Mongo filter goes
 through [utils/narrowing.js](backend/src/utils/narrowing.js) in the controller that uses it:
@@ -623,11 +641,12 @@ expiry is hardcoded to 10 minutes in `getResetPasswordToken()` in
 
 `TRUST_PROXY` ([utils/trustProxy.js](backend/src/utils/trustProxy.js)) is the number of
 reverse-proxy hops in front of the app, defaulting to `0`. At `0`, Express's `trust proxy`
-setting is off, so `X-Forwarded-For` is ignored and `express-rate-limit` keys every client by
-the direct TCP peer — correct when the app is exposed directly, and it stops a client from
-spoofing the header to dodge rate limiting. Behind a reverse proxy or load balancer it must be
-raised to the real hop count, or every client collapses into one shared bucket and `authLimiter`
-locks out everyone at once.
+setting is off, so `X-Forwarded-For` is ignored and `express-rate-limit` resolves the IP of a
+client it is keying by IP to the direct TCP peer — correct when the app is exposed directly, and
+it stops a client from spoofing the header to dodge rate limiting. Behind a reverse proxy or load
+balancer it must be raised to the real hop count, or every client on the IP path collapses into
+one shared bucket and `authLimiter` locks out everyone at once. It has no effect on `apiLimiter`
+for authenticated requests, which key by the verified user id rather than an address.
 
 Frontend `.env.local`: `NEXT_PUBLIC_API_URL` (must carry the `/api` suffix — see below) and
 `NEXT_PUBLIC_IMAGE_HOST` (the origin serving `/uploads` images; consumed by
