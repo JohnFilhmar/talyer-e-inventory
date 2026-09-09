@@ -1,0 +1,35 @@
+# Gitleaks configuration.
+#
+# The default rules are kept in full; this only adds one narrow allowlist.
+#
+# Why it exists: gitleaks' `generic-api-key` rule is entropy-based, and the
+# password fixtures in the backend test suites clear its threshold. It flagged
+# `password: 'brandnewpass123'` in `backend/tests/auth.test.js` at entropy 3.51.
+# That string is a fixture typed into a test, not a credential: the suites run
+# against an in-memory MongoDB with secrets injected by `tests/setup/testEnv.js`,
+# and no test reads a real environment.
+#
+# The fixture was renamed to the low-entropy one the rest of the file uses, but
+# a scan of a pull request covers the whole commit range, so a string that has
+# ever been committed keeps failing the job after the file is fixed. Rewriting
+# published history to erase a non-secret would be the more disruptive answer.
+#
+# Scope is deliberately tight, so this cannot hide a real leak:
+#   - test files under backend/tests only, never src, never config, never
+#     anything outside the backend package;
+#   - and only the specific fixture strings listed below, so a genuine key
+#     committed into a test file still fails the job.
+title = "talyer-e-inventory"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Password fixtures in backend test suites, matched literally"
+paths = ['''backend/tests/.*\.test\.js''']
+regexes = [
+  '''brandnewpass123''',
+  '''newpassword123''',
+  '''oldpassword123''',
+  '''password123''',
+]
