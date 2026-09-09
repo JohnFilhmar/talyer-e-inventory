@@ -6,6 +6,8 @@ export { Button } from './Button';
 export { Alert } from './Alert';
 export { Spinner } from './Spinner';
 export { Modal } from './Modal';
+export { Pagination } from './Pagination';
+export type { PaginationProps } from './Pagination';
 export { Combobox } from './Combobox';
 export type { ComboboxOption } from './Combobox';
 export { CollapsibleSection } from './CollapsibleSection';

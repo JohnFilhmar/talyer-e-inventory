@@ -156,8 +156,8 @@ export const TransferList: React.FC<TransferListProps> = ({
               const toBranch = isPopulatedStockBranch(transfer.toBranch)
                 ? transfer.toBranch.name
                 : 'Unknown';
-              const requestedBy = isPopulatedTransferUser(transfer.requestedBy)
-                ? `${transfer.requestedBy.firstName} ${transfer.requestedBy.lastName}`
+              const requestedBy = isPopulatedTransferUser(transfer.initiatedBy)
+                ? transfer.initiatedBy.name
                 : '';
               
               const statusConfig = getStatusConfig(transfer.status);

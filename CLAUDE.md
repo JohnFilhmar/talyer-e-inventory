@@ -217,6 +217,26 @@ Do not replace the helper with `Math.round(value * 100) / 100`. That is the bug,
 `1.005 * 100` is `100.49999999999999` and rounds down. The helper shifts the decimal exponent
 through `toExponential`, which is exact and also survives values already in exponential notation.
 
+### Stock lists are server-filtered and paginated
+
+`GET /stock` and `GET /stock/branch/:branchId` take `page`, `limit` and `search`. The search matches
+the product's name, SKU, barcode, brand and `productModel`, and because `Stock` references
+`Product` rather than copying its fields, it resolves product ids first and filters by them. Do not
+move that filtering back into the browser: the list paginates, so a client-side filter searches
+only the rows already on screen, and a shop with 300 SKUs cannot reach page four's product from
+page one.
+
+Two frontend reads deliberately walk every page instead of paginating
+([lib/services/stockService.ts](frontend/src/lib/services/stockService.ts)): `getByBranch`, which
+backs the New Sale picker and the offline mirror behind it, and `getAllPages`, which backs the
+transfer modal. Both need the whole set, the picker because it filters by motorcycle fitment and no
+endpoint can express that, and both are bounded at 50 pages of `MAX_LIMIT`.
+
+**Ordering is still not server-side** (GAP-057). `.sort({ 'product.name': 1 })` in
+`stockController` sorts on a path `Stock` does not have, because `populate` is a second query run
+after the sort; the stock page then reorders the page it fetched. Fixing it needs an aggregation
+with `$lookup`.
+
 ### StockMovement ledger
 
 `StockMovement` is an append-only audit trail. Every quantity change follows the same three

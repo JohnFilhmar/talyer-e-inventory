@@ -22,8 +22,12 @@ export interface Stock {
   sellingPrice: number;
   supplier?: StockSupplier | string;
   location?: string;
-  lastRestocked?: string;
-  lastRestockedBy?: string;
+  // `lastRestockedAt` on the model, and `lastRestockedBy` is populated with
+  // `'name'` rather than left as an id. Nothing renders either today, so this
+  // was latent: the first component to show a "last restocked" column would
+  // have shown a blank one.
+  lastRestockedAt?: string;
+  lastRestockedBy?: TransferUser | string;
   createdAt: string;
   updatedAt: string;
   /** Virtual field - quantity - reservedQuantity */
@@ -109,11 +113,15 @@ export interface StockTransfer {
   toBranch: StockBranch | string;
   quantity: number;
   status: TransferStatus;
-  requestedBy: TransferUser | string;
-  shippedBy?: TransferUser | string;
-  completedBy?: TransferUser | string;
+  // These four are named for `backend/src/models/StockTransfer.js`. They were
+  // `requestedBy`, `shippedBy`, `completedBy` and `completedAt`, none of which
+  // the model has. Every read returned undefined, and because the fields were
+  // optional or widened to `| string`, TypeScript never said so.
+  initiatedBy: TransferUser | string;
+  approvedBy?: TransferUser | string;
+  receivedBy?: TransferUser | string;
   shippedAt?: string;
-  completedAt?: string;
+  receivedAt?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -125,12 +133,16 @@ export interface StockTransfer {
 export type TransferStatus = 'pending' | 'in-transit' | 'completed' | 'cancelled';
 
 /**
- * User reference in transfer
+ * User reference in transfer.
+ *
+ * The `User` model has a single `name`, and every transfer read populates these
+ * refs with exactly `'name'`. `firstName`/`lastName` never existed, so the
+ * "by whom" line rendered `undefined undefined` at best and, because the type
+ * guard demanded them, never rendered at all.
  */
 export interface TransferUser {
   _id: string;
-  firstName: string;
-  lastName: string;
+  name: string;
 }
 
 /**
@@ -201,6 +213,12 @@ export interface UpdateTransferStatusPayload {
 export interface StockListParams {
   branch?: string;
   product?: string;
+  /**
+   * Free text matched server-side against the product's name, SKU, barcode,
+   * brand and productModel. Server-side because the list paginates: filtering
+   * the fetched page in the browser searches only the rows on screen.
+   */
+  search?: string;
   lowStock?: string;
   outOfStock?: string;
   page?: number;

@@ -9,6 +9,73 @@ import CacheUtil from '../utils/cache.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
 import { CACHE_TTL, USER_ROLES, PAGINATION } from '../config/constants.js';
 import { resolveBranchScope, canAccessBranch } from '../utils/branchScope.js';
+import { escapeRegex } from '../utils/regex.js';
+
+/**
+ * Resolve a free-text search to the product ids it matches.
+ *
+ * `Stock` holds a reference to `Product`, not a copy of its name or SKU, so a
+ * text search over stock has to resolve products first and filter by id. This
+ * is the same two-step `getBranchStock` already used for its category filter.
+ *
+ * The search exists because the stock list paginates. Filtering the fetched
+ * page in the browser, which is what the page used to do, searches only the
+ * rows that happen to be on screen: with 300 SKUs and a 20-row page, a product
+ * on page four is unfindable from page one and nothing says so.
+ *
+ * @param {string} search
+ * @returns {Promise<Array<import('mongoose').Types.ObjectId>>}
+ */
+const productIdsMatchingSearch = async (search) => {
+  const pattern = new RegExp(escapeRegex(search), 'i');
+  const products = await Product.find({
+    $or: [
+      { name: pattern },
+      { sku: pattern },
+      { barcode: pattern },
+      { brand: pattern },
+      { productModel: pattern },
+    ],
+  })
+    .select('_id')
+    .lean();
+
+  return products.map((product) => product._id);
+};
+
+/**
+ * Narrow `query.product` to the intersection of what is already there and a new
+ * id list.
+ *
+ * Assigning `{ $in: ids }` unconditionally would drop an existing `product`
+ * filter, so a search combined with a product filter would silently widen back
+ * to the whole search. An empty result must stay empty: the previous category
+ * filter skipped itself when it matched nothing, which turned "no products in
+ * this category" into "every product in this branch".
+ *
+ * @param {object} query
+ * @param {Array<import('mongoose').Types.ObjectId|string>} ids
+ */
+const restrictToProducts = (query, ids) => {
+  const asStrings = ids.map(String);
+
+  if (!query.product) {
+    query.product = { $in: ids };
+    return;
+  }
+
+  if (query.product.$in) {
+    const existing = query.product.$in.map(String);
+    const kept = new Set(existing.filter((id) => asStrings.includes(id)));
+    query.product = { $in: ids.filter((id) => kept.has(String(id))) };
+    return;
+  }
+
+  // A single explicit product id: keep it only if it survives the new filter.
+  query.product = asStrings.includes(String(query.product))
+    ? query.product
+    : { $in: [] };
+};
 
 /**
  * Rejects bringing more of a product into stock when the product is archived.
@@ -47,6 +114,7 @@ export const getAllStock = asyncHandler(async (req, res) => {
   const {
     branch,
     product,
+    search,
     lowStock,
     outOfStock,
     page = 1,
@@ -70,6 +138,10 @@ export const getAllStock = asyncHandler(async (req, res) => {
 
   if (product) {
     query.product = product;
+  }
+
+  if (search) {
+    restrictToProducts(query, await productIdsMatchingSearch(search));
   }
 
   if (lowStock === 'true') {
@@ -117,7 +189,7 @@ export const getAllStock = asyncHandler(async (req, res) => {
  */
 export const getBranchStock = asyncHandler(async (req, res) => {
   const { branchId } = req.params;
-  const { category, lowStock, page = 1, limit = 50 } = req.query;
+  const { category, search, lowStock, page = 1, limit = 50 } = req.query;
 
   // Check if branch exists
   const branch = await Branch.findById(branchId);
@@ -137,16 +209,19 @@ export const getBranchStock = asyncHandler(async (req, res) => {
   const limitNum = Math.min(parseInt(limit), PAGINATION.MAX_LIMIT);
   const skip = (pageNum - 1) * limitNum;
 
-  // Build product filter if category specified
-  let productQuery = {};
+  // Narrow by category, then by search. Both resolve to product ids because
+  // Stock references Product rather than copying its fields.
+  //
+  // Note the empty case is now honoured. This used to apply the category filter
+  // only when it matched at least one product, so a category with nothing in it
+  // returned the branch's entire stock list instead of nothing.
   if (category) {
-    productQuery.category = category;
+    const products = await Product.find({ category }).select('_id').lean();
+    restrictToProducts(query, products.map((p) => p._id));
   }
 
-  // Get products matching category filter
-  const products = category ? await Product.find(productQuery).select('_id') : null;
-  if (products && products.length > 0) {
-    query.product = { $in: products.map(p => p._id) };
+  if (search) {
+    restrictToProducts(query, await productIdsMatchingSearch(search));
   }
 
   const [stockRecords, total] = await Promise.all([

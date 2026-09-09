@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { stockService } from '@/lib/services/stockService';
 import {
+  withOfflineList,
   withOfflinePaginatedList,
   withOfflineScopedList,
   withOfflineScopedPaginatedList,
@@ -56,6 +57,27 @@ export function useStock(
     queryKey: stockKeys.list(params),
     queryFn: () => withOfflinePaginatedList('stock', () => stockService.getAll(params)),
     staleTime: 30 * 1000, // 30 seconds
+    ...options,
+  });
+}
+
+/**
+ * Hook to fetch every stock row, across all pages.
+ *
+ * For callers that need the whole set rather than a page: the transfer modal
+ * builds its product list from it, and it used to see whatever a single
+ * unparameterised request returned, which is the API's 20-row default.
+ *
+ * A screen that shows rows to a person should use `useStock` and paginate.
+ */
+export function useAllStock(
+  params: StockListParams = {},
+  options?: Partial<UseQueryOptions<Stock[], Error>>
+) {
+  return useQuery<Stock[], Error>({
+    queryKey: [...stockKeys.lists(), 'all-pages', params] as const,
+    queryFn: () => withOfflineList('stock', () => stockService.getAllPages(params)),
+    staleTime: 30 * 1000,
     ...options,
   });
 }

@@ -45,6 +45,26 @@ bringing reality back in line with `docs/DEPLOYMENT.md:46`, which had said
 "public" throughout. No documentation change is needed; the code and the deploy
 guidance were right and the setting had drifted.
 
+**Wave 6 is closed as of 2026-09-09.** GAP-040, GAP-041, GAP-042, GAP-043 and
+GAP-047 are fixed. Two of the five needed more than the entry described, and the
+notes say so on each: GAP-040 listed eight identifier-generation sites and there
+are eleven, three of them writing transaction numbers in a format the model does
+not document, and GAP-043's checklist would have left the stock page's search
+box filtering only the rows already on screen once the list paginated, so the
+search moved to the server.
+
+**GAP-057 was raised on 2026-09-09** out of GAP-043. Ordering was never applied
+server-side at all: `Stock` has no `product.name` path, so the API's own
+`.sort({ 'product.name': 1 })` sorts on a field that does not exist, and the
+page then reorders whatever it fetched. Paginating an unordered list is the
+worse half of that, since a row can appear on two pages or none. Scheduled in
+Wave 7, serialised behind GAP-056 because both edit `stockController.js`.
+
+**GAP-025's residual is settled**, half done and half deliberately refused:
+`mobile-app` now has a Dependabot entry, and it is deliberately absent from the
+auto-merge allow-list because `mobile-check` runs no tests, so a green run there
+proves only that the app compiles. Both files say so in place.
+
 **Wave 5 is closed as of 2026-09-09**, all ten entries. GAP-021, GAP-023,
 GAP-024, GAP-025, GAP-030, GAP-034, GAP-038, GAP-048 and GAP-055 were fixed
 first. **GAP-027 was left half done deliberately** because its memory limits
@@ -131,7 +151,7 @@ time an entry's status drifted from the code; the wave audit checks membership,
 not whether a scheduled entry was actually recorded as done, which is the hole
 both slipped through.
 
-Remaining open: 17 of the 59 gaps now listed. Two new entries were raised on
+Remaining open: 13 of the 60 gaps now listed. Two new entries were raised on
 2026-09-08 from findings surfaced while working Wave 2 and deliberately not
 fixed there: **GAP-053** (the refresh cookie repeats GAP-005's fail-open shape,
 left alone because the naive inversion breaks local HTTP login) and
@@ -350,6 +370,7 @@ S1=8, S2=5, S3=2, S4=1; C1=1.0, C2=0.8, C3=0.5; XS=1, S=2, M=4, L=7, XL=12.
 | 57 | GAP-056 | SEC | Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible | S3 | M | D2 | R1 | C1 | 0.5 | READY |
 | 58 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
 | 59 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
+| 60 | GAP-057 | CODE | Stock list sorting orders one page, and the API's own sort key has never applied | S3 | M | D2 | R1 | C1 | 0.5 | READY |
 
 **Order overrides.** One was needed, and the original claim that none were was
 wrong. Three of the four dependency edges (GAP-014 -> GAP-046,
@@ -376,11 +397,11 @@ is S1 because a mechanic, the lowest-privileged role that can reach the route,
 can make a stock deduction land on a product they did not name while the ledger
 records it as correct.
 
-**CODE (20)**: GAP-003 (8.0), GAP-006 (5.0), GAP-009 (5.0), GAP-010 (5.0),
+**CODE (21)**: GAP-003 (8.0), GAP-006 (5.0), GAP-009 (5.0), GAP-010 (5.0),
 GAP-013 (5.0), GAP-014 (4.0), GAP-016 (2.5), GAP-018 (2.5), GAP-019 (2.5),
 GAP-020 (2.5), GAP-022 (2.5), GAP-026 (2.5), GAP-029 (2.0), GAP-031 (2.0),
 GAP-032 (2.0), GAP-034 (2.0), GAP-040 (1.25), GAP-041 (1.25), GAP-046 (1.14),
-GAP-047 (1.0).
+GAP-047 (1.0), GAP-057 (0.5).
 
 **OPS (10)**: GAP-011 (5.0), GAP-023 (2.5), GAP-024 (2.5), GAP-027 (2.5),
 GAP-028 (2.0), GAP-036 (2.0), GAP-037 (2.0), GAP-055 (2.0), GAP-048 (1.0),
@@ -414,9 +435,9 @@ GAP-015c, GAP-016, GAP-017,
 GAP-018, GAP-019, GAP-020, GAP-021, GAP-022, GAP-023, GAP-024, GAP-025, GAP-026,
 GAP-027, GAP-029, GAP-030, GAP-047, GAP-048, GAP-049.
 
-**M: 10 gaps, several modules, one design choice each.** GAP-015d, GAP-056,
+**M: 11 gaps, several modules, one design choice each.** GAP-015d, GAP-056,
 GAP-028,
-GAP-040, GAP-041, GAP-042, GAP-043, GAP-044, GAP-045, GAP-052.
+GAP-040, GAP-041, GAP-042, GAP-043, GAP-044, GAP-045, GAP-052, GAP-057.
 
 **L: 3 gaps, cross-cutting, plan before code.** GAP-046, GAP-050, GAP-051.
 
@@ -538,11 +559,14 @@ GAP-040, GAP-041, GAP-042, GAP-043, GAP-047. GAP-040 and GAP-041 both touch
 `SalesOrder.js` and `ServiceOrder.js`, so serialise them: GAP-040 first.
 GAP-042, GAP-043 and GAP-047 are frontend-only and disjoint from each other.
 
-### Wave 7: verification and alert cleanup (3 gaps, parallel)
+### Wave 7: verification and alert cleanup (4 gaps, one pair serialised)
 
-GAP-044, GAP-045 and GAP-056. GAP-044 and GAP-045 add test files only: GAP-044
-creates new suites, GAP-045 rewrites `backend/tests/branch.test.js`. GAP-056
-edits five controllers and is disjoint from both. It sits this late because it
+GAP-044, GAP-045, GAP-056 and GAP-057. GAP-044 and GAP-045 add test files
+only: GAP-044 creates new suites, GAP-045 rewrites
+`backend/tests/branch.test.js`. GAP-056 edits five controllers and is disjoint
+from both. **GAP-057 also edits `stockController.js`, so it and GAP-056 are
+serialised rather than parallel**; GAP-056 first, since it is the smaller edit
+to that file. It sits this late because it
 is cleanup of alerts whose exploitability was already closed in earlier waves,
 not because it is optional.
 
@@ -5579,6 +5603,35 @@ way, since the two agree on every value that is not exactly a half centavo.
 
 ### GAP-042 [FEAT] The dashboard, the post-login landing page, is entirely non-functional
 
+> **FIXED 2026-09-09, Wave 6.** `QuickAction` destructures `href` and renders a
+> `Link`. It had declared the prop, never read it, and rendered a bare `<button>`
+> with no handler, so every action on the first screen after login did nothing.
+> The paths are checked against the routes that exist: `/inventory`,
+> `/inventory/new` and `/reports` are none of them. They are `/stock` and
+> `/products/new` now, and the reports action is removed rather than pointed
+> somewhere, since there is no reports page and building one is out of scope.
+>
+> The four placeholder stat cards show real figures, composed from endpoints
+> that already exist rather than from a new aggregate endpoint. For an admin or
+> a salesperson: today's sales, pending orders, low-stock items and jobs in
+> progress. Each card links to the list it counts.
+>
+> **Role gating is a correctness matter here, not a nicety.** `GET /sales/stats`
+> and `GET /stock/low-stock` are both `authorize(ADMIN, SALESPERSON)`, and a
+> hook cannot be called conditionally, so calling them unconditionally would
+> give every mechanic two 403s on the landing page. The cards are two
+> components, chosen by role: a mechanic sees their own jobs in progress and
+> their scheduled jobs, from the mechanic-only `GET /services/my-jobs`. A role
+> with no readable figures, such as a customer, gets no stats block at all
+> rather than an empty grid.
+>
+> Nothing passes a branch. Non-admins are already clamped to their own branch by
+> the server, and an admin legitimately wants the whole business, so these
+> numbers are scoped exactly the way every other list in the app is.
+>
+> Each card renders a spinner while loading and the word Unavailable on error,
+> so a failed request is visible rather than showing as a confident zero.
+
 Severity S2 Major | Complexity M | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 1.25 | Agent suitability AGENT-ASSISTED |
 Depends on none | Blocks none | Est. agent turns 6-12
@@ -5666,14 +5719,60 @@ Revert the page. It returns to being inert.
 
 **Open questions**
 
-Which four figures does the owner actually want on the dashboard, and should they
-be branch-scoped for admins or show all branches? The placeholders give no
-indication of intent, so I would otherwise be inventing a product spec, which is
-why this is AGENT-ASSISTED.
+Answered by implementation on 2026-09-09, and worth confirming.
+
+The figures shipped are today's sales, pending orders, low-stock items and jobs
+in progress for an admin or salesperson, and my jobs in progress and scheduled
+for me for a mechanic. They were chosen because each one is actionable on the
+spot and each already had an endpoint; the placeholders they replaced were
+Total Products, Active Customers, Pending Jobs and Today's Sales, and of those
+"Active Customers" has no endpoint at all, since customers exist only as names
+embedded in orders.
+
+Scoping follows the rest of the app: an admin sees every branch, everyone else
+sees their own, because the server clamps them. Say so if you want a different
+four, or admin figures scoped to one branch with a picker.
 
 ---
 
 ### GAP-043 [FEAT] Stock lists are silently truncated to one unpaginated page
+
+> **FIXED 2026-09-09, Wave 6.** The stock page is server-driven now: one
+> `GET /stock` call carrying branch, search, the two stock-level flags, a page
+> and a limit, with real pagination controls and a footer that reads the
+> server's total. It previously ran two unparameterised queries, took the API's
+> 20-row and 50-row defaults, and reported its own row count as the total, so a
+> shop with 300 SKUs saw 20 and was told "Showing 20 of 20 stock records".
+>
+> **The entry's checklist would have left the search box lying, so the fix went
+> further than the checklist.** Paginating a list whose search filters the
+> fetched page means the search covers only the rows already on screen. `GET
+> /stock` and `GET /stock/branch/:branchId` therefore accept a `search`
+> parameter, matched against the product's name, SKU, barcode, brand and
+> productModel. `Stock` references `Product` rather than copying its fields, so
+> the search resolves product ids first and filters by them, which is the same
+> two-step the category filter already used.
+>
+> That work surfaced a live bug in the category filter: it applied itself only
+> when it matched at least one product, so filtering by an empty category
+> returned the branch's entire stock list instead of nothing. Fixed, with a
+> test.
+>
+> **The New Sale picker keeps its own read, deliberately not the one the entry
+> proposed.** Switching it to `GET /products/search` would have broken offline
+> order creation, which is built on the branch stock mirror, and lost the
+> fitment filter, which no endpoint can express. `stockService.getByBranch`
+> walks every page instead, so the picker sees the whole branch and the mirror
+> still holds it. The transfer modal gets the same treatment through a new
+> `useAllStock`.
+>
+> `components/ui/Pagination.tsx` is new and shared, because the products page
+> already carried two copies of the same block.
+>
+> **Sorting is still client-side over the fetched page**, and that is now a
+> smaller lie than it was but still a lie, so it is raised as GAP-057 rather
+> than left implied. Backend: 26 suites, 792 tests, with 8 new stock tests.
+> Frontend lint 0 errors, build clean.
 
 Severity S2 Major | Complexity M | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 1.25 | Agent suitability AGENT-READY |
@@ -5753,6 +5852,10 @@ cd frontend && npm run lint && npm run build
 Do not raise the server-side `MAX_LIMIT` to avoid paginating. Do not remove the
 offline fallback in the stock hooks. Do not change the query-key factory shape
 beyond adding the pagination parameters.
+
+All three held. The page-walking reads request `MAX_LIMIT` per page and loop,
+bounded at 50 pages, rather than asking for a larger page than the server
+allows.
 
 **Rollback**
 
@@ -6071,6 +6174,27 @@ be answered before an agent starts rather than discovered midway.
 ---
 
 ### GAP-047 [CODE] Frontend types drift from the API contract at four points
+
+> **FIXED 2026-09-09, Wave 6.** All four points now name what the API sends.
+>
+> `StockTransfer` declared `requestedBy`, `shippedBy`, `completedBy` and
+> `completedAt`; the model has `initiatedBy`, `approvedBy`, `receivedBy`,
+> `shippedAt` and `receivedAt`. `TransferUser` declared `firstName` and
+> `lastName`; `User` has a single `name`, and every transfer read populates
+> these refs with exactly `'name'`. `TransferList`'s type guard demanded the
+> two absent fields, so the "by whom" line never rendered at all rather than
+> rendering wrongly.
+>
+> `PaginationInfo` declared `hasNextPage` and `hasPrevPage` as `boolean`, which
+> no endpoint has ever sent. Typed non-optional, `if (pagination.hasNextPage)`
+> compiled cleanly and was always false. They are gone, replaced by two derived
+> helpers over `page` and `pages`. One caller was constructing the two booleans
+> by hand to satisfy the type; it no longer needs to.
+>
+> `lastRestocked` is `lastRestockedAt`, and `lastRestockedBy` is typed as
+> populated-or-id because the controller populates it with `'name'`. Both were
+> latent, since nothing renders them yet; the first component to add a "last
+> restocked" column would have shown a blank one.
 
 Severity S3 Moderate | Complexity S | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 1.0 | Agent suitability AGENT-READY |
@@ -7128,6 +7252,100 @@ None.
 
 ---
 
+### GAP-057 [CODE] Stock list sorting orders one page, and the API's own sort key has never applied
+
+Severity S3 Moderate | Complexity M | Difficulty D2 Standard | Risk R1 |
+Confidence C1 Verified | Priority score 0.5 | Agent suitability AGENT-READY |
+Depends on none | Blocks none | Est. agent turns 6-12
+
+**Location**
+- `backend/src/controllers/stockController.js:97` (`.sort({ 'branch.name': 1, 'product.name': 1 })`)
+- `backend/src/controllers/stockController.js:236` (`.sort({ 'product.name': 1 })`)
+- `frontend/src/app/(protected)/stock/page.tsx` (the `filteredStock` comparator and the `SORT_FIELDS` control)
+
+**Evidence**
+
+```js
+// backend/src/controllers/stockController.js: Stock has no `product.name` path
+  Stock.find(query)
+    .populate({ path: 'product', select: 'sku name brand ...' })
+    .sort({ 'branch.name': 1, 'product.name': 1 })
+```
+
+`populate` is a second query issued after the first one has already been sorted
+and paginated, so a sort key naming a populated document's field sorts on a path
+that does not exist on the `Stock` document.
+
+**What is wrong**
+
+Two separate problems that look like one. The API's declared ordering never
+takes effect, so pages come back in whatever order the index yields. And the
+stock page sorts in the browser, over the page it has, so choosing "sort by
+quantity" reorders 25 rows out of 300 while the control implies otherwise.
+
+**Why it matters**
+
+Paginating an unordered list is worse than not paginating it: a row can appear on
+two pages or on none, because "page 2" has no stable meaning without a total
+order. Sorting the fetched page then makes the wrong thing look right. Someone
+looking for the lowest-stock item sorts ascending, reads the top row, and is
+looking at the lowest of the 25 rows they happened to fetch.
+
+**Intended behavior**
+
+The list has one server-side order, applied before pagination, and the sort
+control changes that order rather than reordering the current page.
+
+**Proposed fix**
+
+`Stock` cannot sort by a populated field with `find`, so this needs an
+aggregation: `$lookup` the product and the branch, `$sort` on the joined field,
+then `$skip`/`$limit`, with `$facet` or a second `countDocuments` for the total.
+Sorting by `quantity` or `sellingPrice`, which live on `Stock` itself, can stay
+on the existing `find` path if the aggregation proves too costly, but splitting
+the two would leave the same control behaving differently per field, so prefer
+one path. Add `sortBy` and `sortOrder` to the read validators with an allow-list,
+the way `salesRoutes.js` already does. Then drop the browser-side comparator.
+
+**Implementation checklist**
+
+- [ ] Add a sort allow-list to `backend/src/routes/stockRoutes.js` for `GET /stock` and `GET /stock/branch/:branchId`, exported for reuse the way `SALES_SORT_FIELDS` is.
+- [ ] Replace the `find` in `getAllStock` with an aggregation that joins product and branch, sorts, then paginates.
+- [ ] Do the same in `getBranchStock`.
+- [ ] Return the same populated shape the pickers and the offline mirror already expect, including nested `motorcycleModels`.
+- [ ] In `frontend/src/app/(protected)/stock/page.tsx`, send `sortBy` and `sortOrder` and delete the client-side comparator.
+- [ ] Add a test asserting that ordering holds across a page boundary with more rows than one page.
+
+**Acceptance criteria**
+
+- [ ] With more rows than fit one page, sorting ascending and descending returns disjoint first pages that are consistent with each other.
+- [ ] No row appears on two pages, and none is skipped.
+- [ ] The New Sale picker and the offline mirror still receive nested fitment data.
+- [ ] The stock page no longer sorts in the browser.
+
+**Verification commands**
+
+```bash
+cd backend && npm test -- stock.test.js
+cd frontend && npm run lint && npm run build
+```
+
+**Do not**
+
+Do not sort in the browser and call it fixed. Do not drop the nested
+`motorcycleModels` populate to simplify the aggregation; the New Sale picker
+matches fitment against it offline, where an unpopulated id is an opaque string.
+
+**Rollback**
+
+Revert the controllers and the page. Ordering returns to being unspecified.
+
+**Open questions**
+
+None.
+
+---
+
 ## 11. Deferred and Rejected
 
 Things considered and consciously not listed as gaps, with the reason.
@@ -7291,7 +7509,8 @@ lines, no empty catch blocks, and no page importing axios directly.
 {"id":"GAP-053","cat":"SEC","sev":"S2","cplx":"XS","diff":"D2","risk":"R2","conf":"C1","pri":5.0,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":[],"files":["backend/src/controllers/authController.js","backend/src/utils/environment.js"],"title":"The refresh cookie's secure and sameSite fail open on NODE_ENV"},
 {"id":"GAP-054","cat":"SEC","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/middleware/validate.js","frontend/src/types/api.ts"],"title":"Validation errors echo the submitted value, including passwords"},
 {"id":"GAP-055","cat":"OPS","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C2","pri":2.0,"agent":"AGENT-ASSISTED","depends_on":["GAP-014"],"blocks":[],"files":["backend/src/utils/reconcileReservations.js","backend/tests/reconcileReservations.test.js"],"title":"Stock reservations leaked before GAP-014 are still stranded in the data"},
-{"id":"GAP-056","cat":"SEC","sev":"S3","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/controllers/stockController.js","backend/src/controllers/userController.js","backend/src/controllers/salesController.js","backend/src/controllers/serviceController.js","backend/src/controllers/productController.js","backend/src/utils/branchScope.js"],"title":"Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible"}
+{"id":"GAP-056","cat":"SEC","sev":"S3","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/controllers/stockController.js","backend/src/controllers/userController.js","backend/src/controllers/salesController.js","backend/src/controllers/serviceController.js","backend/src/controllers/productController.js","backend/src/utils/branchScope.js"],"title":"Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible"},
+{"id":"GAP-057","cat":"CODE","sev":"S3","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/controllers/stockController.js","frontend/src/app/(protected)/stock/page.tsx"],"title":"Stock list sorting orders one page, and the API own sort key has never applied"}
 ]
 ```
 
@@ -7536,9 +7755,9 @@ single unit test against `isURL`.
 - [x] Every checklist item is a single action naming the file it touches.
 - [x] Every AGENT-READY entry has `Open questions: None`. The five HUMAN-FIRST entries and the eight AGENT-ASSISTED entries each carry a real question.
 - [x] Every CONTRA entry names both positions with quoted evidence and states who decides.
-- [x] The JSON appendix has 59 objects whose ids, scores, dependencies and titles match the prose entries.
-- [x] Counts in the metadata block match the actual entries: 59 total; S1 8, S2 35, S3 16, S4 0; CODE 20, SEC 18, OPS 10, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
-- [x] S1 findings are 8 of 59, or 13.6%, inside the 15% calibration ceiling.
+- [x] The JSON appendix has 60 objects whose ids, scores, dependencies and titles match the prose entries.
+- [x] Counts in the metadata block match the actual entries: 60 total; S1 8, S2 35, S3 17, S4 0; CODE 21, SEC 18, OPS 10, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
+- [x] S1 findings are 8 of 60, or 13.3%, inside the 15% calibration ceiling.
 
 **One caveat on my own confidence.** I read about 62% of the source and executed
 none of it. The largest unread surface is the frontend, which also has no tests,
