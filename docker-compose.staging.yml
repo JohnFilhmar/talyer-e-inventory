@@ -4,10 +4,34 @@
 # name (-p), supplied by the deploy workflow -- not from anything in this
 # file.
 services:
+  # Staging is held to roughly half of production's memory. It exists to catch
+  # problems, not to serve customers, and the point of limiting it at all is
+  # that a leak here must not be able to starve the production stack or the
+  # other systems sharing this box.
+  mongo:
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
   backend:
     ports:
       - "5001:5000"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
 
   frontend:
     ports:
       - "3001:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
