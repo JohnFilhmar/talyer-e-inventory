@@ -83,9 +83,17 @@ records where its own proposed fix was wrong.
 
 Two things the triage found that are worth carrying forward. The 24 false
 positives still need dismissing in the Security tab, which is a human action.
-And the true positives will not close automatically either: CodeQL does not
-recognise a hand-written guard or an allow-list as a barrier, so the alert count
-is not the measure of this work.
+**That second claim was wrong, and is corrected here.** It said the true
+positives would not close because CodeQL does not recognise a hand-written guard
+as a barrier. Two things were mistaken. First, the "56 open" figure came from an
+unfiltered alert listing that spans every branch, not master; **on master's own
+ref the count went 60 to 26** as the fixes merged, so they have been closing all
+along. Second, CodeQL does recognise *some* barriers: a regex test of the form
+`/^[0-9a-fA-F]{24}$/.test(String(value))` is one, which is what cleared the two
+alerts the GAP-026 pagination raised. What it does not recognise is an
+express-validator chain on the route, or the `sanitizeRequest` middleware,
+because neither is visible as a transformation of the value on the path to the
+sink. See section 13.4.
 
 **GAP-053 is closed** as of 2026-09-09, the same day it was raised, because
 the workflow question it depended on was answered immediately.
@@ -2331,11 +2339,16 @@ None.
 > `{"partsUsed":[{"product":{"$ne":null},"quantity":1}]}` on
 > `PUT /api/services/:id/parts` returns 400 with the stock untouched.
 >
-> Two residuals, both deliberate. The CodeQL alerts will not close: the query
-> does not recognise a hand-written guard as a barrier, so 36 of the 60 stay
-> open and the measure of this gap is the behaviour, not the alert count. And
-> the guard is a floor, not a substitute for GAP-017's validation chains, which
-> are still needed for the same four routes.
+> Two residuals. The guard is a floor, not a substitute for GAP-017's
+> validation chains, which are still needed for the same four routes.
+>
+> The second residual, that the CodeQL alerts would not close, was **wrong and
+> is corrected in section 13.4**. They have been closing steadily as the fixes
+> merged, 60 down to 26 on master, and a value narrowed by a regex test is a
+> barrier the query does recognise. What it does not recognise is this
+> middleware, because the guard rejects a request rather than transforming the
+> value, so nothing on the path from source to sink looks different to the
+> analysis.
 
 Severity S1 Critical | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 4.0 | Agent suitability AGENT-READY |
@@ -6977,24 +6990,54 @@ relative to `backend/src/routes/`.
 | 45 | `userController.js:128` | `body.branch` | POST /users: body('branch').optional().isMongoId() userRoutes.js:69-71 | FALSE POSITIVE | FP-A |
 | 46 | `userController.js:212` | `body.branch` | PUT /users/:id: body('branch').optional({values:'null'}).isMongoId() userRoutes.js:94-96 | FALSE POSITIVE | FP-A |
 
-### 13.4 Alerts raised after the triage
+### 13.4 What CodeQL actually accepts as a barrier
 
-**2026-09-09, two new `js/sql-injection` alerts on `stockController.js:278` and
-`:285`, from the GAP-026 fix.** They are **FP-A**, not a regression, and the
-code is better constrained than the version that preceded them.
+**2026-09-09.** The GAP-026 pagination fix raised two new `js/sql-injection`
+alerts on `stockController.js:278` and `:285`, failing the `CodeQL` check run on
+PR #47. Resolving them settled a question this document had been getting wrong.
 
-`getLowStock` previously had one sink, `Stock.find(query)`, carrying alert 47,
-classified LATENT because the route declared no chain at all. Pagination added a
-second sink, `Stock.countDocuments(query)`, and moved the first, so CodeQL
-attributes both to the PR that introduced them. The only request value in that
-query is `branch`, and the route now declares
-`idRule('branch')` plus `paginationRules()`, so a non-MongoId or an array is
-rejected before the controller runs. That is the same barrier that makes the
-other 24 FP-A alerts false positives.
+`getLowStock` previously had one sink, `Stock.find(query)`, carrying alert 47.
+Pagination added a second, `Stock.countDocuments(query)`, and moved the first, so
+both were attributed to that PR. Worth remembering on its own: **adding
+pagination to an endpoint adds a `countDocuments` sink, so it always looks like a
+new alert**, and a fix that improves validation can still raise the count.
 
-The general shape is worth remembering: **adding pagination to an endpoint adds
-a `countDocuments` sink, so it will always look like a new alert**, and a fix
-that improves validation can still raise the alert count.
+The alerts were resolved rather than dismissed, by validating the id inside
+`utils/branchScope.js`:
+
+```js
+const OBJECT_ID = /^[0-9a-fA-F]{24}$/;
+const isValidBranchId = (value) => OBJECT_ID.test(String(value));
+```
+
+Both alerts cleared and the check went green. That gives a concrete answer to
+what this query treats as a sanitizer:
+
+- **Recognised:** a regex test that narrows the value, applied on the path
+  between the source and the sink, with the matched value used afterwards.
+  `String(value)` first also removes the array and object shapes.
+- **Not recognised:** an express-validator chain on the route. It runs in a
+  different module and rejects the request rather than transforming the value,
+  so nothing on the dataflow path looks different.
+- **Not recognised:** `middleware/sanitizeRequest.js`, for the same reason.
+- **Recognised, in effect:** replacing `req.body` with an allow-listed object,
+  as GAP-015c did. That is why all four TP-2 alerts closed on merge: the taint
+  no longer flows.
+
+**The earlier claim that these alerts would never close was wrong.** It rested
+on an unfiltered alert listing, which spans every branch rather than master. On
+master's own ref the count has gone **60 at triage to 26**, tracking the merges.
+The remaining 26 are 18 in `stockController.js`, 4 in `userController.js`, 2 in
+`salesController.js`, and 1 each in `serviceController.js` and
+`productController.js`. Several of the stock ones should clear when the
+`branchScope` change merges, since `getAllStock` and `getLowStock` both resolve
+their branch through it.
+
+The lesson for the remaining work: where an alert is genuinely a false positive
+because a route validator constrains the value, **moving that constraint into
+the controller or a shared util turns it into a barrier the analysis can see**,
+and hardens the code against a caller that forgets the route chain. That is
+better than dismissing the alert, and it is what should be tried first.
 
 ### 13.5 What the triage does not cover
 
@@ -7003,10 +7046,11 @@ eight unescaped `$regex` sites in GAP-015a carry no alert at all: CodeQL
 reports at the query sink, and the `getBranches` and `getSuppliers` sinks were
 not flagged. Fixing only what the Security tab lists would leave them open.
 
-Dismissing the 24 FP-A alerts in the Security tab is a human action and is not
-part of any gap. Expect the TP and LATENT alerts to stay open after GAP-015b
-lands: CodeQL will not recognise a hand-written guard as a barrier. The
-measure of that gap is the behaviour, not the alert count.
+Dismissing the remaining FP-A alerts in the Security tab is a human action and
+is not part of any gap. Prefer the approach in section 13.4 first: several of
+them can be resolved outright by moving the constraint into the controller or a
+shared util, which is both a real hardening and a barrier the analysis
+recognises. Dismissal is for what is left after that.
 
 ---
 ## 14. Self-Audit Note
