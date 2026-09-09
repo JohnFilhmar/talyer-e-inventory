@@ -20,6 +20,13 @@ name: Dependabot auto-merge
 # a green CI run is not sufficient evidence that a major upgrade is safe — see
 # the redis 6 evaluation, where the suite passed while never once connecting to
 # a real Redis.
+#
+# mobile-app-minor-patch is absent from the allow-list on purpose, not by
+# oversight. The same reasoning applies with more force there: mobile-check runs
+# lint, typecheck and `jest --passWithNoTests`, so a green run says the app still
+# compiles and nothing more. Backend and frontend each have a suite that would
+# actually catch a broken update. Add mobile-app here once it has tests worth
+# gating on.
 
 on:
   workflow_run:

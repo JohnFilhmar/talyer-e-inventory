@@ -3783,9 +3783,24 @@ None.
 > findings. Backend and frontend stay blocking, which is where a fixable
 > advisory will actually appear.
 >
-> Residual: the Dependabot ecosystem entry and the auto-merge allow-list are not
-> done here, because both touch files GAP-012 rewrote and are better reviewed on
-> their own. Revisit the mobile advisories when the app gains real features, or
+> The residual is closed as of 2026-09-09, one half done and one half
+> deliberately refused. `.github/dependabot.yml` gains an npm entry for
+> `/mobile-app` with `mobile-app-minor-patch` and `mobile-app-major` groups. It
+> holds the SDK-controlled packages back: `expo` and `react-native` below a
+> minor, and `expo-*`, `react-native-*`, `react` and `react-dom` below a major,
+> because `expo install --fix` puts that whole set at the version the installed
+> SDK expects and bumping one of them alone leaves the app off-SDK with nothing
+> in CI to notice.
+>
+> `mobile-app-minor-patch` is **not** in the auto-merge allow-list, and that is a
+> decision rather than an omission. `mobile-check` runs lint, typecheck and
+> `jest --passWithNoTests`, so a green run proves the app still compiles and
+> nothing else, which is the same reasoning the workflow already records for the
+> redis 6 bump. Backend and frontend each have a suite that would catch a broken
+> update. Both files now say so in place. Add mobile-app to the allow-list once
+> it has tests worth gating on, which is GAP-044's scope.
+>
+> Revisit the nine remaining Expo advisories when the app gains real features, or
 > when Expo ships a release that clears them.
 
 Severity S2 Major | Complexity S | Difficulty D1 Mechanical | Risk R1 |

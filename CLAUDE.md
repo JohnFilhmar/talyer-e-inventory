@@ -651,5 +651,17 @@ Eligibility is matched on the group name embedded in Dependabot's branch
 CI run is not sufficient evidence for a major bump: the suite never connects to a real Redis or a
 real browser, so it passed cleanly while node-redis 6 went entirely unexercised.
 
-The check names in that file must match the workflow job names (including matrix suffixes)
-exactly, or the required check never reports and every PR blocks permanently.
+`mobile-app-minor-patch` is **not** allow-listed, deliberately. `mobile-check` runs lint,
+typecheck and `jest --passWithNoTests`, so a green run there says the app compiles and nothing
+more. Add it once mobile-app has tests worth gating on.
+
+The `/mobile-app` npm entry holds the Expo SDK's own packages back — `expo` and `react-native`
+below a minor, `expo-*`, `react-native-*`, `react` and `react-dom` below a major. `expo install
+--fix` sets that whole set to what the installed SDK expects, so an individual bump past the `~`
+range leaves the app off-SDK and nothing in CI notices. An Expo SDK upgrade is a migration someone
+runs on purpose, not a pull request to review.
+
+The auto-merge job waits on the checks it finds at runtime rather than a hardcoded list of names,
+excluding only its own check run, so adding or renaming a CI job does not need an edit here. What
+it does require is that every check reach a *terminal success*: a check that stays queued past the
+30 minute deadline leaves the PR unmerged for a human, which is the intended failure direction.
