@@ -1868,3 +1868,122 @@ describe('Low stock listing is paginated', () => {
     expect(res.body.data).toHaveLength(1);
   });
 });
+
+describe('stock list search', () => {
+  // The stock list paginates, so filtering the fetched page in the browser
+  // searches only the rows already on screen: with 300 SKUs and a 20-row page,
+  // a product on page four is unreachable from page one and nothing says so.
+  let adminToken;
+  let branch;
+  let category;
+
+  beforeEach(async () => {
+    const admin = await createTestAdmin();
+    adminToken = admin.token;
+    category = await createTestCategory();
+    branch = await createTestBranch();
+
+    const brakePad = await createTestProduct({
+      name: 'Front Brake Pad',
+      sku: 'BRK-001',
+      category: category._id,
+      brand: 'Honda',
+    });
+    const chain = await createTestProduct({
+      name: 'Drive Chain',
+      sku: 'CHN-001',
+      category: category._id,
+      brand: 'Yamaha',
+    });
+
+    await createTestStock({ product: brakePad._id, branch: branch._id });
+    await createTestStock({ product: chain._id, branch: branch._id });
+  });
+
+  it('matches on product name and reports the matching total', async () => {
+    const res = await request(app)
+      .get('/api/stock?search=brake')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].product.sku).toBe('BRK-001');
+    // The footer reads this, so it has to be the count of matches, not of rows
+    // that happen to be on this page.
+    expect(res.body.pagination.total).toBe(1);
+  });
+
+  it('matches on SKU and on brand', async () => {
+    const bySku = await request(app)
+      .get('/api/stock?search=CHN-001')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(bySku.body.data).toHaveLength(1);
+
+    const byBrand = await request(app)
+      .get('/api/stock?search=yamaha')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(byBrand.body.data).toHaveLength(1);
+    expect(byBrand.body.data[0].product.sku).toBe('CHN-001');
+  });
+
+  it('returns nothing when the search matches no product', async () => {
+    const res = await request(app)
+      .get('/api/stock?search=carburettor')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(0);
+    expect(res.body.pagination.total).toBe(0);
+  });
+
+  it('treats the search as literal text, not as a pattern', async () => {
+    const res = await request(app)
+      .get('/api/stock?search=.*')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(0);
+  });
+
+  it('rejects a repeated search parameter rather than filtering on an array', async () => {
+    const res = await request(app)
+      .get('/api/stock?search=a&search=b')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('searches branch stock too', async () => {
+    const res = await request(app)
+      .get(`/api/stock/branch/${branch._id}?search=chain`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].product.sku).toBe('CHN-001');
+  });
+
+  it('returns nothing for a category that holds no products', async () => {
+    // This used to apply the category filter only when it matched at least one
+    // product, so an empty category returned the branch's entire stock list.
+    const empty = await createTestCategory({ name: 'Empty', code: 'EMPTY' });
+
+    const res = await request(app)
+      .get(`/api/stock/branch/${branch._id}?category=${empty._id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(0);
+  });
+
+  it('narrows rather than widens when a search and a product filter combine', async () => {
+    const chain = await Product.findOne({ sku: 'CHN-001' });
+
+    const res = await request(app)
+      .get(`/api/stock?product=${chain._id}&search=brake`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(0);
+  });
+});

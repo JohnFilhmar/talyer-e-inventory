@@ -35,6 +35,49 @@ updates:
       frontend-major:
         update-types: [major]
 
+  # Expo mobile app.
+  #
+  # The Expo SDK controls `expo`, `react-native`, `react`, `react-dom` and every
+  # `expo-*` and `react-native-*` package as one set: `expo install --fix` puts
+  # each of them at the version the installed SDK expects, which is why they are
+  # written with `~` ranges. Bumping any one of them past that range on its own
+  # leaves the app off-SDK, and nothing in CI would notice. So the SDK-controlled
+  # packages are held below a major here, and `expo` and `react-native` below a
+  # minor as well, since an SDK bump is a migration someone runs deliberately
+  # through `expo install --fix`, not a pull request to review. Everything the
+  # SDK does not own, axios and the react-query packages for example, updates
+  # normally.
+  #
+  # These pull requests are deliberately NOT auto-merged; see the group
+  # allow-list in dependabot-auto-merge.yml for why.
+  - package-ecosystem: npm
+    directory: /mobile-app
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      mobile-app-minor-patch:
+        update-types: [minor, patch]
+      mobile-app-major:
+        update-types: [major]
+    ignore:
+      - dependency-name: expo
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+      - dependency-name: react-native
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+      - dependency-name: expo-*
+        update-types: [version-update:semver-major]
+      - dependency-name: react-native-*
+        update-types: [version-update:semver-major]
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+
   # Docker base images.
   #
   # Node major bumps are ignored on purpose. Dependabot offers whatever tag is

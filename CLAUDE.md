@@ -200,6 +200,43 @@ a rename would otherwise leave cached products showing the old label. The stock 
 the New Sale picker nest-populate fitment for the same reason: offline, an unpopulated id is an
 opaque string with nothing to match against.
 
+### Money
+
+Every monetary field is a double, and doubles cannot represent most centavo amounts. Three units
+at PHP 8.10 multiply out to 24.299999999999997. That is not a display problem: the stored `total`
+is what `payment.amountPaid >= total` compares against, so an unrounded total leaves a customer
+who paid the amount on the screen sitting in `partial`, and a full-value line discount produces a
+total of about -3.55e-15 that trips the schema's `min: 0` and rejects the sale.
+
+[utils/currency.js](backend/src/utils/currency.js) exports `roundCurrency` (half away from zero,
+two decimals) and `sumCurrency` (adds raw, rounds once). **Every computed monetary assignment
+rounds at the point of assignment**, in both totals hooks and at the three `Transaction.amount`
+writes. `amountPaid` is not rounded: it is entered, not computed.
+
+Do not replace the helper with `Math.round(value * 100) / 100`. That is the bug, not the fix:
+`1.005 * 100` is `100.49999999999999` and rounds down. The helper shifts the decimal exponent
+through `toExponential`, which is exact and also survives values already in exponential notation.
+
+### Stock lists are server-filtered and paginated
+
+`GET /stock` and `GET /stock/branch/:branchId` take `page`, `limit` and `search`. The search matches
+the product's name, SKU, barcode, brand and `productModel`, and because `Stock` references
+`Product` rather than copying its fields, it resolves product ids first and filters by them. Do not
+move that filtering back into the browser: the list paginates, so a client-side filter searches
+only the rows already on screen, and a shop with 300 SKUs cannot reach page four's product from
+page one.
+
+Two frontend reads deliberately walk every page instead of paginating
+([lib/services/stockService.ts](frontend/src/lib/services/stockService.ts)): `getByBranch`, which
+backs the New Sale picker and the offline mirror behind it, and `getAllPages`, which backs the
+transfer modal. Both need the whole set, the picker because it filters by motorcycle fitment and no
+endpoint can express that, and both are bounded at 50 pages of `MAX_LIMIT`.
+
+**Ordering is still not server-side** (GAP-057). `.sort({ 'product.name': 1 })` in
+`stockController` sorts on a path `Stock` does not have, because `populate` is a second query run
+after the sort; the stock page then reorders the page it fetched. Fixing it needs an aggregation
+with `$lookup`.
+
 ### StockMovement ledger
 
 `StockMovement` is an append-only audit trail. Every quantity change follows the same three
@@ -231,8 +268,29 @@ hooks, so they must be replicated by hand in any new completion path.
 
 ### Identifiers
 
-Human-readable IDs are generated in Mongoose `pre('save')` hooks via `countDocuments`:
-`PROD-000001`, `SO-YYYY-000001`, `JOB-YYYY-000001`, `TR-YYYY-000001`, `TXN-YYYYMM-000001`.
+Human-readable IDs are allocated from a `Counter` collection, one document per sequence, by
+[utils/sequence.js](backend/src/utils/sequence.js): `PROD-000001`, `SO-YYYY-000001`,
+`JOB-YYYY-000001`, `TR-YYYY-000001`, `SM-YYYY-000001`, `TXN-YYYYMM-000001`. A single
+`findOneAndUpdate` with `$inc` and `upsert` is atomic on one document, which is why this works on
+the standalone production server with no transaction.
+
+Three things here are load-bearing:
+
+- **The hooks are `pre('validate')`, not `pre('save')`.** Mongoose runs validate hooks first, and
+  every one of these fields except `sku` and `movementId` is `required`, so a value assigned in a
+  save hook arrives after the check that demands it. The old save hooks could never fire, which is
+  why both order controllers, and three separate transaction writes, used to generate their own.
+- **Callers must not supply the number.** `Transaction.create` used to be handed a hand-built
+  `TXN-<count>-<timestamp>` from `serviceController.js` and `utils/salesCompletion.js`, a different
+  format from the one this model documents, and supplying it suppressed the hook. Pass no
+  identifier and let the model allocate.
+- **A counter seeds itself from existing data on first use.** `nextSequence(key, seed)` consults
+  the seed only when the counter document is absent, so a database that predates this cannot
+  collide even if nobody runs the migration. `npm run migrate:counters` does the same work up
+  front; it reports by default, writes under `--apply`, and only ever raises a counter.
+
+Each sequence resets on the period its prefix advertises: yearly for `SO-`/`JOB-`/`TR-`/`SM-`,
+monthly for `TXN-`, never for `PROD-`.
 
 ### Uploads
 
@@ -651,5 +709,17 @@ Eligibility is matched on the group name embedded in Dependabot's branch
 CI run is not sufficient evidence for a major bump: the suite never connects to a real Redis or a
 real browser, so it passed cleanly while node-redis 6 went entirely unexercised.
 
-The check names in that file must match the workflow job names (including matrix suffixes)
-exactly, or the required check never reports and every PR blocks permanently.
+`mobile-app-minor-patch` is **not** allow-listed, deliberately. `mobile-check` runs lint,
+typecheck and `jest --passWithNoTests`, so a green run there says the app compiles and nothing
+more. Add it once mobile-app has tests worth gating on.
+
+The `/mobile-app` npm entry holds the Expo SDK's own packages back — `expo` and `react-native`
+below a minor, `expo-*`, `react-native-*`, `react` and `react-dom` below a major. `expo install
+--fix` sets that whole set to what the installed SDK expects, so an individual bump past the `~`
+range leaves the app off-SDK and nothing in CI notices. An Expo SDK upgrade is a migration someone
+runs on purpose, not a pull request to review.
+
+The auto-merge job waits on the checks it finds at runtime rather than a hardcoded list of names,
+excluding only its own check run, so adding or renaming a CI job does not need an edit here. What
+it does require is that every check reach a *terminal success*: a check that stays queued past the
+30 minute deadline leaves the PR unmerged for a human, which is the intended failure direction.

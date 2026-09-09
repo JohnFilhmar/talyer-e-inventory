@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import { PHONE_REGEX, normalizePhoneNumber } from '../utils/phoneValidation.js';
+import { roundCurrency, sumCurrency } from '../utils/currency.js';
+import { highestSuffix, nextIdentifier, yearKey } from '../utils/sequence.js';
 
 const serviceOrderSchema = new mongoose.Schema(
   {
@@ -194,27 +196,33 @@ serviceOrderSchema.index({ branch: 1, createdAt: -1 });
 serviceOrderSchema.index({ 'customer.phone': 1 });
 serviceOrderSchema.index({ 'vehicle.plateNumber': 1 });
 
-// Auto-generate job number
-serviceOrderSchema.pre('save', async function () {
+// Auto-generate job number, atomically. See utils/sequence.js, and the note on
+// SalesOrder for why this is a validate hook.
+serviceOrderSchema.pre('validate', async function () {
   if (this.isNew && !this.jobNumber) {
-    const year = new Date().getFullYear();
-    const count = await this.constructor.countDocuments();
-    this.jobNumber = `JOB-${year}-${String(count + 1).padStart(6, '0')}`;
+    const year = yearKey();
+    const prefix = `JOB-${year}-`;
+    this.jobNumber = await nextIdentifier({
+      key: `serviceOrder:${year}`,
+      prefix,
+      seed: () => highestSuffix(this.constructor, 'jobNumber', prefix),
+    });
   }
 });
 
-// Calculate totals before saving
+// Calculate totals before saving. Rounded to centavos at every assignment for
+// the same reason as SalesOrder: `totalAmount` is what decides payment status.
 serviceOrderSchema.pre('save', function () {
   // Calculate part totals
   this.partsUsed.forEach(part => {
-    part.total = part.quantity * part.unitPrice;
+    part.total = roundCurrency(part.quantity * part.unitPrice);
   });
   
   // Calculate total parts cost
-  this.totalParts = this.partsUsed.reduce((sum, part) => sum + part.total, 0);
+  this.totalParts = sumCurrency(this.partsUsed.map(part => part.total));
   
   // Calculate total amount
-  this.totalAmount = this.totalParts + this.laborCost + this.otherCharges;
+  this.totalAmount = roundCurrency(this.totalParts + this.laborCost + this.otherCharges);
   
   // Update payment status
   if (this.payment.amountPaid === 0) {

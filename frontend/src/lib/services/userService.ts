@@ -35,8 +35,6 @@ export const userService = {
         limit: 10,
         total: 0,
         pages: 0,
-        hasNextPage: false,
-        hasPrevPage: false,
       },
     };
   },

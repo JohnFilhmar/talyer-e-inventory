@@ -8,6 +8,7 @@ import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { PAGINATION, USER_ROLES } from '../config/constants.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
+import { roundCurrency } from '../utils/currency.js';
 import { canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
 // The fields a list may be ordered by. `sortBy` is used as an object key, so an
@@ -262,13 +263,8 @@ export const createServiceOrder = asyncHandler(async (req, res) => {
     }
   }
 
-  // Generate job number
-  const jobCount = await ServiceOrder.countDocuments();
-  const jobNumber = `JOB-${new Date().getFullYear()}-${String(jobCount + 1).padStart(6, '0')}`;
-
-  // Create service order
+  // The job number is allocated by ServiceOrder's validate hook, atomically.
   const order = await ServiceOrder.create({
-    jobNumber,
     clientRequestId,
     branch,
     customer,
@@ -447,15 +443,14 @@ export const updateServiceOrderStatus = asyncHandler(async (req, res) => {
 
     // Create transaction record if paid
     if (order.payment.status === 'paid') {
-      const txnCount = await Transaction.countDocuments();
-      const timestamp = Date.now().toString().slice(-6);
-      const transactionNumber = `TXN-${String(txnCount + 1).padStart(6, '0')}-${timestamp}`;
-      
+      // The transaction number is allocated by Transaction's validate hook. The
+      // number built here was `TXN-<count>-<timestamp>`, which is not the
+      // `TXN-YYYYMM-NNNNNN` format the model and the docs describe, and
+      // supplying it meant the model's own generator never ran.
       await Transaction.create({
-        transactionNumber,
         type: 'service',
         branch: order.branch,
-        amount: order.totalAmount,
+        amount: roundCurrency(order.totalAmount),
         paymentMethod: order.payment.method,
         reference: {
           model: 'ServiceOrder',
@@ -612,15 +607,12 @@ export const updatePayment = asyncHandler(async (req, res) => {
 
   // Create transaction if order is completed and now fully paid
   if (order.status === 'completed' && order.payment.status === 'paid' && wasUnpaid) {
-    const txnCount = await Transaction.countDocuments();
-    const timestamp = Date.now().toString().slice(-6);
-    const transactionNumber = `TXN-${String(txnCount + 1).padStart(6, '0')}-${timestamp}`;
-    
+    // Allocated by Transaction's validate hook; see the note on the other
+    // transaction write in this file.
     await Transaction.create({
-      transactionNumber,
       type: 'service',
       branch: order.branch,
-      amount: order.totalAmount,
+      amount: roundCurrency(order.totalAmount),
       paymentMethod: order.payment.method,
       reference: {
         model: 'ServiceOrder',

@@ -11,6 +11,7 @@ import {
   idRule,
   enumRule,
   boolRule,
+  textRule,
   paginationRules,
   dateRangeRules,
 } from '../utils/queryRules.js';
@@ -97,6 +98,10 @@ const stockIdValidation = [
 const listStockValidation = [
   idRule('branch'),
   idRule('product'),
+  // Reaches an escaped $regex over product name, SKU, barcode, brand and
+  // productModel. textRule trims, caps the length and rejects a repeated
+  // parameter, which Express would otherwise hand over as an array.
+  textRule('search'),
   boolRule('lowStock'),
   boolRule('outOfStock'),
   ...paginationRules()
@@ -130,6 +135,7 @@ const listTransfersValidation = [
 
 const branchStockValidation = [
   idRule('category'),
+  textRule('search'),
   boolRule('lowStock'),
   ...paginationRules()
 ];

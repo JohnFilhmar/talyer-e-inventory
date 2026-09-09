@@ -17,6 +17,45 @@ import type {
 } from '@/types/stock';
 
 /**
+ * The server caps a page at PAGINATION.MAX_LIMIT, which is 100.
+ *
+ * Two callers need every row rather than a page: the New Sale product picker,
+ * which filters by motorcycle fitment client-side because no endpoint can, and
+ * the transfer modal, which lists the products stocked anywhere. Both used to
+ * take whatever a single unparameterised request returned, 50 rows and 20 rows
+ * respectively, and silently show nothing else.
+ */
+const MAX_PAGE_SIZE = 100;
+
+/** Refuses to loop forever if the API keeps reporting more pages. */
+const MAX_PAGES = 50;
+
+/**
+ * Read every page of a paginated stock endpoint.
+ *
+ * The alternative, raising the server's own cap, is explicitly ruled out by
+ * GAP-043: it moves the truncation rather than removing it, and it makes one
+ * request unboundedly large.
+ */
+async function readAllPages(
+  fetchPage: (page: number, limit: number) => Promise<PaginatedResponse<Stock>>
+): Promise<Stock[]> {
+  const rows: Stock[] = [];
+
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const response = await fetchPage(page, MAX_PAGE_SIZE);
+    rows.push(...response.data);
+
+    const pages = response.pagination?.pages;
+    // No pagination envelope means the endpoint answered with a plain list, so
+    // there is nothing more to ask for.
+    if (pages === undefined || page >= pages) break;
+  }
+
+  return rows;
+}
+
+/**
  * Stock service
  * Handles all stock-related API calls
  */
@@ -37,19 +76,45 @@ export const stockService = {
   },
 
   /**
-   * Get stock for a specific branch
+   * Get every stock row for a branch, across all pages.
+   *
+   * This backs the New Sale and New Service product pickers and the offline
+   * mirror behind them. It used to send no pagination at all and take the
+   * endpoint's 50-row default, so a branch stocking more than 50 products could
+   * not sell the rest through the picker and nothing in the interface said so.
+   *
    * @param branchId - Branch ID
    */
   async getByBranch(branchId: string): Promise<Stock[]> {
-    const { data } = await apiClient.get<ApiResponse<Stock[]>>(
-      `/stock/branch/${branchId}`
-    );
+    return readAllPages(async (page, limit) => {
+      const { data } = await apiClient.get<ApiResponse<Stock[]>>(
+        `/stock/branch/${branchId}`,
+        { params: { page, limit } }
+      );
 
-    if (!data.success) {
-      throw new Error(data.message ?? 'Failed to fetch branch stock');
-    }
+      if (!data.success) {
+        throw new Error(data.message ?? 'Failed to fetch branch stock');
+      }
 
-    return data.data ?? [];
+      return { data: data.data ?? [], pagination: data.pagination };
+    });
+  },
+
+  /**
+   * Get every stock row matching the filters, across all pages.
+   *
+   * Only for callers that genuinely need the whole set, such as the transfer
+   * modal's product list. A screen showing rows to a person should paginate
+   * with `getAll` instead.
+   */
+  async getAllPages(params: StockListParams = {}): Promise<Stock[]> {
+    return readAllPages(async (page, limit) => {
+      const { data } = await apiClient.get<ApiResponse<Stock[]>>('/stock', {
+        params: { ...params, page, limit },
+      });
+
+      return { data: data.data ?? [], pagination: data.pagination };
+    });
   },
 
   /**

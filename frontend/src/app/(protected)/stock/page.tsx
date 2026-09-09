@@ -9,7 +9,6 @@ import { useUrlFilters } from '@/hooks/useUrlFilters';
 import { useBranchContext } from '@/providers/BranchProvider';
 import {
   useStock,
-  useStockByBranch,
   useLowStock,
   useRestockById,
   useAdjustStockById,
@@ -26,7 +25,7 @@ import {
 } from '@/components/stock';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
-import { Spinner } from '@/components/ui';
+import { Pagination, Spinner } from '@/components/ui';
 import { Stock } from '@/types/stock';
 import type { RestockFormData, AdjustStockFormData, CreateStockFormData } from '@/utils/validators/stock';
 
@@ -40,7 +39,11 @@ const STOCK_FILTER_DEFAULTS = {
   outOfStock: false,
   sortField: 'product.name',
   sortOrder: 'asc',
+  page: 1,
 };
+
+/** Rows per request. The server caps this at PAGINATION.MAX_LIMIT regardless. */
+const PAGE_SIZE = 25;
 
 /** Columns the table can actually sort by — see `filteredStock`'s switch. */
 const SORT_FIELDS = ['product.name', 'branch.name', 'quantity', 'available', 'sellingPrice'];
@@ -67,6 +70,12 @@ const STOCK_FILTER_PARSERS = {
   branch: (raw: string) => (OBJECT_ID_PATTERN.test(raw) ? raw : ''),
   sortField: oneOf(SORT_FIELDS, 'product.name'),
   sortOrder: oneOf(['asc', 'desc'], 'asc'),
+  // `?page=0`, `?page=-3` and `?page=abc` all have to read as page 1. A zero
+  // or negative page reaches the API as a negative skip.
+  page: (raw: string) => {
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+  },
 };
 
 /**
@@ -93,6 +102,7 @@ function StockPageContent() {
   // Safe cast: STOCK_FILTER_PARSERS allow-lists both of these, so a garbage
   // URL value has already been clamped back to its default by now.
   const sortOrder = filters.sortOrder as 'asc' | 'desc';
+  const page = Number(filters.page);
 
   // A hand-edited or shared URL can name a branch this user cannot see. The
   // backend rejects it (utils/branchScope.js), but a 403 on page load is a
@@ -115,63 +125,47 @@ function StockPageContent() {
     return 'data' in branchesData ? branchesData.data : branchesData;
   }, [branchesData]);
 
-  // Use branch-specific query if a branch is selected, otherwise get all stock
-  const allStockQuery = useStock(
-    {},
-    { enabled: !effectiveBranch }
-  );
+  // One server-driven query, filtered, paginated and searched by the API.
+  //
+  // This used to be two: `GET /stock` for the all-branches view and
+  // `GET /stock/branch/:id` for one branch, neither passing a page or a limit.
+  // The API defaults to 20 and 50 rows respectively, so a shop with 300 SKUs
+  // saw the first 20 and was told "Showing 20 of 20 stock records". `GET /stock`
+  // takes a branch filter and clamps a non-admin to their own branch anyway, so
+  // the branch endpoint was never needed here; it stays for the offline-capable
+  // product pickers, which want the whole branch in one read.
+  //
+  // Search, low-stock and out-of-stock are all server-side now. Filtering the
+  // fetched page in the browser searched only the rows already on screen.
+  const stockQuery = useStock({
+    branch: effectiveBranch || undefined,
+    search: search || undefined,
+    lowStock: showLowStock ? 'true' : undefined,
+    outOfStock: showOutOfStock ? 'true' : undefined,
+    page,
+    limit: PAGE_SIZE,
+  });
 
-  const branchStockQuery = useStockByBranch(
-    effectiveBranch || undefined,
-    { enabled: !!effectiveBranch }
-  );
-
-  const lowStockQuery = useLowStock();
+  const lowStockQuery = useLowStock({ limit: 1 });
 
   // Mutations - use by-ID versions for modals
   const restockMutation = useRestockById();
   const adjustMutation = useAdjustStockById();
   const addStockMutation = useRestock();
 
-  // Determine which data to use and extract array
-  const stockQuery = effectiveBranch ? branchStockQuery : allStockQuery;
-  
-  // Extract stock array from query data
-  const stockData = useMemo(() => {
-    const data = stockQuery.data;
-    if (!data) return [];
-    // Check if it's a paginated response or just an array
-    if (Array.isArray(data)) return data;
-    if ('data' in data && Array.isArray(data.data)) return data.data;
-    return [];
-  }, [stockQuery.data]);
+  const stockData = useMemo(() => stockQuery.data?.data ?? [], [stockQuery.data]);
+  const pagination = stockQuery.data?.pagination;
 
-  // Filter and sort stock data
+  // Sorting, and only sorting: search and the two stock-level filters are the
+  // server's job now.
+  //
+  // This orders the page that was fetched, not the whole result set. Ordering
+  // across pages needs the API to sort, and the fields this control offers
+  // (product name, branch name) live on populated documents rather than on
+  // `Stock`, so the server cannot sort by them without an aggregation. Raised
+  // as GAP-057 rather than left implied: the sort control says "this page".
   const filteredStock = useMemo(() => {
-    let filtered = [...stockData];
-
-    // Search filter
-    if (search) {
-      const searchLower = search.toLowerCase();
-      filtered = filtered.filter((stock) => {
-        const product = stock.product as { name?: string; sku?: string; barcode?: string };
-        return (
-          product?.name?.toLowerCase().includes(searchLower) ||
-          product?.sku?.toLowerCase().includes(searchLower) ||
-          product?.barcode?.toLowerCase().includes(searchLower)
-        );
-      });
-    }
-
-    // Low stock filter
-    if (showLowStock || showOutOfStock) {
-      filtered = filtered.filter((stock) => {
-        const available = stock.quantity - stock.reservedQuantity;
-        if (showOutOfStock && stock.quantity === 0) return true;
-        if (showLowStock && available <= stock.reorderPoint && stock.quantity > 0) return true;
-        return false;
-      });
-    }
+    const filtered = [...stockData];
 
     // Sort
     filtered.sort((a, b) => {
@@ -216,7 +210,7 @@ function StockPageContent() {
     });
 
     return filtered;
-  }, [stockData, search, showLowStock, showOutOfStock, sortField, sortOrder]);
+  }, [stockData, sortField, sortOrder]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -229,12 +223,15 @@ function StockPageContent() {
     const outOfStockCount = stockData.filter((s: Stock) => s.quantity === 0).length;
 
     return {
-      totalItems: stockData.length,
+      // The server's count across every page, not the rows on this one.
+      totalItems: pagination?.total ?? stockData.length,
+      // Value and out-of-stock count are still derived from the loaded page,
+      // because no endpoint aggregates them. The labels say so.
       totalValue,
-      lowStockCount: lowStockArray?.length ?? 0,
+      lowStockCount: lowStockData?.pagination?.total ?? lowStockArray?.length ?? 0,
       outOfStockCount,
     };
-  }, [stockData, lowStockQuery.data]);
+  }, [stockData, pagination, lowStockQuery.data]);
 
   // Handlers
   const handleSortChange = useCallback((field: string) => {
@@ -244,6 +241,11 @@ function StockPageContent() {
       setFilters({ sortField: field, sortOrder: 'asc' }, 'push');
     }
   }, [sortField, sortOrder, setFilters]);
+
+  const handlePageChange = useCallback((nextPage: number) => {
+    setFilters({ page: nextPage }, 'push');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [setFilters]);
 
   const handleRestock = useCallback(async (stockId: string, data: RestockFormData) => {
     await restockMutation.mutateAsync({
@@ -348,15 +350,17 @@ function StockPageContent() {
         search={search}
         // Debounced inside StockFilters. 'replace' (the default) on purpose —
         // a typing pause must not become a history entry.
-        onSearchChange={(v) => setFilters({ search: v }, 'replace')}
+        // Every filter change returns to page one. Staying on page seven while
+        // narrowing to three results shows an empty table.
+        onSearchChange={(v) => setFilters({ search: v, page: 1 }, 'replace')}
         branchId={effectiveBranch}
-        onBranchChange={(v) => setFilters({ branch: v }, 'push')}
+        onBranchChange={(v) => setFilters({ branch: v, page: 1 }, 'push')}
         branches={branches}
         branchesLoading={branchesLoading}
         showLowStock={showLowStock}
-        onShowLowStockChange={(v) => setFilters({ lowStock: v }, 'push')}
+        onShowLowStockChange={(v) => setFilters({ lowStock: v, page: 1 }, 'push')}
         showOutOfStock={showOutOfStock}
-        onShowOutOfStockChange={(v) => setFilters({ outOfStock: v }, 'push')}
+        onShowOutOfStockChange={(v) => setFilters({ outOfStock: v, page: 1 }, 'push')}
         onReset={resetFilters}
       />
 
@@ -379,11 +383,18 @@ function StockPageContent() {
         />
       )}
 
-      {/* Pagination placeholder - can be added later */}
-      {filteredStock.length > 0 && (
-        <div className="text-sm text-gray-500 dark:text-gray-400 text-center">
-          Showing {filteredStock.length} of {stockData.length} stock records
-        </div>
+      {/* Pagination. The summary counts the server's total, not the rows on
+          screen: the old footer read "Showing 20 of 20 stock records" to a shop
+          holding 300 SKUs. */}
+      {pagination && (
+        <Pagination
+          page={pagination.page}
+          limit={pagination.limit}
+          total={pagination.total}
+          pages={pagination.pages}
+          onPageChange={handlePageChange}
+          label="stock records"
+        />
       )}
 
       {/* Modals */}

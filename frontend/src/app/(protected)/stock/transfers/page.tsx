@@ -5,7 +5,7 @@ import { Truck, Plus, RefreshCw, Filter } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useBranches } from '@/hooks/useBranches';
 import {
-  useStock,
+  useAllStock,
   useTransfers,
   useCreateTransfer,
   useUpdateTransferStatus,
@@ -13,6 +13,7 @@ import {
 import { TransferList, CreateTransferModal } from '@/components/stock';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { Pagination } from '@/components/ui/Pagination';
 import type { TransferStatus, CreateTransferPayload } from '@/types/stock';
 import type { CreateTransferFormData } from '@/utils/validators/stock';
 
@@ -21,22 +22,32 @@ import type { CreateTransferFormData } from '@/utils/validators/stock';
  * 
  * Manage stock transfers between branches.
  */
+/** Rows per page for the transfer list. */
+const PAGE_SIZE = 20;
+
 export default function TransfersPage() {
   const { user, isAdmin } = useAuth();
   const showAdminActions = isAdmin();
 
   // Filter state
   const [statusFilter, setStatusFilter] = useState<TransferStatus | ''>('');
+  const [page, setPage] = useState(1);
 
   // Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Fetch data
   const { data: branchesData } = useBranches();
-  const stockQuery = useStock();
-  const transfersQuery = useTransfers(
-    statusFilter ? { status: statusFilter } : {}
-  );
+  // The modal's product list needs every stocked product, not a page of them.
+  // This was `useStock()` with no parameters, which takes the API's 20-row
+  // default: a transfer of the 21st product could not be created at all.
+  const stockQuery = useAllStock();
+
+  const transfersQuery = useTransfers({
+    ...(statusFilter ? { status: statusFilter } : {}),
+    page,
+    limit: PAGE_SIZE,
+  });
 
   // Mutations
   const createMutation = useCreateTransfer();
@@ -48,13 +59,7 @@ export default function TransfersPage() {
     return 'data' in branchesData ? branchesData.data : branchesData;
   }, [branchesData]);
 
-  const stocks = useMemo(() => {
-    const data = stockQuery.data;
-    if (!data) return [];
-    if (Array.isArray(data)) return data;
-    if ('data' in data) return data.data;
-    return [];
-  }, [stockQuery.data]);
+  const stocks = useMemo(() => stockQuery.data ?? [], [stockQuery.data]);
 
   const transfers = useMemo(() => {
     const data = transfersQuery.data;
@@ -62,6 +67,12 @@ export default function TransfersPage() {
     if (Array.isArray(data)) return data;
     if ('data' in data) return data.data;
     return [];
+  }, [transfersQuery.data]);
+
+  const pagination = useMemo(() => {
+    const data = transfersQuery.data;
+    if (!data || Array.isArray(data)) return undefined;
+    return data.pagination;
   }, [transfersQuery.data]);
 
   // Handlers
@@ -190,11 +201,20 @@ export default function TransfersPage() {
         showActions={showAdminActions}
       />
 
-      {/* Stats */}
-      {transfers.length > 0 && (
-        <div className="text-sm text-gray-500 dark:text-gray-400 text-center">
-          Showing {transfers.length} transfer{transfers.length !== 1 ? 's' : ''}
-        </div>
+      {/* Pagination. The count is the server's total across every page; the
+          line here used to report how many rows had been rendered. */}
+      {pagination && (
+        <Pagination
+          page={pagination.page}
+          limit={pagination.limit}
+          total={pagination.total}
+          pages={pagination.pages}
+          onPageChange={(nextPage) => {
+            setPage(nextPage);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          label="transfers"
+        />
       )}
 
       {/* Create Transfer Modal */}

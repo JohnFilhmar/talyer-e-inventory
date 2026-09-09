@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { highestSuffix, monthKey, nextIdentifier } from '../utils/sequence.js';
 
 const transactionSchema = new mongoose.Schema(
   {
@@ -59,13 +60,23 @@ transactionSchema.index({ type: 1 });
 transactionSchema.index({ paymentMethod: 1 });
 transactionSchema.index({ 'reference.model': 1, 'reference.id': 1 });
 
-// Auto-generate transaction number
-transactionSchema.pre('save', async function () {
+// Auto-generate transaction number, atomically. The period here is the month
+// the `TXN-YYYYMM-` prefix advertises, not the year. See utils/sequence.js.
+//
+// This hook is now the only generator. Three call sites used to build their own
+// number as `TXN-<count>-<timestamp>`, a different format from the one this
+// model and the documentation describe, and because they always supplied a
+// value this hook never ran. Transactions written before that was fixed keep
+// their old numbers; nothing reads the format.
+transactionSchema.pre('validate', async function () {
   if (this.isNew && !this.transactionNumber) {
-    const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, '0');
-    const count = await this.constructor.countDocuments();
-    this.transactionNumber = `TXN-${year}${month}-${String(count + 1).padStart(6, '0')}`;
+    const period = monthKey();
+    const prefix = `TXN-${period}-`;
+    this.transactionNumber = await nextIdentifier({
+      key: `transaction:${period}`,
+      prefix,
+      seed: () => highestSuffix(this.constructor, 'transactionNumber', prefix),
+    });
   }
 });
 

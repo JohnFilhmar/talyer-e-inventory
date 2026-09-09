@@ -9,7 +9,8 @@
     "test": "cross-env NODE_ENV=test jest --runInBand",
     "test:watch": "cross-env NODE_ENV=test jest --watch --runInBand",
     "test:coverage": "cross-env NODE_ENV=test jest --coverage --runInBand",
-    "migrate:product-model": "node src/utils/migrateProductModel.js"
+    "migrate:product-model": "node src/utils/migrateProductModel.js",
+    "migrate:counters": "node src/utils/migrateCounters.js"
   },
   "keywords": [],
   "author": "",

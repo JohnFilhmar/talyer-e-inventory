@@ -24,14 +24,28 @@ export interface ApiResponse<T = unknown> {
   meta?: Record<string, unknown>;
 }
 
+/**
+ * Exactly what `ApiResponse.paginate` emits, and nothing more.
+ *
+ * `hasNextPage` and `hasPrevPage` used to be declared here and have never been
+ * sent by any endpoint. Typed as `boolean` rather than `boolean | undefined`,
+ * `if (pagination.hasNextPage)` compiled cleanly and was always false, which is
+ * precisely the shape a paging bug ships in. Derive them instead.
+ */
 export interface PaginationInfo {
   page: number;
   limit: number;
   total: number;
   pages: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
 }
+
+/** True when a further page exists. Derived, because the API does not send it. */
+export const hasNextPage = (pagination: PaginationInfo): boolean =>
+  pagination.page < pagination.pages;
+
+/** True when an earlier page exists. */
+export const hasPrevPage = (pagination: PaginationInfo): boolean =>
+  pagination.page > 1;
 
 export interface PaginatedResponse<T> {
   data: T[];
