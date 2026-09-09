@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Stock from '../models/Stock.js';
 import Product from '../models/Product.js';
 import Branch from '../models/Branch.js';
@@ -7,10 +8,10 @@ import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
-import { CACHE_TTL, USER_ROLES, PAGINATION } from '../config/constants.js';
+import { USER_ROLES, PAGINATION, STOCK_TRANSFER_STATUS } from '../config/constants.js';
 import { resolveBranchScope, canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
-import { asObjectId } from '../utils/objectId.js';
+import { asObjectId, asDate, asEnum } from '../utils/narrowing.js';
 
 /**
  * Resolve a free-text search to the product ids it matches.
@@ -106,6 +107,124 @@ const blockedFromIncrease = (product) => {
   return null;
 };
 
+
+/**
+ * The fields a stock list may be ordered by.
+ *
+ * Exported so the route validators check against the same list the controller
+ * honours, the way `SALES_SORT_FIELDS` already works.
+ */
+export const STOCK_SORT_FIELDS = [
+  'product.name',
+  'branch.name',
+  'quantity',
+  'available',
+  'sellingPrice',
+  'createdAt',
+];
+
+/**
+ * Cast the id fields of a filter for use in an aggregation.
+ *
+ * `find` casts a filter against the schema, so a 24-character string matches an
+ * ObjectId field. An aggregation `$match` does not: the string is compared as a
+ * string and matches nothing, silently returning an empty page rather than
+ * failing. Only the two fields this controller ever filters by are converted;
+ * an `$in` list is already built from real ObjectIds.
+ *
+ * @param {object} query
+ * @returns {object}
+ */
+const castIds = (query) => {
+  const match = { ...query };
+
+  for (const field of ['branch', 'product']) {
+    if (typeof match[field] === 'string') {
+      match[field] = new mongoose.Types.ObjectId(match[field]);
+    }
+  }
+
+  return match;
+};
+
+/**
+ * Return one ordered, paginated page of stock ids.
+ *
+ * `Stock.find().populate('product').sort({'product.name': 1})` does not work,
+ * and had never worked: `populate` is a second query issued after the first has
+ * already been sorted and paginated, so that sort key names a path the `Stock`
+ * document does not have. The list came back in whatever order the index
+ * yielded, which is the worse half of paginating it, because "page 2" has no
+ * stable meaning without a total order.
+ *
+ * Sorting by a populated field needs an aggregation. This one resolves ids
+ * only, and the caller then loads those ids through the normal `find` with its
+ * populate chain: the New Sale picker and the offline mirror depend on the
+ * exact populated shape, including nested fitment, and reproducing that in an
+ * aggregation would be a second definition of it to keep in step.
+ *
+ * `_id` is always the final sort key. Without a tiebreak, two rows with the
+ * same name can swap places between requests, which makes a row appear on two
+ * pages or on none.
+ *
+ * @param {object} query the same filter the count uses
+ * @param {string} sortBy one of STOCK_SORT_FIELDS
+ * @param {1|-1} direction
+ * @param {number} skip
+ * @param {number} limit
+ * @returns {Promise<Array<import('mongoose').Types.ObjectId>>}
+ */
+const orderedStockIds = async (query, sortBy, direction, skip, limit) => {
+  const pipeline = [{ $match: castIds(query) }];
+
+  if (sortBy === 'product.name' || sortBy === 'branch.name') {
+    const [ref] = sortBy.split('.');
+    const from = ref === 'product' ? Product.collection.name : Branch.collection.name;
+
+    pipeline.push(
+      { $lookup: { from, localField: ref, foreignField: '_id', as: '_sortJoin' } },
+      { $unwind: { path: '$_sortJoin', preserveNullAndEmptyArrays: true } },
+      { $addFields: { _sortKey: '$_sortJoin.name' } }
+    );
+  } else if (sortBy === 'available') {
+    // A virtual on the document, so it does not exist to sort on in the
+    // database. Recomputed here from the two fields it is derived from.
+    pipeline.push({
+      $addFields: { _sortKey: { $subtract: ['$quantity', '$reservedQuantity'] } },
+    });
+  } else {
+    pipeline.push({ $addFields: { _sortKey: `$${sortBy}` } });
+  }
+
+  pipeline.push(
+    { $sort: { _sortKey: direction, _id: 1 } },
+    { $skip: skip },
+    { $limit: limit },
+    { $project: { _id: 1 } }
+  );
+
+  const rows = await Stock.aggregate(pipeline);
+  return rows.map((row) => row._id);
+};
+
+/**
+ * Load stock rows by id, in the order the ids were given.
+ *
+ * `$in` returns them in whatever order it likes, so the ordering the
+ * aggregation just established has to be reapplied after the populate.
+ *
+ * @param {Array<import('mongoose').Types.ObjectId>} ids
+ * @param {(q: import('mongoose').Query) => import('mongoose').Query} withPopulate
+ */
+const loadInOrder = async (ids, withPopulate) => {
+  if (ids.length === 0) return [];
+
+  const records = await withPopulate(Stock.find({ _id: { $in: ids } }));
+  const byId = new Map(records.map((record) => [String(record._id), record]));
+
+  return ids.map((id) => byId.get(String(id))).filter(Boolean);
+};
+
 /**
  * @desc    Get all stock records with filters
  * @route   GET /api/stock
@@ -119,7 +238,9 @@ export const getAllStock = asyncHandler(async (req, res) => {
     lowStock,
     outOfStock,
     page = 1,
-    limit = PAGINATION.DEFAULT_LIMIT
+    limit = PAGINATION.DEFAULT_LIMIT,
+    sortBy = 'product.name',
+    sortOrder = 'asc'
   } = req.query;
 
   const query = {};
@@ -138,7 +259,11 @@ export const getAllStock = asyncHandler(async (req, res) => {
   }
 
   if (product) {
-    query.product = product;
+    const productId = asObjectId(product);
+    if (!productId) {
+      return ApiResponse.error(res, 400, 'Invalid product ID');
+    }
+    query.product = productId;
   }
 
   if (search) {
@@ -158,8 +283,19 @@ export const getAllStock = asyncHandler(async (req, res) => {
   const limitNum = Math.min(parseInt(limit), PAGINATION.MAX_LIMIT);
   const skip = (pageNum - 1) * limitNum;
 
-  const [stockRecords, total] = await Promise.all([
-    Stock.find(query)
+  const sortField = asEnum(sortBy, STOCK_SORT_FIELDS);
+  if (!sortField) {
+    return ApiResponse.error(res, 400, 'Invalid sortBy field');
+  }
+  const direction = sortOrder === 'desc' ? -1 : 1;
+
+  const [orderedIds, total] = await Promise.all([
+    orderedStockIds(query, sortField, direction, skip, limitNum),
+    Stock.countDocuments(query)
+  ]);
+
+  const stockRecords = await loadInOrder(orderedIds, (find) =>
+    find
       .populate({
         path: 'product',
         select: 'sku name brand productModel barcode images motorcycleModels isActive isDiscontinued',
@@ -167,11 +303,7 @@ export const getAllStock = asyncHandler(async (req, res) => {
       })
       .populate('branch', 'name code')
       .populate('supplier', 'name code')
-      .sort({ 'branch.name': 1, 'product.name': 1 })
-      .skip(skip)
-      .limit(limitNum),
-    Stock.countDocuments(query)
-  ]);
+  );
 
   return ApiResponse.paginate(
     res,
@@ -190,7 +322,15 @@ export const getAllStock = asyncHandler(async (req, res) => {
  */
 export const getBranchStock = asyncHandler(async (req, res) => {
   const { branchId } = req.params;
-  const { category, search, lowStock, page = 1, limit = 50 } = req.query;
+  const {
+    category,
+    search,
+    lowStock,
+    page = 1,
+    limit = 50,
+    sortBy = 'product.name',
+    sortOrder = 'asc'
+  } = req.query;
 
   // Check if branch exists
   const branch = await Branch.findById(branchId);
@@ -236,8 +376,19 @@ export const getBranchStock = asyncHandler(async (req, res) => {
     restrictToProducts(query, await productIdsMatchingSearch(search));
   }
 
-  const [stockRecords, total] = await Promise.all([
-    Stock.find(query)
+  const sortField = asEnum(sortBy, STOCK_SORT_FIELDS);
+  if (!sortField) {
+    return ApiResponse.error(res, 400, 'Invalid sortBy field');
+  }
+  const direction = sortOrder === 'desc' ? -1 : 1;
+
+  const [orderedIds, total] = await Promise.all([
+    orderedStockIds(query, sortField, direction, skip, limitNum),
+    Stock.countDocuments(query)
+  ]);
+
+  const stockRecords = await loadInOrder(orderedIds, (find) =>
+    find
       // motorcycleModels is nested-populated here, not just referenced: the New
       // Sale picker searches and filters this list client-side, and offline it
       // reads it back out of the IndexedDB mirror, where an unpopulated id is
@@ -251,11 +402,7 @@ export const getBranchStock = asyncHandler(async (req, res) => {
         ]
       })
       .populate('supplier', 'name code')
-      .sort({ 'product.name': 1 })
-      .skip(skip)
-      .limit(limitNum),
-    Stock.countDocuments(query)
-  ]);
+  );
 
   return ApiResponse.paginate(
     res,
@@ -409,10 +556,19 @@ export const restockProduct = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 400, 'Branch is required');
   }
 
+  // Narrowed here, not only in the route chain: these two reach a query
+  // directly, and the controller has to be safe on its own terms. See
+  // utils/narrowing.js.
+  const productId = asObjectId(product);
+  const branchId = asObjectId(targetBranch);
+  if (!productId || !branchId) {
+    return ApiResponse.error(res, 400, 'Invalid product or branch ID');
+  }
+
   // Validate product and branch exist
   const [productExists, branchExists] = await Promise.all([
-    Product.findById(product),
-    Branch.findById(targetBranch)
+    Product.findById(productId),
+    Branch.findById(branchId)
   ]);
 
   if (!productExists) {
@@ -429,7 +585,7 @@ export const restockProduct = asyncHandler(async (req, res) => {
   }
 
   // Find existing stock record or create new one
-  let stock = await Stock.findOne({ product, branch: targetBranch });
+  let stock = await Stock.findOne({ product: productId, branch: branchId });
   const isNewStock = !stock;
   const oldQuantity = stock ? stock.quantity : 0;
 
@@ -508,7 +664,13 @@ export const adjustStock = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 400, 'Reason for adjustment is required');
   }
 
-  const stock = await Stock.findOne({ product, branch });
+  const adjustProductId = asObjectId(product);
+  const adjustBranchId = asObjectId(branch);
+  if (!adjustProductId || !adjustBranchId) {
+    return ApiResponse.error(res, 400, 'Invalid product or branch ID');
+  }
+
+  const stock = await Stock.findOne({ product: adjustProductId, branch: adjustBranchId });
 
   if (!stock) {
     return ApiResponse.error(res, 404, 'Stock record not found');
@@ -517,7 +679,7 @@ export const adjustStock = asyncHandler(async (req, res) => {
   // Only upward adjustments are refused. Writing dead stock down must stay
   // possible, or archiving a product would trap its remaining units.
   if (adjustment > 0) {
-    const refusal = blockedFromIncrease(await Product.findById(product));
+    const refusal = blockedFromIncrease(await Product.findById(adjustProductId));
     if (refusal) {
       return ApiResponse.error(res, 400, refusal);
     }
@@ -738,8 +900,17 @@ export const createStockTransfer = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 400, 'Source and destination branches must be different');
   }
 
+  const transferProductId = asObjectId(product);
+  const sourceBranchId = asObjectId(fromBranch);
+  if (!transferProductId || !sourceBranchId) {
+    return ApiResponse.error(res, 400, 'Invalid product or branch ID');
+  }
+
   // Check if source branch has sufficient stock
-  const sourceStock = await Stock.findOne({ product, branch: fromBranch });
+  const sourceStock = await Stock.findOne({
+    product: transferProductId,
+    branch: sourceBranchId,
+  });
 
   if (!sourceStock) {
     return ApiResponse.error(res, 404, 'No stock found at source branch');
@@ -887,7 +1058,6 @@ export const updateStockTransferStatus = asyncHandler(async (req, res) => {
     });
 
     const destOldQuantity = destStock ? destStock.quantity : 0;
-    const isNewDestStock = !destStock;
 
     if (destStock) {
       destStock.quantity += transfer.quantity;
@@ -978,11 +1148,21 @@ export const getStockTransfers = asyncHandler(async (req, res) => {
   const andClauses = [];
 
   if (branch) {
-    andClauses.push({ $or: [{ fromBranch: branch }, { toBranch: branch }] });
+    const branchId = asObjectId(branch);
+    if (!branchId) {
+      return ApiResponse.error(res, 400, 'Invalid branch ID');
+    }
+    andClauses.push({ $or: [{ fromBranch: branchId }, { toBranch: branchId }] });
   }
 
   if (status) {
-    query.status = status;
+    // The value stored is the one from the constant, not the one that matched
+    // it, which is what makes this a barrier rather than an assertion.
+    const transferStatus = asEnum(status, Object.values(STOCK_TRANSFER_STATUS));
+    if (!transferStatus) {
+      return ApiResponse.error(res, 400, 'Invalid status filter');
+    }
+    query.status = transferStatus;
   }
 
   if (req.user.role !== USER_ROLES.ADMIN) {
@@ -1091,24 +1271,36 @@ export const getMovements = asyncHandler(async (req, res) => {
   const query = {};
 
   if (type) {
-    query.type = type;
+    const movementType = asEnum(type, Object.values(MOVEMENT_TYPES));
+    if (!movementType) {
+      return ApiResponse.error(res, 400, 'Invalid movement type filter');
+    }
+    query.type = movementType;
   }
 
   if (branch) {
-    query.branch = branch;
+    const branchId = asObjectId(branch);
+    if (!branchId) {
+      return ApiResponse.error(res, 400, 'Invalid branch ID');
+    }
+    query.branch = branchId;
   }
 
   if (product) {
-    query.product = product;
+    const productId = asObjectId(product);
+    if (!productId) {
+      return ApiResponse.error(res, 400, 'Invalid product ID');
+    }
+    query.product = productId;
   }
 
   if (startDate || endDate) {
     query.createdAt = {};
     if (startDate) {
-      query.createdAt.$gte = new Date(startDate);
+      query.createdAt.$gte = asDate(startDate);
     }
     if (endDate) {
-      query.createdAt.$lte = new Date(endDate);
+      query.createdAt.$lte = asDate(endDate);
     }
   }
 
@@ -1212,7 +1404,11 @@ export const getMovementsByProduct = asyncHandler(async (req, res) => {
   // outright. Admins keep the full cross-branch view.
   if (req.user.role === USER_ROLES.ADMIN) {
     if (branch) {
-      query.branch = branch;
+      const branchId = asObjectId(branch);
+      if (!branchId) {
+        return ApiResponse.error(res, 400, 'Invalid branch ID');
+      }
+      query.branch = branchId;
     }
   } else {
     if (!req.user.branch) {
@@ -1265,16 +1461,20 @@ export const getMovementsByBranch = asyncHandler(async (req, res) => {
   const query = { branch: branchId };
 
   if (type) {
-    query.type = type;
+    const movementType = asEnum(type, Object.values(MOVEMENT_TYPES));
+    if (!movementType) {
+      return ApiResponse.error(res, 400, 'Invalid movement type filter');
+    }
+    query.type = movementType;
   }
 
   if (startDate || endDate) {
     query.createdAt = {};
     if (startDate) {
-      query.createdAt.$gte = new Date(startDate);
+      query.createdAt.$gte = asDate(startDate);
     }
     if (endDate) {
-      query.createdAt.$lte = new Date(endDate);
+      query.createdAt.$lte = asDate(endDate);
     }
   }
 

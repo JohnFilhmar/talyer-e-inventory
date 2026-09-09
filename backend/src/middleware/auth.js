@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { passwordGeneration } from '../utils/jwt.js';
 
 const protect = async (req, res, next) => {
   let token;
@@ -26,6 +27,25 @@ const protect = async (req, res, next) => {
         return res.status(401).json({
           success: false,
           message: 'Account is deactivated',
+        });
+      }
+
+      // A password change ends every session, including ones already holding a
+      // signed access token.
+      //
+      // Clearing the stored refresh token (GAP-001) stops an attacker minting
+      // NEW tokens, but an access token already in their hands stays valid for
+      // its full 7 days, and the reset flow exists precisely to remediate a
+      // compromise.
+      //
+      // A token with no `pwd` claim decodes to 0, which matches a user who has
+      // never changed their password. That is deliberate: sessions established
+      // before this shipped keep working until their owner changes their
+      // password, rather than every logged-in user being signed out on deploy.
+      if ((decoded.pwd ?? 0) !== passwordGeneration(req.user)) {
+        return res.status(401).json({
+          success: false,
+          message: 'Password was changed. Please log in again.',
         });
       }
 

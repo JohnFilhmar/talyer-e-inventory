@@ -60,6 +60,29 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:5000/api
         run: npm run build
 
+  frontend-test:
+    name: frontend-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      # Its own job rather than a step in frontend-build: a failing test and a
+      # failing build are different problems, and reading which one broke off
+      # the check list is worth one more runner.
+      - name: Test
+        working-directory: frontend
+        run: npm test
+
   mobile-check:
     name: mobile-check
     runs-on: ubuntu-latest

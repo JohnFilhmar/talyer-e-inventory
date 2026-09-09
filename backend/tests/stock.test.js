@@ -1987,3 +1987,180 @@ describe('stock list search', () => {
     expect(res.body.data).toHaveLength(0);
   });
 });
+
+describe('stock list ordering', () => {
+  // Ordering used to be declared and never applied: `.sort({'product.name': 1})`
+  // names a path `Stock` does not have, because populate is a second query run
+  // after the sort. Paginating an unordered list is the worse half of that, since
+  // a row can appear on two pages or on none.
+  let adminToken;
+  let branch;
+  let category;
+
+  const NAMES = ['Alpha Part', 'Bravo Part', 'Charlie Part', 'Delta Part', 'Echo Part'];
+
+  beforeEach(async () => {
+    const admin = await createTestAdmin();
+    adminToken = admin.token;
+    category = await createTestCategory();
+    branch = await createTestBranch();
+
+    // Created in a deliberately unsorted order, and with quantities that do not
+    // follow the name order, so a passing assertion cannot be insertion order.
+    const quantities = { 'Charlie Part': 5, 'Alpha Part': 40, 'Echo Part': 10, 'Bravo Part': 30, 'Delta Part': 20 };
+    for (const name of ['Charlie Part', 'Alpha Part', 'Echo Part', 'Bravo Part', 'Delta Part']) {
+      const product = await createTestProduct({ name, sku: name.replace(/\s/g, '-'), category: category._id });
+      await createTestStock({ product: product._id, branch: branch._id, quantity: quantities[name] });
+    }
+  });
+
+  const namesFrom = (res) => res.body.data.map((row) => row.product.name);
+
+  it('orders by product name across the whole result set, not within a page', async () => {
+    const first = await request(app)
+      .get('/api/stock?sortBy=product.name&sortOrder=asc&limit=2&page=1')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const second = await request(app)
+      .get('/api/stock?sortBy=product.name&sortOrder=asc&limit=2&page=2')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const third = await request(app)
+      .get('/api/stock?sortBy=product.name&sortOrder=asc&limit=2&page=3')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(first.statusCode).toBe(200);
+    expect([...namesFrom(first), ...namesFrom(second), ...namesFrom(third)]).toEqual(NAMES);
+  });
+
+  it('reverses on sortOrder=desc', async () => {
+    const res = await request(app)
+      .get('/api/stock?sortBy=product.name&sortOrder=desc')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(namesFrom(res)).toEqual([...NAMES].reverse());
+  });
+
+  it('shows no row twice and skips none across pages', async () => {
+    const seen = [];
+    for (const page of [1, 2, 3]) {
+      const res = await request(app)
+        .get(`/api/stock?sortBy=product.name&limit=2&page=${page}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      seen.push(...res.body.data.map((row) => row._id));
+    }
+
+    expect(seen).toHaveLength(5);
+    expect(new Set(seen).size).toBe(5);
+  });
+
+  it('orders by a field on the stock document itself', async () => {
+    const res = await request(app)
+      .get('/api/stock?sortBy=quantity&sortOrder=asc')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.body.data.map((row) => row.quantity)).toEqual([5, 10, 20, 30, 40]);
+  });
+
+  it('orders by available quantity, which is a virtual and not stored', async () => {
+    const res = await request(app)
+      .get('/api/stock?sortBy=available&sortOrder=desc')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    const available = res.body.data.map((row) => row.quantity - row.reservedQuantity);
+    expect(available).toEqual([...available].sort((a, b) => b - a));
+    expect(available[0]).toBe(40);
+  });
+
+  it('rejects a sortBy the controller does not honour', async () => {
+    const res = await request(app)
+      .get('/api/stock?sortBy=password')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('orders branch stock the same way', async () => {
+    const res = await request(app)
+      .get(`/api/stock/branch/${branch._id}?sortBy=product.name&sortOrder=asc`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(namesFrom(res)).toEqual(NAMES);
+  });
+});
+
+describe('movement read routes', () => {
+  // GET /api/stock/movements and its per-branch sibling received no request
+  // from any suite: the ledger could have been unreadable and every test would
+  // have stayed green (GAP-045).
+  let adminToken;
+  let branch;
+  let product;
+
+  beforeEach(async () => {
+    const admin = await createTestAdmin();
+    adminToken = admin.token;
+    const category = await createTestCategory();
+    branch = await createTestBranch();
+    product = await createTestProduct({ category: category._id });
+
+    await createTestStock({ product: product._id, branch: branch._id, quantity: 10 });
+
+    await request(app)
+      .post('/api/stock/restock')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ product: product._id.toString(), branch: branch._id.toString(), quantity: 5 });
+  });
+
+  it('lists movements', async () => {
+    const res = await request(app)
+      .get('/api/stock/movements')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.length).toBeGreaterThan(0);
+    expect(res.body.pagination.total).toBeGreaterThan(0);
+  });
+
+  it('filters movements by type', async () => {
+    const res = await request(app)
+      .get('/api/stock/movements?type=restock')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.every((row) => row.type === 'restock')).toBe(true);
+  });
+
+  it('rejects a movement type outside the enum', async () => {
+    const res = await request(app)
+      .get('/api/stock/movements?type=not-a-type')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('lists movements for one branch', async () => {
+    const res = await request(app)
+      .get(`/api/stock/movements/branch/${branch._id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.length).toBeGreaterThan(0);
+  });
+
+  it('404s for a branch that does not exist', async () => {
+    const res = await request(app)
+      .get('/api/stock/movements/branch/507f1f77bcf86cd799439011')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('lists movements for one product', async () => {
+    const res = await request(app)
+      .get(`/api/stock/movements/product/${product._id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.length).toBeGreaterThan(0);
+  });
+});

@@ -45,7 +45,11 @@ const STOCK_FILTER_DEFAULTS = {
 /** Rows per request. The server caps this at PAGINATION.MAX_LIMIT regardless. */
 const PAGE_SIZE = 25;
 
-/** Columns the table can actually sort by — see `filteredStock`'s switch. */
+/**
+ * Columns the table can sort by. Must stay a subset of `STOCK_SORT_FIELDS` in
+ * `backend/src/controllers/stockController.js`, which the API validates
+ * against: an unknown field is a 400 rather than a silently ignored filter.
+ */
 const SORT_FIELDS = ['product.name', 'branch.name', 'quantity', 'available', 'sellingPrice'];
 
 /**
@@ -142,6 +146,8 @@ function StockPageContent() {
     search: search || undefined,
     lowStock: showLowStock ? 'true' : undefined,
     outOfStock: showOutOfStock ? 'true' : undefined,
+    sortBy: sortField,
+    sortOrder,
     page,
     limit: PAGE_SIZE,
   });
@@ -156,61 +162,10 @@ function StockPageContent() {
   const stockData = useMemo(() => stockQuery.data?.data ?? [], [stockQuery.data]);
   const pagination = stockQuery.data?.pagination;
 
-  // Sorting, and only sorting: search and the two stock-level filters are the
-  // server's job now.
-  //
-  // This orders the page that was fetched, not the whole result set. Ordering
-  // across pages needs the API to sort, and the fields this control offers
-  // (product name, branch name) live on populated documents rather than on
-  // `Stock`, so the server cannot sort by them without an aggregation. Raised
-  // as GAP-057 rather than left implied: the sort control says "this page".
-  const filteredStock = useMemo(() => {
-    const filtered = [...stockData];
-
-    // Sort
-    filtered.sort((a, b) => {
-      let aVal: string | number = '';
-      let bVal: string | number = '';
-
-      switch (sortField) {
-        case 'product.name':
-          aVal = (a.product as { name?: string })?.name ?? '';
-          bVal = (b.product as { name?: string })?.name ?? '';
-          break;
-        case 'branch.name':
-          aVal = (a.branch as { name?: string })?.name ?? '';
-          bVal = (b.branch as { name?: string })?.name ?? '';
-          break;
-        case 'quantity':
-          aVal = a.quantity;
-          bVal = b.quantity;
-          break;
-        case 'available':
-          aVal = a.quantity - a.reservedQuantity;
-          bVal = b.quantity - b.reservedQuantity;
-          break;
-        case 'sellingPrice':
-          aVal = a.sellingPrice;
-          bVal = b.sellingPrice;
-          break;
-        default:
-          aVal = (a.product as { name?: string })?.name ?? '';
-          bVal = (b.product as { name?: string })?.name ?? '';
-      }
-
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return sortOrder === 'asc'
-          ? aVal.localeCompare(bVal)
-          : bVal.localeCompare(aVal);
-      }
-
-      return sortOrder === 'asc'
-        ? (aVal as number) - (bVal as number)
-        : (bVal as number) - (aVal as number);
-    });
-
-    return filtered;
-  }, [stockData, sortField, sortOrder]);
+  // No client-side sorting. The API orders the whole result set and this page
+  // renders what it is given: ordering the fetched page would reorder 25 rows
+  // out of 300 while the control implies otherwise, and paginating an unordered
+  // list lets a row appear on two pages or on none.
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -235,10 +190,12 @@ function StockPageContent() {
 
   // Handlers
   const handleSortChange = useCallback((field: string) => {
+    // Back to page one: the order changes, so page seven of the old order has
+    // nothing to do with page seven of the new one.
     if (sortField === field) {
-      setFilters({ sortOrder: sortOrder === 'asc' ? 'desc' : 'asc' }, 'push');
+      setFilters({ sortOrder: sortOrder === 'asc' ? 'desc' : 'asc', page: 1 }, 'push');
     } else {
-      setFilters({ sortField: field, sortOrder: 'asc' }, 'push');
+      setFilters({ sortField: field, sortOrder: 'asc', page: 1 }, 'push');
     }
   }, [sortField, sortOrder, setFilters]);
 
@@ -371,7 +328,7 @@ function StockPageContent() {
         </Alert>
       ) : (
         <StockTable
-          stocks={filteredStock}
+          stocks={stockData}
           isLoading={stockQuery.isLoading}
           sortField={sortField}
           sortOrder={sortOrder}

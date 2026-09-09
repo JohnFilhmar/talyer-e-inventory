@@ -9,6 +9,7 @@ import CacheUtil from '../utils/cache.js';
 import { PAGINATION, USER_ROLES } from '../config/constants.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
 import { roundCurrency } from '../utils/currency.js';
+import { asObjectId } from '../utils/narrowing.js';
 import { canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
 // The fields a list may be ordered by. `sortBy` is used as an object key, so an
@@ -240,7 +241,17 @@ export const createServiceOrder = asyncHandler(async (req, res) => {
   // to succeed. Scoped to `branch` (already access-checked above) so a guessed
   // key cannot be used to read an order from a branch the caller cannot reach.
   if (clientRequestId) {
-    const existing = await ServiceOrder.findOne({ clientRequestId, branch })
+    // Narrowed at the sink, the same as the sales path. See utils/narrowing.js.
+    const replayKey = asObjectId(clientRequestId);
+    const replayBranch = asObjectId(branch);
+    if (!replayKey || !replayBranch) {
+      return ApiResponse.error(res, 400, 'Invalid clientRequestId or branch');
+    }
+
+    const existing = await ServiceOrder.findOne({
+      clientRequestId: replayKey,
+      branch: replayBranch,
+    })
       .populate('branch', 'name code')
       .populate('assignedTo', 'name')
       .populate('createdBy', 'name');

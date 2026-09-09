@@ -82,13 +82,27 @@ const userSchema = new mongoose.Schema(
       type: Date,
       select: false,
     },
+    // When the password last changed. Read by `protect` to reject access tokens
+    // that were minted before it, which is the only way to end a session that
+    // is already holding a signed 7-day token.
+    //
+    // Deliberately NOT `select: false`: `protect` loads the user on every
+    // authenticated request with `.select('-password')`, and a field it cannot
+    // see is a check that silently never fires.
+    passwordChangedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Hash password before saving
+// Hash password before saving, and record when it changed.
+//
+// Both live in the same hook on purpose. Every path that changes a password goes
+// through here, so a future one cannot forget to stamp the time: the reset flow,
+// the admin change, and anything added later.
 userSchema.pre('save', async function () {
   // Only hash if password is modified
   if (!this.isModified('password')) {
@@ -97,6 +111,14 @@ userSchema.pre('save', async function () {
 
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+
+  // Not stamped on creation. A brand-new user has no outstanding tokens to
+  // invalidate, and leaving the field unset keeps "never changed" distinct from
+  // "changed at signup", which is what lets a token minted before this shipped
+  // stay valid until its owner changes their password.
+  if (!this.isNew) {
+    this.passwordChangedAt = new Date();
+  }
 });
 
 // Method to compare password

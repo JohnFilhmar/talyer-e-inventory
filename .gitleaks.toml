@@ -1,0 +1,35 @@
+# Gitleaks configuration.
+#
+# The default rule set is kept in full. This adds one allowlist, as tight as the
+# tool allows.
+#
+# Why it exists: gitleaks' `generic-api-key` rule is entropy-based, and the
+# password fixtures in the backend test suites clear its threshold. It failed
+# secret-scan on `password: 'brandnewpass123'` in `backend/tests/auth.test.js`
+# at entropy 3.51. That is a string typed into a test, not a credential: the
+# suites run against an in-memory MongoDB with secrets injected by
+# `tests/setup/testEnv.js`, and no test reads a real environment.
+#
+# Renaming the fixture was not enough on its own. A pull request scan covers the
+# whole commit range, so a string that has ever been committed keeps failing the
+# job after the file is fixed, and rewriting published history to erase a
+# non-secret is the more disruptive answer.
+#
+# `stopwords` rather than a path exemption, deliberately. A path rule would
+# exempt every rule for every backend test file, so a real AWS key pasted into a
+# test would stop failing the build. A stopword matches the detected secret
+# itself, so exactly these four fixture strings are allowed and nothing else is,
+# in test files or anywhere else.
+title = "talyer-e-inventory"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Password fixtures used by the backend test suites"
+stopwords = [
+  "brandnewpass123",
+  "newpassword123",
+  "oldpassword123",
+  "password123",
+]

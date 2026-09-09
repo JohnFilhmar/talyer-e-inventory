@@ -3,6 +3,8 @@ import Branch from '../models/Branch.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import { escapeRegex } from '../utils/regex.js';
+import { asEnum, asObjectId } from '../utils/narrowing.js';
+import { USER_ROLES } from '../config/constants.js';
 
 // Defence in depth on top of the schema's `select: false`. The field names must
 // match `models/User.js` exactly: Mongoose silently ignores an exclusion for a
@@ -39,14 +41,24 @@ const getUsers = asyncHandler(async (req, res) => {
     ];
   }
 
-  // Role filter
+  // Role filter. Narrowed here rather than only in the route chain: what goes
+  // into the filter is the constant that matched, not the caller's string. See
+  // utils/narrowing.js.
   if (role) {
-    query.role = role;
+    const roleFilter = asEnum(role, Object.values(USER_ROLES));
+    if (!roleFilter) {
+      return ApiResponse.error(res, 400, 'Invalid role filter');
+    }
+    query.role = roleFilter;
   }
 
   // Branch filter
   if (branch) {
-    query.branch = branch;
+    const branchId = asObjectId(branch);
+    if (!branchId) {
+      return ApiResponse.error(res, 400, 'Invalid branch ID');
+    }
+    query.branch = branchId;
   }
 
   // Active status filter
@@ -127,7 +139,11 @@ const createUser = asyncHandler(async (req, res) => {
 
   // Validate branch exists if provided
   if (branch) {
-    const branchExists = await Branch.findById(branch);
+    const branchId = asObjectId(branch);
+    if (!branchId) {
+      return ApiResponse.error(res, 400, 'Invalid branch ID');
+    }
+    const branchExists = await Branch.findById(branchId);
     if (!branchExists) {
       return ApiResponse.error(res, 404, 'Branch not found');
     }
@@ -211,7 +227,11 @@ const updateUser = asyncHandler(async (req, res) => {
 
   // Validate branch exists if provided
   if (branch) {
-    const branchExists = await Branch.findById(branch);
+    const branchId = asObjectId(branch);
+    if (!branchId) {
+      return ApiResponse.error(res, 400, 'Invalid branch ID');
+    }
+    const branchExists = await Branch.findById(branchId);
     if (!branchExists) {
       return ApiResponse.error(res, 404, 'Branch not found');
     }

@@ -5,6 +5,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { escapeRegex } from '../utils/regex.js';
+import { asObjectId } from '../utils/narrowing.js';
 import { pickFields } from '../utils/pickFields.js';
 import { CACHE_TTL, PAGINATION } from '../config/constants.js';
 
@@ -137,7 +138,11 @@ export const getProducts = asyncHandler(async (req, res) => {
   const query = {};
 
   if (category) {
-    query.category = category;
+    const categoryId = asObjectId(category);
+    if (!categoryId) {
+      return ApiResponse.error(res, 400, 'Invalid category ID');
+    }
+    query.category = categoryId;
   }
 
   if (brand) {
@@ -161,7 +166,10 @@ export const getProducts = asyncHandler(async (req, res) => {
   }
   
   if (search) {
-    query.$text = { $search: search };
+    // `$search` takes a string, so a non-string here would be an operator
+    // object reaching the text index. String() is the narrowing; the value is
+    // otherwise passed through as the free text it is meant to be.
+    query.$text = { $search: String(search) };
   }
   
   if (minPrice || maxPrice) {

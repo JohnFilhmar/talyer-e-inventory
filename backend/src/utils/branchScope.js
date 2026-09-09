@@ -1,4 +1,5 @@
 import { USER_ROLES } from '../config/constants.js';
+import { asObjectId } from './narrowing.js';
 
 /**
  * Resolve the branch a request is allowed to act on.
@@ -21,21 +22,22 @@ import { USER_ROLES } from '../config/constants.js';
  * unchecked. Coercing to a string first means an array or an object cannot slip
  * past on shape.
  */
-const OBJECT_ID = /^[0-9a-fA-F]{24}$/;
-
-const isValidBranchId = (value) => OBJECT_ID.test(String(value));
+// The regex itself lives in utils/narrowing.js, which is where every other
+// controller now reaches for it. It was declared here first and was on its way
+// to being copied per call site.
 
 export const resolveBranchScope = (user, requestedBranchId) => {
   if (user.role === USER_ROLES.ADMIN) {
     if (requestedBranchId === undefined || requestedBranchId === null || requestedBranchId === '') {
       return { ok: true, branchId: null };
     }
-    if (!isValidBranchId(requestedBranchId)) {
-      return { ok: false, status: 400, message: 'Invalid branch id' };
-    }
     // Normalised to the matched string, so what reaches the query is a plain
     // 24-character hex id and never the original object or array.
-    return { ok: true, branchId: String(requestedBranchId) };
+    const branchId = asObjectId(requestedBranchId);
+    if (!branchId) {
+      return { ok: false, status: 400, message: 'Invalid branch id' };
+    }
+    return { ok: true, branchId };
   }
 
   if (!user.branch) {
