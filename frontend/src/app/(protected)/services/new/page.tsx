@@ -27,6 +27,7 @@ import {
 } from '@/types/service';
 import type { CreateServiceOrderPayload } from '@/types/service';
 import type { User } from '@/types/auth';
+import { resolveBranchId } from '@/types/auth';
 
 /**
  * Format currency in Philippine Peso
@@ -88,9 +89,7 @@ export default function NewServicePage() {
   // Get user's branch or allow selection for admin
   const userBranchId = useMemo(() => {
     if (isAdmin() || !user?.branch) return undefined;
-    return typeof user.branch === 'string'
-      ? user.branch
-      : (user.branch as { _id: string })._id;
+    return resolveBranchId(user.branch);
   }, [user, isAdmin]);
 
   // Fetch branches for admin selection

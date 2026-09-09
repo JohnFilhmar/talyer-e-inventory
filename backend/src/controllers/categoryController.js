@@ -41,7 +41,17 @@ export const getCategories = asyncHandler(async (req, res) => {
   }
 
   // Check cache
-  const cacheKey = CacheUtil.generateKey('categories', 'list', JSON.stringify(query));
+  // includeChildren is part of the key because it changes the response shape:
+  // it is read from req.query but never enters `query`, so it never entered the
+  // key either. Whichever variant was requested first populated the entry and
+  // every request with the other value got the wrong shape for the full TTL, so
+  // a category-tree UI rendered every node as a leaf for up to an hour.
+  const cacheKey = CacheUtil.generateKey(
+    'categories',
+    'list',
+    JSON.stringify(query),
+    includeChildren === 'true' ? 'withChildren' : 'flat'
+  );
   const cached = await CacheUtil.get(cacheKey);
   
   if (cached) {

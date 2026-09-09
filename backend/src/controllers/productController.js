@@ -370,6 +370,10 @@ export const createProduct = asyncHandler(async (req, res) => {
     // Invalidate cache
     await CacheUtil.delPattern('cache:products:*');
     await CacheUtil.delPattern('cache:category:*');
+    // The singular pattern above does not match the category *list*'s key, and
+    // that list caches a productCount for CACHE_TTL.LONG.
+    await CacheUtil.delPattern('cache:categories:*');
+    await CacheUtil.delPattern('cache:motorcycleModels:*');
 
     return ApiResponse.success(res, 201, 'Product created successfully', populatedProduct);
   } catch (error) {
@@ -449,6 +453,11 @@ export const updateProduct = asyncHandler(async (req, res) => {
   // Invalidate cache
   await CacheUtil.del(CacheUtil.generateKey('product', id));
   await CacheUtil.delPattern('cache:products:*');
+  // The category list caches a productCount for CACHE_TTL.LONG, so any
+  // write that changes how many products a category holds must clear it.
+  // Product fitment does the same for the motorcycle-model reads.
+  await CacheUtil.delPattern('cache:categories:*');
+  await CacheUtil.delPattern('cache:motorcycleModels:*');
 
   return ApiResponse.success(res, 200, 'Product updated successfully', product);
 });
@@ -475,6 +484,11 @@ export const deleteProduct = asyncHandler(async (req, res) => {
   // Invalidate cache
   await CacheUtil.del(CacheUtil.generateKey('product', id));
   await CacheUtil.delPattern('cache:products:*');
+  // The category list caches a productCount for CACHE_TTL.LONG, so any
+  // write that changes how many products a category holds must clear it.
+  // Product fitment does the same for the motorcycle-model reads.
+  await CacheUtil.delPattern('cache:categories:*');
+  await CacheUtil.delPattern('cache:motorcycleModels:*');
 
   return ApiResponse.success(
     res,
@@ -511,6 +525,11 @@ export const restoreProduct = asyncHandler(async (req, res) => {
 
   await CacheUtil.del(CacheUtil.generateKey('product', id));
   await CacheUtil.delPattern('cache:products:*');
+  // The category list caches a productCount for CACHE_TTL.LONG, so any
+  // write that changes how many products a category holds must clear it.
+  // Product fitment does the same for the motorcycle-model reads.
+  await CacheUtil.delPattern('cache:categories:*');
+  await CacheUtil.delPattern('cache:motorcycleModels:*');
 
   const populated = await Product.findById(id)
     .populate('category', 'name code color')

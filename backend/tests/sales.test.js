@@ -685,7 +685,12 @@ describe('Sales Order Management', () => {
       expect(res.body.data.payment.method).toBe('gcash');
     });
 
-    it('should reject payment update for completed order', async () => {
+    // GAP-016 deliberately reverses this. Refusing payment on a completed order
+    // made on-account sales unrecordable: staff complete the order so the shelf
+    // count is right, completeSalesOrder writes no Transaction because it is
+    // unpaid, and this guard then refused the payment that was supposed to
+    // write one. Only 'cancelled' is refused now, matching serviceController.
+    it('should reject payment update for a cancelled order', async () => {
       const admin = await createTestAdmin();
       const category = await createTestCategory();
       const branch = await createTestBranch();
@@ -693,7 +698,7 @@ describe('Sales Order Management', () => {
       await createTestStock(product, branch);
 
       const order = await createTestSalesOrder(branch, product, admin.user, {
-        status: 'completed'
+        status: 'cancelled'
       });
 
       const res = await request(app)
@@ -1501,5 +1506,84 @@ describe('Sales order creation is all-or-nothing for reservations', () => {
     expect(res.status).toBe(201);
     expect((await Stock.findById(stockA._id)).reservedQuantity).toBe(2);
     expect((await Stock.findById(stockB._id)).reservedQuantity).toBe(3);
+  });
+});
+
+// GAP-016. A sale completed while unpaid (goods released on account) writes no
+// Transaction by design, because the payment path is supposed to write it when
+// the money lands. But that path refused any completed order, so there was no
+// third route: the order stayed payment.status 'pending' forever with no
+// Transaction, while getSalesStatistics counted it in revenue because that
+// aggregation filters on status 'completed'.
+describe('Sales API - an on-account sale can still be paid', () => {
+  const seed = async () => {
+    const admin = await createTestAdmin();
+    const category = await createTestCategory();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(category);
+    await createTestStock(product, branch, { quantity: 50, sellingPrice: 100 });
+    return { admin, branch, product };
+  };
+
+  const completedUnpaidOrder = async (branch, product, user) =>
+    createTestSalesOrder(branch, product, user, {
+      status: 'completed',
+      payment: { method: 'cash', amountPaid: 0, status: 'pending' }
+    });
+
+  it('accepts payment on a completed order and writes exactly one Transaction', async () => {
+    const { admin, branch, product } = await seed();
+    const order = await completedUnpaidOrder(branch, product, admin.user);
+
+    const res = await request(app)
+      .put(`/api/sales/${order._id}/payment`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ amountPaid: order.total });
+
+    expect(res.status).toBe(200);
+
+    const txns = await Transaction.find({
+      'reference.model': 'SalesOrder',
+      'reference.id': order._id,
+      type: 'sale'
+    });
+    expect(txns).toHaveLength(1);
+  });
+
+  it('does not write a second Transaction when the payment call is repeated', async () => {
+    const { admin, branch, product } = await seed();
+    const order = await completedUnpaidOrder(branch, product, admin.user);
+
+    await request(app)
+      .put(`/api/sales/${order._id}/payment`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ amountPaid: order.total });
+
+    const second = await request(app)
+      .put(`/api/sales/${order._id}/payment`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ amountPaid: order.total });
+
+    expect(second.status).toBe(200);
+
+    const txns = await Transaction.find({
+      'reference.model': 'SalesOrder',
+      'reference.id': order._id,
+      type: 'sale'
+    });
+    expect(txns).toHaveLength(1);
+  });
+
+  it('marks the order paid once the balance is settled', async () => {
+    const { admin, branch, product } = await seed();
+    const order = await completedUnpaidOrder(branch, product, admin.user);
+
+    await request(app)
+      .put(`/api/sales/${order._id}/payment`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ amountPaid: order.total });
+
+    const stored = await SalesOrder.findById(order._id);
+    expect(stored.payment.status).toBe('paid');
   });
 });

@@ -244,7 +244,7 @@ export const getProductStock = asyncHandler(async (req, res) => {
  * @access  Private (Admin, Salesperson)
  */
 export const getLowStock = asyncHandler(async (req, res) => {
-  const { branch } = req.query;
+  const { branch, page = 1, limit = PAGINATION.DEFAULT_LIMIT } = req.query;
 
   const query = {
     $expr: { $lte: ['$quantity', '$reorderPoint'] }
@@ -263,17 +263,35 @@ export const getLowStock = asyncHandler(async (req, res) => {
     query.branch = scope.branchId;
   }
 
-  const lowStockItems = await Stock.find(query)
-    .populate('product', 'sku name brand')
-    .populate('branch', 'name code')
-    .populate('supplier', 'name code contact')
-    .sort({ quantity: 1 });
+  // Paginated. This endpoint had no skip and no limit at all, so it returned
+  // every low-stock row in one response: survivable with a few hundred
+  // products, not with a real catalogue, and it is exactly the endpoint a
+  // dashboard polls.
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(
+    Math.max(1, parseInt(limit, 10) || PAGINATION.DEFAULT_LIMIT),
+    PAGINATION.MAX_LIMIT
+  );
+  const skip = (pageNum - 1) * limitNum;
 
-  return ApiResponse.success(
+  const [lowStockItems, total] = await Promise.all([
+    Stock.find(query)
+      .populate('product', 'sku name brand')
+      .populate('branch', 'name code')
+      .populate('supplier', 'name code contact')
+      .sort({ quantity: 1 })
+      .skip(skip)
+      .limit(limitNum),
+    Stock.countDocuments(query)
+  ]);
+
+  return ApiResponse.paginate(
     res,
-    200,
-    'Low stock items retrieved successfully',
-    lowStockItems
+    lowStockItems,
+    pageNum,
+    limitNum,
+    total,
+    'Low stock items retrieved successfully'
   );
 });
 
@@ -419,7 +437,27 @@ export const adjustStock = asyncHandler(async (req, res) => {
   }
 
   const oldQuantity = stock.quantity;
-  stock.quantity = Math.max(0, stock.quantity + adjustment);
+  // An adjustment must never leave quantity below what is already committed to
+  // open orders. Both endpoints clamped at zero and never consulted
+  // reservedQuantity, and the `available` virtual is
+  // Math.max(0, quantity - reservedQuantity), so a row left at quantity 0 with
+  // reservedQuantity 5 simply reads as empty and nothing reconciles the two.
+  // Completing that order then calls deductStock(5) against quantity 0, which
+  // throws: the order can no longer be completed or cleanly cancelled, and the
+  // phantom reservations survive indefinitely.
+  //
+  // Refused rather than silently released: those reservations belong to real
+  // orders, and which one to cancel is a human's decision.
+  const targetQuantity = Math.max(0, stock.quantity + adjustment);
+  if (targetQuantity < stock.reservedQuantity) {
+    return ApiResponse.error(
+      res,
+      400,
+      `Cannot reduce stock to ${targetQuantity}: ${stock.reservedQuantity} unit(s) are reserved by open orders. Cancel or amend those orders first.`
+    );
+  }
+
+  stock.quantity = targetQuantity;
   await stock.save();
 
   // Log stock movement
@@ -543,7 +581,27 @@ export const adjustById = asyncHandler(async (req, res) => {
   }
 
   const oldQuantity = stock.quantity;
-  stock.quantity = Math.max(0, stock.quantity + quantity);
+  // An adjustment must never leave quantity below what is already committed to
+  // open orders. Both endpoints clamped at zero and never consulted
+  // reservedQuantity, and the `available` virtual is
+  // Math.max(0, quantity - reservedQuantity), so a row left at quantity 0 with
+  // reservedQuantity 5 simply reads as empty and nothing reconciles the two.
+  // Completing that order then calls deductStock(5) against quantity 0, which
+  // throws: the order can no longer be completed or cleanly cancelled, and the
+  // phantom reservations survive indefinitely.
+  //
+  // Refused rather than silently released: those reservations belong to real
+  // orders, and which one to cancel is a human's decision.
+  const targetQuantity = Math.max(0, stock.quantity + quantity);
+  if (targetQuantity < stock.reservedQuantity) {
+    return ApiResponse.error(
+      res,
+      400,
+      `Cannot reduce stock to ${targetQuantity}: ${stock.reservedQuantity} unit(s) are reserved by open orders. Cancel or amend those orders first.`
+    );
+  }
+
+  stock.quantity = targetQuantity;
   await stock.save();
 
   // Log stock movement

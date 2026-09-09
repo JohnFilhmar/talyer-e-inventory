@@ -4,6 +4,7 @@ import { useEffect, ComponentType } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserRole } from '@/types/auth';
+import { resolveBranchId } from '@/types/auth';
 
 /**
  * Configuration for role guard
@@ -62,7 +63,7 @@ export function withRoleGuard<P extends object>(
         // Check branch access (admins have access to all branches)
         let hasBranchAccess = true;
         if (branchId && user.role !== 'admin') {
-          hasBranchAccess = user.branch === branchId;
+          hasBranchAccess = resolveBranchId(user.branch) === branchId;
         }
 
         // Redirect if no access

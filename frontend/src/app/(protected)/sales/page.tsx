@@ -14,6 +14,7 @@ import {
   SalesOrderTable,
 } from '@/components/sales';
 import type { OrderStatus, PaymentStatus, SalesOrderFilters } from '@/types/sales';
+import { resolveBranchId } from '@/types/auth';
 
 /**
  * Sales Overview Page
@@ -66,7 +67,7 @@ export default function SalesPage() {
   // Get user's branch ID if not admin
   const userBranchId = useMemo(() => {
     if (showAllBranches || !user?.branch) return undefined;
-    return typeof user.branch === 'string' ? user.branch : (user.branch as { _id: string })._id;
+    return resolveBranchId(user.branch);
   }, [showAllBranches, user]);
 
   // Fetch sales orders with appropriate endpoint

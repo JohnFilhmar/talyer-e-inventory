@@ -8,7 +8,7 @@ import { PAGINATION, USER_ROLES } from '../config/constants.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
 import { getReportingPeriodBounds } from '../utils/reportingPeriod.js';
 import { canAccessBranch } from '../utils/branchScope.js';
-import { completeSalesOrder } from '../utils/salesCompletion.js';
+import { completeSalesOrder, recordSaleTransaction } from '../utils/salesCompletion.js';
 
 /**
  * Normalize a branch reference that may be a populated Branch document or a
@@ -493,8 +493,18 @@ export const updateSalesOrderPayment = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 403, 'Access denied to this order');
   }
 
-  if (order.status === 'completed' || order.status === 'cancelled') {
-    return ApiResponse.error(res, 400, 'Cannot update payment for completed/cancelled order');
+  // Only 'cancelled' is refused, matching updatePayment in serviceController.
+  //
+  // Refusing 'completed' too made on-account sales unrecordable. Staff mark an
+  // order completed so the shelf count is right; completeSalesOrder sees it is
+  // unpaid and deliberately writes no Transaction, documenting that the payment
+  // path will write it later. But this guard then refused that payment, so
+  // there was no third path: the order stayed payment.status 'pending' forever
+  // and no Transaction was ever written, while getSalesStatistics counted it in
+  // revenue because that aggregation filters on status 'completed'. Reported
+  // revenue and the cash ledger diverged permanently.
+  if (order.status === 'cancelled') {
+    return ApiResponse.error(res, 400, 'Cannot update payment for a cancelled order');
   }
 
   if (amountPaid !== undefined) {
@@ -512,7 +522,15 @@ export const updateSalesOrderPayment = asyncHandler(async (req, res) => {
   // with its stock still merely reserved, which is the confusion this flow was
   // reworked to remove.
   if (order.payment.status === 'paid') {
-    await completeSalesOrder(order, req.user);
+    // completeSalesOrder is idempotent and returns false when the order is
+    // already 'completed', in which case it also writes no Transaction. That is
+    // the on-account case: the sale was completed while unpaid, so the money
+    // has only now arrived and still needs recording. recordSaleTransaction
+    // dedupes by reference, so calling it here can never double-write.
+    const justCompleted = await completeSalesOrder(order, req.user);
+    if (!justCompleted && order.status === 'completed') {
+      await recordSaleTransaction(order, req.user);
+    }
     await order.save();
   }
 

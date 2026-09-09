@@ -45,6 +45,13 @@ bringing reality back in line with `docs/DEPLOYMENT.md:46`, which had said
 "public" throughout. No documentation change is needed; the code and the deploy
 guidance were right and the setting had drifted.
 
+**Wave 4 is closed** as of 2026-09-09: GAP-016, GAP-018, GAP-020, GAP-026,
+GAP-031 and GAP-032 are fixed, each with a note on its entry. Two of them carry
+open questions that are still open and still need an owner's answer, recorded on
+GAP-016 (whether selling on account is intended at all) and GAP-018 (whether an
+admin may force an adjustment below the reserved level). In both cases the
+shipped behaviour is the safe default and is not invalidated by either answer.
+
 **Wave 3 is closed** as of 2026-09-09: GAP-003, GAP-009, GAP-014, GAP-017,
 GAP-019, GAP-022 and GAP-054 are fixed, each with a note on its entry. GAP-003
 was pulled forward from Wave 4 in the same change, because GAP-022 depends on it
@@ -83,7 +90,14 @@ is not the measure of this work.
 **GAP-053 is closed** as of 2026-09-09, the same day it was raised, because
 the workflow question it depended on was answered immediately.
 
-Remaining open: 32 of the 57 gaps now listed. Two new entries were raised on
+**GAP-055 was raised on 2026-09-09** from GAP-014's own Open questions field,
+which noted that a reconciliation of already-leaked reservations "would be a
+sensible follow-up gap" and left it at that. GAP-014 is now FIXED, so nothing
+else in this document tracked the residue: the fix stopped new leaks and
+repaired none of the existing ones, and stock stranded by them is still
+invisible to every availability check. It is scheduled in Wave 5.
+
+Remaining open: 27 of the 58 gaps now listed. Two new entries were raised on
 2026-09-08 from findings surfaced while working Wave 2 and deliberately not
 fixed there: **GAP-053** (the refresh cookie repeats GAP-005's fail-open shape,
 left alone because the naive inversion breaks local HTTP login) and
@@ -286,20 +300,21 @@ S1=8, S2=5, S3=2, S4=1; C1=1.0, C2=0.8, C3=0.5; XS=1, S=2, M=4, L=7, XL=12.
 | 41 | GAP-038 | SEC | Image processing returns the raw internal error message and path on 500 | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
 | 42 | GAP-039 | CONTRA | apiLimiter is documented as 300/IP and implemented as 3000/user | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
 | 43 | GAP-054 | SEC | Validation errors echo the submitted value, including passwords | S3 | XS | D1 | R1 | C1 | 2.0 | READY |
-| 44 | GAP-040 | CODE | Every human-readable identifier is generated with countDocuments() + 1 | S2 | M | D2 | R3 | C1 | 1.25 | ASSISTED |
-| 45 | GAP-041 | CODE | All money is IEEE-754 floating point with no rounding at any boundary | S2 | M | D3 | R3 | C1 | 1.25 | ASSISTED |
-| 46 | GAP-042 | FEAT | The dashboard, the post-login landing page, is entirely non-functional | S2 | M | D2 | R1 | C1 | 1.25 | ASSISTED |
-| 47 | GAP-043 | FEAT | Stock lists are silently truncated to one unpaginated page | S2 | M | D2 | R1 | C1 | 1.25 | READY |
-| 48 | GAP-044 | TEST | No concurrency test exists and the StockMovement ledger is never asserted | S2 | M | D3 | R1 | C1 | 1.25 | READY |
-| 49 | GAP-045 | TEST | branch.test.js tests Mongoose directly; four branch endpoints are unverified | S2 | M | D2 | R1 | C1 | 1.25 | READY |
-| 50 | GAP-046 | CODE | No atomicity on stock quantity writes: lost updates and oversell | S1 | L | D3 | R3 | C1 | 1.14 | HUMAN-FIRST |
-| 51 | GAP-047 | CODE | Frontend types drift from the API contract at four points | S3 | S | D2 | R1 | C1 | 1.0 | READY |
-| 52 | GAP-048 | OPS | Cache invalidation uses Redis KEYS on every mutation hot path | S3 | S | D2 | R1 | C1 | 1.0 | READY |
-| 53 | GAP-049 | CONTRA | Transaction numbers never take the documented TXN-YYYYMM shape | S3 | S | D2 | R3 | C1 | 1.0 | ASSISTED |
-| 54 | GAP-050 | FEAT | There is no refund, void, or reversal path anywhere in the system | S2 | L | D4 | R3 | C1 | 0.71 | HUMAN-FIRST |
-| 55 | GAP-051 | OPS | No observability: no metrics, structured logs, tracing, or alerting | S2 | L | D2 | R1 | C1 | 0.71 | ASSISTED |
-| 56 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
-| 57 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
+| 44 | GAP-055 | OPS | Stock reservations leaked before GAP-014 are still stranded in the data | S2 | S | D2 | R2 | C2 | 2.0 | ASSISTED |
+| 45 | GAP-040 | CODE | Every human-readable identifier is generated with countDocuments() + 1 | S2 | M | D2 | R3 | C1 | 1.25 | ASSISTED |
+| 46 | GAP-041 | CODE | All money is IEEE-754 floating point with no rounding at any boundary | S2 | M | D3 | R3 | C1 | 1.25 | ASSISTED |
+| 47 | GAP-042 | FEAT | The dashboard, the post-login landing page, is entirely non-functional | S2 | M | D2 | R1 | C1 | 1.25 | ASSISTED |
+| 48 | GAP-043 | FEAT | Stock lists are silently truncated to one unpaginated page | S2 | M | D2 | R1 | C1 | 1.25 | READY |
+| 49 | GAP-044 | TEST | No concurrency test exists and the StockMovement ledger is never asserted | S2 | M | D3 | R1 | C1 | 1.25 | READY |
+| 50 | GAP-045 | TEST | branch.test.js tests Mongoose directly; four branch endpoints are unverified | S2 | M | D2 | R1 | C1 | 1.25 | READY |
+| 51 | GAP-046 | CODE | No atomicity on stock quantity writes: lost updates and oversell | S1 | L | D3 | R3 | C1 | 1.14 | HUMAN-FIRST |
+| 52 | GAP-047 | CODE | Frontend types drift from the API contract at four points | S3 | S | D2 | R1 | C1 | 1.0 | READY |
+| 53 | GAP-048 | OPS | Cache invalidation uses Redis KEYS on every mutation hot path | S3 | S | D2 | R1 | C1 | 1.0 | READY |
+| 54 | GAP-049 | CONTRA | Transaction numbers never take the documented TXN-YYYYMM shape | S3 | S | D2 | R3 | C1 | 1.0 | ASSISTED |
+| 55 | GAP-050 | FEAT | There is no refund, void, or reversal path anywhere in the system | S2 | L | D4 | R3 | C1 | 0.71 | HUMAN-FIRST |
+| 56 | GAP-051 | OPS | No observability: no metrics, structured logs, tracing, or alerting | S2 | L | D2 | R1 | C1 | 0.71 | ASSISTED |
+| 57 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
+| 58 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
 
 **Order overrides.** One was needed, and the original claim that none were was
 wrong. Three of the four dependency edges (GAP-014 -> GAP-046,
@@ -332,8 +347,9 @@ GAP-020 (2.5), GAP-022 (2.5), GAP-026 (2.5), GAP-029 (2.0), GAP-031 (2.0),
 GAP-032 (2.0), GAP-034 (2.0), GAP-040 (1.25), GAP-041 (1.25), GAP-046 (1.14),
 GAP-047 (1.0).
 
-**OPS (9)**: GAP-011 (5.0), GAP-023 (2.5), GAP-024 (2.5), GAP-027 (2.5),
-GAP-028 (2.0), GAP-036 (2.0), GAP-037 (2.0), GAP-048 (1.0), GAP-051 (0.71).
+**OPS (10)**: GAP-011 (5.0), GAP-023 (2.5), GAP-024 (2.5), GAP-027 (2.5),
+GAP-028 (2.0), GAP-036 (2.0), GAP-037 (2.0), GAP-055 (2.0), GAP-048 (1.0),
+GAP-051 (0.71).
 
 **FEAT (4)**: GAP-021 (2.5), GAP-042 (1.25), GAP-043 (1.25), GAP-050 (0.71).
 
@@ -357,7 +373,8 @@ GAP-004, GAP-005, GAP-006, GAP-007, GAP-008, GAP-009, GAP-010, GAP-011, GAP-012,
 GAP-013, GAP-031, GAP-032, GAP-033, GAP-034, GAP-035, GAP-036, GAP-037, GAP-038,
 GAP-039, GAP-053, GAP-054.
 
-**S: 21 gaps, one module, under 200 lines.** GAP-014, GAP-015a, GAP-015b,
+**S: 22 gaps, one module, under 200 lines.** GAP-014, GAP-015a, GAP-015b,
+GAP-055,
 GAP-015c, GAP-016, GAP-017,
 GAP-018, GAP-019, GAP-020, GAP-021, GAP-022, GAP-023, GAP-024, GAP-025, GAP-026,
 GAP-027, GAP-029, GAP-030, GAP-047, GAP-048, GAP-049.
@@ -458,7 +475,7 @@ GAP-006 (Wave 2) also edits `frontend/src/types/auth.ts`, which is why GAP-020
 waits until Wave 4 rather than joining Wave 2. GAP-015c shares three controllers
 with GAP-026, so it is serialised after it rather than run beside it.
 
-### Wave 5: operations and platform (10 gaps)
+### Wave 5: operations and platform (11 gaps)
 
 | Gap | Files touched |
 |---|---|
@@ -472,6 +489,7 @@ with GAP-026, so it is serialised after it rather than run beside it.
 | GAP-015d | `backend/src/routes/stockRoutes.js`, `salesRoutes.js`, `serviceRoutes.js`, `productRoutes.js`, `categoryRoutes.js`, `backend/src/controllers/serviceController.js` |
 | GAP-021 | `backend/src/controllers/salesController.js`, `serviceController.js`, `frontend/src/app/(protected)/sales/page.tsx` |
 | GAP-030 | `frontend/src/app/sw.ts`, `frontend/src/lib/offline/cache.ts` |
+| GAP-055 | `backend/src/utils/reconcileReservations.js` (new), `backend/tests/reconcileReservations.test.js` (new) |
 
 Two serialisation edges inside this wave are called out explicitly because the
 pairs share a file. Run GAP-023 then GAP-024, and GAP-034 then GAP-038. The rest
@@ -1063,11 +1081,11 @@ None.
 > `PRODUCTION`, `prod`, a typo, an empty string and unset, and assert the token
 > is still *minted* so an email transport would work.
 >
-> Residual, deliberately out of scope: `getRefreshTokenCookieOptions` in
-> `authController.js` derives the cookie's `secure` and `sameSite` from the same
-> `=== 'production'` test and has the same fail-open shape. It was left alone
-> because flipping it would set `Secure` on plain-HTTP localhost and break local
-> login. It needs its own entry.
+> The residual this note used to describe is closed.
+> `getRefreshTokenCookieOptions` in `authController.js` had the same fail-open
+> shape and was left alone here because the naive inversion sets `Secure` on
+> plain-HTTP localhost. It became **GAP-053**, which was raised and fixed on
+> 2026-09-09.
 
 | Field | Value |
 |---|---|
@@ -2754,6 +2772,22 @@ None.
 
 ### GAP-016 [CODE] A completed-but-unpaid sale can never be paid; on-account revenue is unrecordable
 
+> **FIXED 2026-09-09, Wave 4.** The payment guard now refuses only
+> `cancelled`, matching `serviceController`, and `updateSalesOrderPayment` calls
+> `recordSaleTransaction` when the order was already completed and the money has
+> now arrived. `completeSalesOrder` returns false in that case, which is exactly
+> the on-account signal; `recordSaleTransaction` dedupes by reference, so a
+> repeated payment call cannot write a second row. Tests cover the single
+> transaction, the repeat, and that a cancelled order still 400s.
+>
+> The existing test asserting a completed order refuses payment was retargeted
+> to `cancelled` rather than deleted: this entry deliberately reverses that
+> behaviour, and the test was asserting the defect.
+>
+> The open question below is unchanged and still needs an answer, but note the
+> fix is safe under either: if on-account sales turn out not to be permitted,
+> the extra path becomes unreachable rather than wrong.
+
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-ASSISTED |
 Depends on none | Blocks GAP-050 | Est. agent turns 4-8
@@ -2974,6 +3008,17 @@ None.
 
 ### GAP-018 [CODE] Stock adjustments ignore reservedQuantity and can strand pending orders
 
+> **FIXED 2026-09-09, Wave 4.** Both adjust endpoints compute the target
+> quantity and refuse with 400 when it falls below `reservedQuantity`, naming
+> the reserved count so the operator can act. Six tests cover the refusal, the
+> message, that no `StockMovement` is written for a refused adjustment, that an
+> adjustment down to exactly the reserved level succeeds, that upward always
+> succeeds, and that the by-id route behaves identically.
+>
+> The open question below stands: whether an admin should be able to force an
+> adjustment below the reserved level with the blocking orders listed. Refusing
+> is the safe default and is what shipped.
+
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-ASSISTED |
 Depends on none | Blocks none | Est. agent turns 4-8
@@ -3167,6 +3212,13 @@ None.
 ---
 
 ### GAP-020 [CODE] user.branch shape drift breaks BranchProvider, roleGuard and hasBranchAccess
+
+> **FIXED 2026-09-09, Wave 4.** `User.branch` is now
+> `string | { _id, name, code }` with a `resolveBranchId` helper exported from
+> `frontend/src/types/auth.ts`. `BranchProvider`, `roleGuard` and
+> `hasBranchAccess` use it, and the three pages that hand-rolled the same
+> `typeof` check now call it instead: `grep -rn "typeof user.branch"` is empty.
+> Lint 0 errors, build clean.
 
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
@@ -3715,6 +3767,15 @@ None.
 
 ### GAP-026 [CODE] Five read endpoints have no pagination or no upper bound on limit
 
+> **FIXED 2026-09-09, Wave 4.** `getLowStock` is paginated: it had no skip and
+> no limit at all, so it returned every low-stock row in one response, and it is
+> the endpoint a dashboard polls. It now takes `page` and `limit`, clamps to
+> `PAGINATION.MAX_LIMIT`, returns through `ApiResponse.paginate`, and the route
+> declares the parameters through the shared `paginationRules()`.
+>
+> The input half for the other listed endpoints was already closed by GAP-015d
+> and its follow-up, as the note above records.
+
 > **Partly overtaken by GAP-015d and its follow-up, 2026-09-08.** Several of
 > these endpoints now bound `limit` at the route instead of the controller: the
 > shared `limitRule()` in `backend/src/utils/queryRules.js` caps it at
@@ -4201,6 +4262,13 @@ AGENT-ASSISTED.
 
 ### GAP-031 [CODE] Cache invalidation is incomplete and one cache key omits a request parameter
 
+> **FIXED 2026-09-09, Wave 4.** The category list cache key carries the
+> `includeChildren` variant, and all four product mutation paths now clear
+> `cache:categories:*` and `cache:motorcycleModels:*` alongside the patterns
+> they already cleared. Two tests assert the two shapes differ in either request
+> order, which is the failure that inverts depending on which variant warmed the
+> cache first.
+
 Severity S3 Moderate | Complexity XS | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |
 Depends on none | Blocks none | Est. agent turns 3-6
@@ -4292,6 +4360,11 @@ None.
 ---
 
 ### GAP-032 [CODE] CORS_ALLOWED_ORIGINS is split without trimming and no Vary: Origin is sent
+
+> **FIXED 2026-09-09, Wave 4.** `ALLOWED_ORIGINS` is trimmed and filtered, so
+> a list written `a.com, b.com` admits both instead of silently dropping the
+> second. `Vary: Origin` is set at the top of the CORS middleware, before the
+> allow-list test, so it is present on rejected origins too.
 
 Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |
@@ -6506,6 +6579,122 @@ None.
 
 ---
 
+### GAP-055 [OPS] Stock reservations leaked before GAP-014 are still stranded in the data
+
+Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
+Confidence C2 Likely | Priority score 2.0 | Agent suitability AGENT-ASSISTED |
+Depends on GAP-014 | Blocks none | Est. agent turns 4-8
+
+**Location**
+- `backend/src/models/Stock.js:112-115` (`releaseReservedStock`, the only writer that can undo one)
+- `backend/src/controllers/salesController.js` (the path that leaked them, fixed by GAP-014)
+- `backend/src/controllers/stockController.js` (`createStockTransfer`, the same shape)
+- No script exists; `backend/src/utils/` has no reconciliation tool
+
+**Evidence**
+
+GAP-014's own Open questions field, which is what raised this:
+
+> Separately, existing leaked reservations in production data are not addressed;
+> a reconciliation script comparing `reservedQuantity` against open orders would
+> be a sensible follow-up gap.
+
+That entry is now FIXED, so nothing else in this document tracks the residue.
+
+**What is wrong**
+
+GAP-014 stopped new leaks; it repaired nothing. Every order-creation request
+that failed after its first reservation, for the whole life of the codebase
+before that fix, left `reservedQuantity` incremented on rows whose order was
+never created. `Stock.availableQuantity` is the virtual
+`quantity - reservedQuantity`, and no endpoint releases an orphan, so those
+units are invisible to the New Sale picker and to every availability check.
+
+The size of the residue is unknown. That is why this entry is C2 rather than
+C1: the defect is certain, the quantity affected is not, and it cannot be
+estimated without querying production.
+
+**Why it matters**
+
+A product reads "out of stock" while the shelf is full, and the only repair
+today is a hand-written database update. Nobody can currently tell which rows
+are affected or by how much, so the shop cannot even quantify what it has lost
+the use of. The longer it sits, the more a stock count will disagree with the
+system for reasons nobody can reconstruct.
+
+**Intended behavior**
+
+An operator can produce, on demand, a list of `Stock` rows whose
+`reservedQuantity` exceeds what the open orders referencing that
+`(product, branch)` actually account for, with the discrepancy per row, and can
+then correct them deliberately.
+
+**Proposed fix**
+
+Add `backend/src/utils/reconcileReservations.js` as a **read-only report** by
+default. For each `Stock` row, sum the quantities of `SalesOrder` items in a
+non-terminal status (`pending`, `processing`) for that product and branch, plus
+any `StockTransfer` in `pending` or `in-transit`, and compare that expected
+reservation against the stored `reservedQuantity`. Print every row where they
+differ, with product, branch, stored value, expected value and the difference.
+
+Gate any write behind an explicit `--apply` flag, and follow the guards
+GAP-036 established for `seedBranches.js`: entry-point check, explicit
+confirmation, refusal under `NODE_ENV=production` without a second flag, and the
+target database printed before acting. Reporting must be the default because the
+correct repair is a judgement call: a discrepancy can also mean a genuinely
+stuck order that a human should look at rather than silently zero out.
+
+**Implementation checklist**
+
+- [ ] Create `backend/src/utils/reconcileReservations.js` exporting a `reconcile()` that returns the discrepancy list without writing.
+- [ ] Compute expected reservations from `SalesOrder` items in `pending` or `processing` status, grouped by product and branch.
+- [ ] Include `StockTransfer` rows in `pending` or `in-transit`, which also hold a source-branch reservation.
+- [ ] Print a table of differing rows: product, branch, stored `reservedQuantity`, expected, difference.
+- [ ] Add an `--apply` flag that calls `releaseReservedStock` for the excess only, never increasing a reservation.
+- [ ] Reuse the guard shape from `seedBranches.js`: entry-point check, `--confirm`, production refusal, redacted target printed.
+- [ ] Add `backend/tests/reconcileReservations.test.js` seeding a leaked row and asserting it is reported and, under apply, corrected.
+- [ ] Run `npm test -- reconcileReservations.test.js` from `backend/`.
+
+**Acceptance criteria**
+
+- [ ] Importing the module performs no database work.
+- [ ] Running it without `--apply` writes nothing and lists every discrepancy.
+- [ ] A `Stock` row with `reservedQuantity` above its open-order total is reported with the correct difference.
+- [ ] A row whose reservation matches its open orders is not reported.
+- [ ] `--apply` lowers only the excess and never raises a reservation.
+
+**Verification commands**
+
+```bash
+cd backend && npm test -- reconcileReservations.test.js
+node src/utils/reconcileReservations.js            # expect a report, no writes
+```
+
+**Do not**
+
+Do not repair rows automatically on server start, and do not call this from
+`server.js`. Do not delete or recreate `Stock` rows; only adjust
+`reservedQuantity` downward, through `releaseReservedStock`. Do not treat a
+discrepancy as proof of a leak without a human looking: a long-running
+`processing` order is a legitimate reservation.
+
+**Rollback**
+
+Delete the script. Nothing else references it. Rows already corrected by
+`--apply` are not restored by rolling back, which is the reason the write path
+is opt-in and guarded.
+
+**Open questions**
+
+Should the report also cover `ServiceOrder`? Service orders deduct parts at
+completion rather than reserving them at creation, so on a reading of the
+current code they hold no reservation and are correctly out of scope. That
+should be confirmed against real data before the script is trusted to say a row
+is over-reserved.
+
+---
+
 ## 11. Deferred and Rejected
 
 Things considered and consciously not listed as gaps, with the reason.
@@ -6667,7 +6856,8 @@ lines, no empty catch blocks, and no page importing axios directly.
 {"id":"GAP-051","cat":"OPS","sev":"S2","cplx":"L","diff":"D2","risk":"R1","conf":"C1","pri":0.71,"agent":"AGENT-ASSISTED","depends_on":["GAP-023"],"blocks":[],"files":["backend/src/server.js","backend/src/middleware/errorHandler.js","backend/package.json","docs/DEPLOYMENT.md"],"title":"No observability: no metrics, structured logs, tracing, or alerting"},
 {"id":"GAP-052","cat":"CONTRA","sev":"S3","cplx":"M","diff":"D1","risk":"R1","conf":"C1","pri":0.5,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":[],"files":["README.md","frontend/docs/Frontend-Guidelines.md","CLAUDE.md","backend/src/server.js","frontend/src/lib/apiClient.ts","backend/package.json","frontend/package.json"],"title":"Documentation contradicts the code at eight independent points"}
 {"id":"GAP-053","cat":"SEC","sev":"S2","cplx":"XS","diff":"D2","risk":"R2","conf":"C1","pri":5.0,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":[],"files":["backend/src/controllers/authController.js","backend/src/utils/environment.js"],"title":"The refresh cookie's secure and sameSite fail open on NODE_ENV"},
-{"id":"GAP-054","cat":"SEC","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/middleware/validate.js","frontend/src/types/api.ts"],"title":"Validation errors echo the submitted value, including passwords"}
+{"id":"GAP-054","cat":"SEC","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/middleware/validate.js","frontend/src/types/api.ts"],"title":"Validation errors echo the submitted value, including passwords"},
+{"id":"GAP-055","cat":"OPS","sev":"S2","cplx":"S","diff":"D2","risk":"R2","conf":"C2","pri":2.0,"agent":"AGENT-ASSISTED","depends_on":["GAP-014"],"blocks":[],"files":["backend/src/utils/reconcileReservations.js","backend/tests/reconcileReservations.test.js"],"title":"Stock reservations leaked before GAP-014 are still stranded in the data"}
 ]
 ```
 
@@ -6862,9 +7052,9 @@ single unit test against `isURL`.
 - [x] Every checklist item is a single action naming the file it touches.
 - [x] Every AGENT-READY entry has `Open questions: None`. The five HUMAN-FIRST entries and the eight AGENT-ASSISTED entries each carry a real question.
 - [x] Every CONTRA entry names both positions with quoted evidence and states who decides.
-- [x] The JSON appendix has 57 objects whose ids, scores, dependencies and titles match the prose entries.
-- [x] Counts in the metadata block match the actual entries: 57 total; S1 8, S2 34, S3 15, S4 0; CODE 20, SEC 17, OPS 9, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
-- [x] S1 findings are 8 of 57, or 14.0%, inside the 15% calibration ceiling.
+- [x] The JSON appendix has 58 objects whose ids, scores, dependencies and titles match the prose entries.
+- [x] Counts in the metadata block match the actual entries: 58 total; S1 8, S2 35, S3 15, S4 0; CODE 20, SEC 17, OPS 10, FEAT 4, TEST 2, CONTRA 3, PROJ 2. The metadata block itself still reads 52 and is deliberately left as first written; section 0 records the change.
+- [x] S1 findings are 8 of 58, or 13.8%, inside the 15% calibration ceiling.
 
 **One caveat on my own confidence.** I read about 62% of the source and executed
 none of it. The largest unread surface is the frontend, which also has no tests,
