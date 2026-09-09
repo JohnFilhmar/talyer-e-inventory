@@ -44,6 +44,7 @@ import {
 } from '@/types/sales';
 import type { Stock, StockProduct } from '@/types/stock';
 import type { CreateSalesOrderPayload } from '@/types/sales';
+import { resolveBranchId } from '@/types/auth';
 
 /**
  * Format currency in Philippine Peso
@@ -140,9 +141,7 @@ export default function NewSalePage() {
   // Get user's branch or allow selection for admin
   const userBranchId = useMemo(() => {
     if (isAdmin() || !user?.branch) return undefined;
-    return typeof user.branch === 'string' 
-      ? user.branch 
-      : (user.branch as { _id: string })._id;
+    return resolveBranchId(user.branch);
   }, [user, isAdmin]);
 
   // Fetch branches for admin selection

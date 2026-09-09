@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import { listOutbox } from '@/lib/offline/outbox';
 import type { UserRole } from '@/types/auth';
+import { resolveBranchId } from '@/types/auth';
 
 /**
  * Custom hook for authentication operations and state
@@ -142,7 +143,7 @@ export const useAuth = () => {
       // Admins have access to all branches
       if (user.role === 'admin') return true;
       // Other users only have access to their assigned branch
-      return user.branch === branchId;
+      return resolveBranchId(user.branch) === branchId;
     },
     [user]
   );

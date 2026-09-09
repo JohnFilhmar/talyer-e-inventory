@@ -1728,3 +1728,143 @@ describe('Transfer completion refuses a missing source row', () => {
     expect((await Stock.findOne({ product: prod._id, branch: to._id })).quantity).toBe(20);
   });
 });
+
+// GAP-018. Both adjust endpoints clamped quantity at zero and never consulted
+// reservedQuantity. The `available` virtual is
+// Math.max(0, quantity - reservedQuantity), so a row left at quantity 0 with
+// reservedQuantity 5 simply reads as empty; completing that order then calls
+// deductStock(5) against quantity 0, which throws, and the order can never be
+// completed or cleanly cancelled.
+describe('Stock adjustments respect committed reservations', () => {
+  const seed = async (quantity, reservedQuantity) => {
+    const from = await createTestBranch({ name: 'Adj Branch', code: 'ADJ-1' });
+    const admin = await createTestAdmin();
+    const cat = await createTestCategory({ name: 'Adj Cat', code: 'ADJ-CAT' });
+    const prod = await createTestProduct({ name: 'Adj Product', category: cat._id });
+    const stock = await createTestStock({
+      product: prod._id,
+      branch: from._id,
+      quantity,
+      reservedQuantity,
+      costPrice: 100,
+      sellingPrice: 150
+    });
+    return { branch: from, admin, prod, stock };
+  };
+
+  const adjust = (admin, prod, branch, adjustment) =>
+    request(app)
+      .post('/api/stock/adjust')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({
+        product: prod._id.toString(),
+        branch: branch._id.toString(),
+        adjustment,
+        reason: 'damaged'
+      });
+
+  it('refuses an adjustment that would drop below the reserved level', async () => {
+    const { branch, admin, prod, stock } = await seed(5, 5);
+
+    const res = await adjust(admin, prod, branch, -5);
+
+    expect(res.statusCode).toBe(400);
+    expect((await Stock.findById(stock._id)).quantity).toBe(5);
+  });
+
+  it('names the reserved quantity so the operator can act', async () => {
+    const { branch, admin, prod } = await seed(10, 4);
+
+    const res = await adjust(admin, prod, branch, -8);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toContain('4');
+  });
+
+  it('writes no movement row for a refused adjustment', async () => {
+    const { branch, admin, prod } = await seed(5, 5);
+
+    await adjust(admin, prod, branch, -5);
+
+    const movements = await StockMovement.find({ product: prod._id });
+    expect(movements).toHaveLength(0);
+  });
+
+  it('allows an adjustment down to exactly the reserved level', async () => {
+    const { branch, admin, prod, stock } = await seed(10, 4);
+
+    const res = await adjust(admin, prod, branch, -6);
+
+    expect(res.statusCode).toBe(200);
+    expect((await Stock.findById(stock._id)).quantity).toBe(4);
+  });
+
+  it('always allows an upward adjustment', async () => {
+    const { branch, admin, prod, stock } = await seed(2, 2);
+
+    const res = await adjust(admin, prod, branch, 5);
+
+    expect(res.statusCode).toBe(200);
+    expect((await Stock.findById(stock._id)).quantity).toBe(7);
+  });
+
+  it('applies the same guard to the by-id adjust route', async () => {
+    const { admin, stock } = await seed(5, 5);
+
+    const res = await request(app)
+      .put(`/api/stock/${stock._id}/adjust`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ quantity: -5, reason: 'damaged' });
+
+    expect(res.statusCode).toBe(400);
+    expect((await Stock.findById(stock._id)).quantity).toBe(5);
+  });
+});
+
+// GAP-026. getLowStock had no skip and no limit at all, so it returned every
+// low-stock row in one response.
+describe('Low stock listing is paginated', () => {
+  it('caps the page size and reports pagination metadata', async () => {
+    const branch = await createTestBranch({ name: 'Low Branch', code: 'LOW-1' });
+    const admin = await createTestAdmin();
+    const cat = await createTestCategory({ name: 'Low Cat', code: 'LOW-CAT' });
+
+    for (let i = 0; i < 5; i += 1) {
+      const prod = await createTestProduct({ name: `Low Product ${i}`, category: cat._id });
+      await createTestStock({
+        product: prod._id,
+        branch: branch._id,
+        quantity: 1,
+        reorderPoint: 10
+      });
+    }
+
+    const res = await request(app)
+      .get('/api/stock/low-stock?limit=2')
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.pagination.total).toBe(5);
+  });
+
+  it('still returns every row when no limit is given, within the default page', async () => {
+    const branch = await createTestBranch({ name: 'Low Branch 2', code: 'LOW-2' });
+    const admin = await createTestAdmin();
+    const cat = await createTestCategory({ name: 'Low Cat 2', code: 'LOW-CAT2' });
+    const prod = await createTestProduct({ name: 'Only Low Product', category: cat._id });
+    await createTestStock({
+      product: prod._id,
+      branch: branch._id,
+      quantity: 1,
+      reorderPoint: 10
+    });
+
+    const res = await request(app)
+      .get('/api/stock/low-stock')
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+  });
+});

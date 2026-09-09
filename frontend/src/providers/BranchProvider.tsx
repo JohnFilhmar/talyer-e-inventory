@@ -4,6 +4,7 @@ import React, { createContext, useContext, useMemo } from 'react';
 import { useBranch } from '@/hooks/useBranches';
 import { useAuthStore } from '@/stores/authStore';
 import type { Branch } from '@/types/branch';
+import { resolveBranchId } from '@/types/auth';
 
 /**
  * Branch context value interface
@@ -54,8 +55,10 @@ const BranchContext = createContext<BranchContextValue>(defaultContextValue);
 export const BranchProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAuthenticated } = useAuthStore();
   
-  // Get the branch ID from the user's profile
-  const branchId = user?.branch ?? null;
+  // Get the branch ID from the user's profile. `user.branch` is a string
+  // after login and a populated object after a reload, so it goes through
+  // the shared resolver rather than being read directly.
+  const branchId = resolveBranchId(user?.branch) ?? null;
   
   // Fetch branch details if user has a branch assigned
   const {

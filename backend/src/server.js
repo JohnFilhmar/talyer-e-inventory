@@ -78,7 +78,14 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Check if the origin is in the allowed list
+// Set before the allow-list test, and unconditionally, so it is present on
+  // rejected origins too. The allow-origin header varies by request; without
+  // this a shared cache in front of the stack (docs/DEPLOYMENT.md prescribes
+  // nginx) can serve a response cached for one origin to another, carrying a
+  // mismatched allow-origin header.
+  res.header('Vary', 'Origin');
+
+    // Check if the origin is in the allowed list
   if (CORS.ALLOWED_ORIGINS.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
   }

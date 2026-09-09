@@ -99,9 +99,17 @@ export const UPLOAD = {
 };
 
 export const CORS = {
-  ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS 
+  // Trimmed and filtered, because server.js matches with an exact
+  // Array.includes(origin). A list written the way people write lists,
+  // `a.com, b.com`, produced an entry with a leading space that could never
+  // match, and the failure is silent: the allow-origin header is simply
+  // omitted, the browser blocks the response including cookie-based refresh,
+  // and nothing is logged server-side.
+  ALLOWED_ORIGINS: (process.env.CORS_ALLOWED_ORIGINS
     ? process.env.CORS_ALLOWED_ORIGINS.split(',')
-    : [process.env.CLIENT_URL || 'http://localhost:3000'],
+    : [process.env.CLIENT_URL || 'http://localhost:3000'])
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   ALLOWED_HEADERS: [
     'Origin',

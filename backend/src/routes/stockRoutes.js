@@ -102,7 +102,7 @@ const listStockValidation = [
   ...paginationRules()
 ];
 
-const lowStockValidation = [idRule('branch')];
+const lowStockValidation = [idRule('branch'), ...paginationRules()];
 
 const listMovementsValidation = [
   enumRule('type', Object.values(MOVEMENT_TYPES)),

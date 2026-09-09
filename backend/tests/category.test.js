@@ -606,3 +606,59 @@ describe('Category API Tests', () => {
     });
   });
 });
+
+// GAP-031. `includeChildren` is read from req.query but never entered `query`,
+// so it never entered the cache key either. Whichever variant was requested
+// first populated the entry and every request with the other value got the
+// wrong shape for the full TTL, so a category-tree UI rendered every node as a
+// leaf for up to an hour.
+describe('Category list cache varies by includeChildren', () => {
+  const seedTree = async (token) => {
+    const parent = await Category.create({
+      name: 'Tree Parent',
+      code: 'TREE-P',
+      isActive: true
+    });
+    await Category.create({
+      name: 'Tree Child',
+      code: 'TREE-C',
+      parent: parent._id,
+      isActive: true
+    });
+    return parent;
+  };
+
+  const list = (token, qs = '') =>
+    request(app)
+      .get(`/api/categories${qs}`)
+      .set('Authorization', `Bearer ${token}`);
+
+  it('returns children only for the includeChildren variant, flat requested first', async () => {
+    const { token } = await createTestAdmin();
+    const parent = await seedTree(token);
+
+    const flat = await list(token);
+    expect(flat.status).toBe(200);
+    const flatParent = flat.body.data.find((c) => String(c._id) === String(parent._id));
+    expect(flatParent.children).toBeUndefined();
+
+    const withChildren = await list(token, '?includeChildren=true');
+    expect(withChildren.status).toBe(200);
+    const nested = withChildren.body.data.find((c) => String(c._id) === String(parent._id));
+    expect(Array.isArray(nested.children)).toBe(true);
+    expect(nested.children).toHaveLength(1);
+  });
+
+  it('returns the flat shape when includeChildren was requested first', async () => {
+    const { token } = await createTestAdmin();
+    const parent = await seedTree(token);
+
+    const withChildren = await list(token, '?includeChildren=true');
+    expect(withChildren.status).toBe(200);
+
+    const flat = await list(token);
+    expect(flat.status).toBe(200);
+    const flatParent = flat.body.data.find((c) => String(c._id) === String(parent._id));
+    expect(flatParent.children).toBeUndefined();
+  });
+});
