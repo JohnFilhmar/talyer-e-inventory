@@ -99,3 +99,75 @@ describe('errorHandler fails closed on an unrecognised NODE_ENV', () => {
     expect(res.body.message).toBe('Quantity must be at least 1');
   });
 });
+
+// GAP-003. The duplicate-key branch matched `err.name === 'MongoServerError'`
+// as well as code 11000, and MongoServerError is the name the driver gives
+// every server-side failure: failover, stepdown, write-concern timeout, pool
+// exhaustion. All were answered 400 "Field already exists". The offline outbox
+// treats a 4xx as permanent and marks the entry rejected, so a Mongo failover
+// during replay discarded real sales.
+describe('errorHandler distinguishes duplicate keys from transient Mongo failures', () => {
+  const original = process.env.NODE_ENV;
+  afterEach(() => {
+    process.env.NODE_ENV = original;
+  });
+
+  const appWith = (err) => {
+    const app = express();
+    app.get('/x', () => {
+      throw err;
+    });
+    app.use(errorHandler);
+    return app;
+  };
+
+  const mongoError = (name, code, extra = {}) => {
+    const err = new Error(`${name} ${code}`);
+    err.name = name;
+    if (code !== undefined) err.code = code;
+    return Object.assign(err, extra);
+  };
+
+  it('still answers 400 for a real duplicate key', async () => {
+    process.env.NODE_ENV = 'test';
+    const err = mongoError('MongoServerError', 11000, { keyPattern: { sku: 1 } });
+
+    const res = await request(appWith(err)).get('/x');
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Sku already exists');
+  });
+
+  it.each([
+    ['a failover', 10107],
+    ['a stepdown', 189],
+    ['a write concern timeout', 64],
+    ['an interrupted operation', 11601],
+  ])('answers 5xx for %s, so the outbox retries instead of discarding', async (_label, code) => {
+    process.env.NODE_ENV = 'test';
+    const err = mongoError('MongoServerError', code);
+
+    const res = await request(appWith(err)).get('/x');
+
+    expect(res.status).toBeGreaterThanOrEqual(500);
+  });
+
+  it('answers 5xx for a MongoServerError carrying no code at all', async () => {
+    process.env.NODE_ENV = 'test';
+    const err = mongoError('MongoServerError', undefined);
+
+    const res = await request(appWith(err)).get('/x');
+
+    expect(res.status).toBeGreaterThanOrEqual(500);
+  });
+
+  it('answers 400 for code 11000 even when the driver names it something else', async () => {
+    process.env.NODE_ENV = 'test';
+    const err = mongoError('MongoBulkWriteError', 11000, { keyValue: { barcode: 'X1' } });
+
+    const res = await request(appWith(err)).get('/x');
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Barcode already exists');
+  });
+});

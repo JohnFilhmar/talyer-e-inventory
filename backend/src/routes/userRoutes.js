@@ -55,11 +55,16 @@ const createUserValidation = [
     .trim()
     .notEmpty().withMessage('Name is required')
     .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters'),
+    // Not normalised: validator.js strips Gmail dots and +subaddressing by
+    // default, so `maria.santos+branch2@gmail.com` was stored as
+    // `mariasantos@gmail.com` while login looks the address up as typed. The
+    // account an admin created could then never sign in, and editing an
+    // unrelated field on a working account rewrote its email retroactively.
+    // The schema's `lowercase: true` plus `.trim()` is the whole policy.
   body('email')
     .trim()
     .notEmpty().withMessage('Email is required')
-    .isEmail({ allow_utf8_local_part: false }).withMessage('Please provide a valid email')
-    .normalizeEmail(),
+    .isEmail({ allow_utf8_local_part: false }).withMessage('Please provide a valid email'),
   body('password')
     .notEmpty().withMessage('Password is required')
     .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
@@ -82,8 +87,7 @@ const updateUserValidation = [
   body('email')
     .optional()
     .trim()
-    .isEmail({ allow_utf8_local_part: false }).withMessage('Please provide a valid email')
-    .normalizeEmail(),
+    .isEmail({ allow_utf8_local_part: false }).withMessage('Please provide a valid email'),
   body('role')
     .optional()
     .isIn(['admin', 'salesperson', 'mechanic']).withMessage('Invalid role. Must be admin, salesperson, or mechanic'),

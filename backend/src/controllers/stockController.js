@@ -608,18 +608,36 @@ export const createStockTransfer = asyncHandler(async (req, res) => {
     );
   }
 
-  // Reserve stock at source
+  // Reserve, then create. Same compensating-action shape as createSalesOrder:
+  // the reservation is a database write, and if the create then fails the units
+  // stay reserved forever with nothing to release them. availableQuantity is
+  // `quantity - reservedQuantity`, so a leaked reservation makes real stock
+  // permanently unsellable and unmovable. Not a transaction; production Mongo is
+  // standalone and GAP-046 owns the real fix.
   await sourceStock.reserveStock(quantity);
 
-  // Create transfer record
-  const transfer = await StockTransfer.create({
-    product,
-    fromBranch,
-    toBranch,
-    quantity,
-    initiatedBy: req.user._id,
-    notes
-  });
+  let transfer;
+  try {
+    transfer = await StockTransfer.create({
+      product,
+      fromBranch,
+      toBranch,
+      quantity,
+      initiatedBy: req.user._id,
+      notes
+    });
+  } catch (error) {
+    try {
+      await sourceStock.releaseReservedStock(quantity);
+    } catch (releaseError) {
+      console.error(
+        'Failed to release reserved stock after transfer-creation failure:',
+        { stockId: String(sourceStock._id), quantity },
+        releaseError
+      );
+    }
+    throw error;
+  }
 
   const populatedTransfer = await StockTransfer.findById(transfer._id)
     .populate('product', 'sku name brand')
@@ -681,25 +699,41 @@ export const updateStockTransferStatus = asyncHandler(async (req, res) => {
     transfer.receivedAt = new Date();
     transfer.receivedBy = req.user._id;
 
-    // Deduct from source branch
+    // Resolve the source row before mutating anything.
+    //
+    // The debit used to sit inside `if (sourceStock)` while the credit below
+    // was unconditional, so a transfer whose source row had been deleted either
+    // invented inventory outright, when the destination row already existed and
+    // was simply incremented, or threw a TypeError dereferencing
+    // `sourceStock.costPrice` on the very null the guard had just skipped, after
+    // `transfer.status` was already mutated in memory. Twenty units could appear
+    // at the destination with a transfer_in movement and no matching
+    // transfer_out. Refusing here means the credit is never reached.
     const sourceStock = await Stock.findOne({
       product: transfer.product,
       branch: transfer.fromBranch
     });
 
-    const sourceOldQuantity = sourceStock ? sourceStock.quantity : 0;
-
-    if (sourceStock) {
-      await sourceStock.deductStock(transfer.quantity);
-      
-      // Log transfer out movement
-      await createMovementWithOldQuantity(sourceStock, sourceOldQuantity, {
-        type: MOVEMENT_TYPES.TRANSFER_OUT,
-        reference: { type: 'StockTransfer', id: transfer._id },
-        notes: `Transfer to ${transfer.toBranch}`,
-        performedBy: req.user._id,
-      });
+    if (!sourceStock) {
+      return ApiResponse.error(
+        res,
+        400,
+        `Cannot complete transfer: no stock record for product ${transfer.product} at the source branch`
+      );
     }
+
+    const sourceOldQuantity = sourceStock.quantity;
+
+    // Deduct from source branch
+    await sourceStock.deductStock(transfer.quantity);
+
+    // Log transfer out movement
+    await createMovementWithOldQuantity(sourceStock, sourceOldQuantity, {
+      type: MOVEMENT_TYPES.TRANSFER_OUT,
+      reference: { type: 'StockTransfer', id: transfer._id },
+      notes: `Transfer to ${transfer.toBranch}`,
+      performedBy: req.user._id,
+    });
 
     // Add to destination branch
     let destStock = await Stock.findOne({

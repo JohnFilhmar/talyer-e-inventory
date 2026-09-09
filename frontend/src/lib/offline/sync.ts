@@ -166,11 +166,12 @@ async function replayEntry(entry: OutboxEntry): Promise<ReplayOutcome> {
  * list views refresh. Safe to omit (e.g. from a non-React caller) — the
  * outbox itself is still replayed, just without cache invalidation.
  */
-export async function replayOutbox(queryClient?: QueryClient): Promise<void> {
-  if (isReplaying) return;
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+export async function replayOutbox(queryClient?: QueryClient): Promise<boolean> {
+  if (isReplaying) return false;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
 
   isReplaying = true;
+  let stalled = false;
   try {
     const entries = await listOutbox();
     let syncedSales = false;
@@ -191,6 +192,12 @@ export async function replayOutbox(queryClient?: QueryClient): Promise<void> {
 
       // 'network-stop' or 'transient-stop': stop the whole run. Everything
       // from here on stays untouched and still `pending`, in order.
+      //
+      // `stalled` is what tells initOutboxSync to schedule its own retry. A
+      // transient stop leaves the queue full while the device is still online,
+      // so no `online` event will ever fire to restart it: the interface never
+      // dropped. Without this the queue sat there until a page reload.
+      stalled = true;
       break;
     }
 
@@ -208,7 +215,12 @@ export async function replayOutbox(queryClient?: QueryClient): Promise<void> {
   } finally {
     isReplaying = false;
   }
+
+  return stalled;
 }
+
+/** Backoff schedule for retrying a stalled run, in milliseconds. */
+const RETRY_DELAYS_MS = [5_000, 15_000, 45_000, 120_000];
 
 /**
  * Wires `replayOutbox` to the `online` event and runs it once immediately
@@ -217,19 +229,77 @@ export async function replayOutbox(queryClient?: QueryClient): Promise<void> {
  * offline session, which never fires an `online` event of its own. Returns
  * an unsubscribe function for the caller's cleanup.
  *
+ * A run that stops on a 5xx while the device stays online also schedules its
+ * own bounded retry. Nothing else would restart it: the `online` event needs an
+ * interface to have dropped, and `useOutboxQueue` only polls IndexedDB for
+ * display. A backend restart during a busy hour otherwise left queued sales
+ * sitting in "Pending" with no control anywhere to push them, recoverable only
+ * by reloading the page or toggling the device's wifi.
+ *
+ * The schedule is bounded rather than indefinite. Entries carry their own
+ * `attempts` counter and are rejected at `OUTBOX_MAX_ATTEMPTS`, so an endlessly
+ * retrying timer would keep waking to do nothing; the `online` event and the
+ * manual Retry on /sync remain as the ways back.
+ *
  * SSR-safe: a no-op returning a no-op cleanup when `window` is unavailable.
  */
 export function initOutboxSync(queryClient: QueryClient): () => void {
   if (typeof window === 'undefined') return () => {};
 
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let retryIndex = 0;
+  let cancelled = false;
+
+  const clearRetry = () => {
+    if (retryTimer !== undefined) {
+      clearTimeout(retryTimer);
+      retryTimer = undefined;
+    }
+  };
+
+  const run = async () => {
+    if (cancelled) return;
+
+    const stalled = await replayOutbox(queryClient);
+    if (cancelled) return;
+
+    if (!stalled) {
+      // A clean run resets the schedule, so the next stall starts short again.
+      retryIndex = 0;
+      clearRetry();
+      return;
+    }
+
+    if (retryIndex >= RETRY_DELAYS_MS.length) return;
+
+    const delay = RETRY_DELAYS_MS[retryIndex];
+    retryIndex += 1;
+    clearRetry();
+    retryTimer = setTimeout(() => {
+      retryTimer = undefined;
+      void run();
+    }, delay);
+  };
+
   const handleOnline = () => {
-    void replayOutbox(queryClient);
+    // A real reconnection is the strongest signal there is, so it restarts the
+    // schedule rather than waiting out the current backoff.
+    retryIndex = 0;
+    clearRetry();
+    void run();
   };
 
   if (navigator.onLine) {
-    void replayOutbox(queryClient);
+    void run();
   }
 
   window.addEventListener('online', handleOnline);
-  return () => window.removeEventListener('online', handleOnline);
+
+  return () => {
+    // Must clear the timer, or a scheduled retry outlives the provider and
+    // fires against a torn-down query client.
+    cancelled = true;
+    clearRetry();
+    window.removeEventListener('online', handleOnline);
+  };
 }

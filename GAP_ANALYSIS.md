@@ -45,6 +45,18 @@ bringing reality back in line with `docs/DEPLOYMENT.md:46`, which had said
 "public" throughout. No documentation change is needed; the code and the deploy
 guidance were right and the setting had drifted.
 
+**Wave 3 is closed** as of 2026-09-09: GAP-003, GAP-009, GAP-014, GAP-017,
+GAP-019, GAP-022 and GAP-054 are fixed, each with a note on its entry. GAP-003
+was pulled forward from Wave 4 in the same change, because GAP-022 depends on it
+and had been scheduled a whole wave earlier; see **Order overrides** in section
+5, where the original claim that no override was needed is corrected.
+
+Two entries again understated their scope. GAP-014's validation pass exposed
+that two lines of the same product each passed the per-item stock check on their
+own, so an order could reserve more than existed; and GAP-019's fix had to cover
+the two order-completion paths as well as the transfer, or a later missing row
+would leave an order half-deducted.
+
 **Wave 2 is closed** as of 2026-09-08: GAP-005, GAP-006, GAP-008, GAP-010,
 GAP-013 (its remaining half), GAP-036 and GAP-037 are fixed, each with a note on
 its entry. Three of those entries understated their own scope, and the notes say
@@ -71,7 +83,7 @@ is not the measure of this work.
 **GAP-053 is closed** as of 2026-09-09, the same day it was raised, because
 the workflow question it depended on was answered immediately.
 
-Remaining open: 39 of the 57 gaps now listed. Two new entries were raised on
+Remaining open: 32 of the 57 gaps now listed. Two new entries were raised on
 2026-09-08 from findings surfaced while working Wave 2 and deliberately not
 fixed there: **GAP-053** (the refresh cookie repeats GAP-005's fail-open shape,
 left alone because the naive inversion breaks local HTTP login) and
@@ -289,11 +301,16 @@ S1=8, S2=5, S3=2, S4=1; C1=1.0, C2=0.8, C3=0.5; XS=1, S=2, M=4, L=7, XL=12.
 | 56 | GAP-052 | CONTRA | Documentation contradicts the code at eight independent points | S3 | M | D1 | R1 | C1 | 0.5 | ASSISTED |
 | 57 | GAP-015d | SEC | Twelve read routes have no query-validation chain at all | S3 | M | D2 | R1 | C1 | 0.5 | READY |
 
-**Order overrides.** None were needed. The dependency edges that exist
-(GAP-014 -> GAP-046, GAP-040 -> GAP-046, GAP-016 -> GAP-050, GAP-003 -> GAP-022)
-all already run in the correct direction, because in each pair the prerequisite
-is either cheaper or higher-severity than its dependent and therefore already
-sorts above it.
+**Order overrides.** One was needed, and the original claim that none were was
+wrong. Three of the four dependency edges (GAP-014 -> GAP-046,
+GAP-040 -> GAP-046, GAP-016 -> GAP-050) do run in the correct direction, because
+in each pair the prerequisite is cheaper or higher-severity and therefore sorts
+above its dependent. **The fourth, GAP-003 -> GAP-022, did not.** It is correct
+in this priority index, where GAP-003 at 8.0 sorts far above GAP-022 at 2.5, but
+section 8 had placed GAP-003 in Wave 4 and GAP-022 in Wave 3, so the dependent
+ran a whole wave before its prerequisite. Corrected on 2026-09-09 by moving
+GAP-003 into Wave 3; its one file, `middleware/errorHandler.js`, is disjoint from
+every other member of that wave.
 
 ## 6. Index by Category
 
@@ -405,7 +422,7 @@ GAP-009 is held to Wave 3: it edits `authRoutes.js`, and Wave 2 already has an
 `authController.js` edit whose review is easier without a second auth change
 landing beside it.
 
-### Wave 3: inventory correctness, part one (8 gaps)
+### Wave 3: inventory correctness, part one (9 gaps)
 
 | Gap | Files touched |
 |---|---|
@@ -417,6 +434,7 @@ landing beside it.
 | GAP-019 | `backend/src/controllers/stockController.js` |
 | GAP-022 | `frontend/src/app/(protected)/sync/page.tsx`, `frontend/src/lib/offline/sync.ts` |
 | GAP-054 | `backend/src/middleware/validate.js`, `frontend/src/types/api.ts` |
+| GAP-003 | `backend/src/middleware/errorHandler.js` |
 
 GAP-015a touches `productController.js` and GAP-026 also would, so GAP-026 moves
 to Wave 4. GAP-018 touches `stockController.js` like GAP-019, so it also moves.
@@ -424,11 +442,10 @@ GAP-015b and GAP-017 both edit `backend/tests/service.test.js`, so they are
 serialised rather than parallel: GAP-015b first, because its guard is what makes
 GAP-017's four routes safe while GAP-017's chains are still being written.
 
-### Wave 4: inventory correctness, part two (8 gaps)
+### Wave 4: inventory correctness, part two (7 gaps)
 
 | Gap | Files touched |
 |---|---|
-| GAP-003 | `backend/src/middleware/errorHandler.js` |
 | GAP-016 | `backend/src/controllers/salesController.js` |
 | GAP-018 | `backend/src/controllers/stockController.js` |
 | GAP-020 | `frontend/src/types/auth.ts`, `frontend/src/providers/BranchProvider.tsx`, `frontend/src/middlewares/roleGuard.tsx` |
@@ -809,6 +826,18 @@ None.
 ---
 
 ### GAP-003 [CODE] Every MongoServerError is answered 400, so offline replay discards real sales
+
+> **FIXED 2026-09-09, Wave 3.** The duplicate-key branch is keyed on
+> `err.code === 11000` alone. It also matched `err.name === 'MongoServerError'`,
+> which is the name the driver gives *every* server-side failure: a failover, a
+> stepdown, a write-concern timeout, an exhausted pool. All were answered 400
+> "Field already exists", and the outbox treats a 4xx as permanent, so a Mongo
+> blip during replay discarded real sales. Tests cover four transient codes, a
+> MongoServerError with no code at all, and a code-11000 error the driver named
+> something else.
+>
+> Moved into Wave 3 in the same change: GAP-022 depends on this entry and was
+> scheduled a whole wave earlier, which is recorded under **Order overrides**.
 
 | Field | Value |
 |---|---|
@@ -1471,6 +1500,17 @@ product call, which is why this entry is AGENT-ASSISTED rather than AGENT-READY.
 
 ### GAP-009 [CODE] normalizeEmail on admin user routes but not on login locks accounts out
 
+> **FIXED 2026-09-09, Wave 3.** All four `.normalizeEmail()` calls are gone;
+> `grep -rn normalizeEmail backend/src` is empty. The schema's
+> `lowercase: true` plus `.trim()` is the whole policy now, so the address an
+> admin types is the address that authenticates. Tests assert a dotted,
+> subaddressed Gmail address survives creation unchanged, survives an unrelated
+> edit, and is still lowercased.
+>
+> The open question below is unchanged and still needs a human: accounts created
+> before this change whose stored address was already rewritten cannot log in
+> with the credentials they were given, and nothing here repairs them.
+
 Severity S2 Major | Complexity XS | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 5.0 | Agent suitability AGENT-ASSISTED |
 Depends on none | Blocks none | Est. agent turns 3-6
@@ -1994,6 +2034,18 @@ None.
 ---
 
 ### GAP-014 [CODE] Stock reservations leak on every order-creation failure path
+
+> **FIXED 2026-09-09, Wave 3.** `createSalesOrder` now runs a read-only
+> validation pass over every item before writing anything, then reserves inside
+> a try/catch that releases everything it took if the create fails.
+> `createStockTransfer` got the same treatment. Four regression tests assert a
+> failed multi-item order leaves every `reservedQuantity` untouched.
+>
+> One thing the entry did not mention and the validation pass exposed: two lines
+> of the same product each passed `hasSufficientStock` on their own, so an order
+> for 6 + 6 of a product with 8 in stock reserved 12 and drove
+> `availableQuantity` negative. The quantities are now summed per stock row and
+> checked once, with a test.
 
 Severity S1 Critical | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 4.0 | Agent suitability AGENT-READY |
@@ -2808,6 +2860,15 @@ is why this entry is AGENT-ASSISTED.
 
 ### GAP-017 [SEC] Four mutating service routes have no validation chain
 
+> **FIXED 2026-09-09, Wave 3.** All five mutating routes now declare chains
+> wired through the file's existing `validationHandler`: `:id` as a MongoId on
+> every one, `mechanicId` on assign, `partsUsed` as an array with per-element
+> product and positive-integer quantity, `amountPaid` as a non-negative float
+> with `paymentMethod` against `PAYMENT_METHODS`, and `status` against
+> `SERVICE_STATUS`. Tests assert 400 rather than 500 for an empty parts body, a
+> non-array `partsUsed`, a zero quantity, a non-numeric `amountPaid`, a
+> malformed `:id`, and an out-of-enum status.
+
 > **The 2026-09-07 NoSQL triage raised what is at stake here.** These four routes
 > are the only place in the backend where an unvalidated request *body* value
 > reaches a Mongo filter, so they carried all four TP-1 alerts (26, 29, 33, 34).
@@ -3002,6 +3063,15 @@ cannot answer, and it is why this entry is AGENT-ASSISTED rather than READY.
 ---
 
 ### GAP-019 [CODE] Transfer completion credits the destination when the source Stock row is missing
+
+> **FIXED 2026-09-09, Wave 3.** The transfer-completion branch resolves the
+> source row before mutating anything and returns 400 when it is absent, so the
+> unconditional destination credit is never reached and the `sourceStock.costPrice`
+> dereference on a null is gone. `salesCompletion.js` and the service completion
+> path both resolve every stock row up front and refuse a missing one, rather
+> than `continue`-ing past it: that also means a later missing row cannot leave
+> an order half-deducted. Five tests cover the transfer case, including that no
+> movement rows are written and the transfer stays retryable.
 
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
@@ -3294,6 +3364,19 @@ UI honest. Widening it is a product call, which is why this is AGENT-ASSISTED.
 ---
 
 ### GAP-022 [CODE] The offline replay queue can stall indefinitely with no user-visible retry
+
+> **FIXED 2026-09-09, Wave 3.** `replayOutbox` now reports whether it stopped
+> on a transient failure, and `initOutboxSync` schedules a bounded backoff
+> (5s, 15s, 45s, 120s) when it did. A real `online` event resets the schedule
+> rather than waiting out the current delay, a clean run resets it too, and the
+> teardown cancels any pending timer so it cannot fire against a torn-down query
+> client. `/sync` renders Retry for the Pending and Syncing sections, not just
+> Rejected.
+>
+> The backoff is deliberately finite. Entries carry their own `attempts` counter
+> and are rejected at `OUTBOX_MAX_ATTEMPTS`, so an unbounded timer would keep
+> waking to do nothing; the `online` event and the manual Retry remain the ways
+> back.
 
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-READY |
@@ -6328,6 +6411,10 @@ practice as well as in intent.
 ---
 
 ### GAP-054 [SEC] Validation errors echo the submitted value, including passwords
+
+> **FIXED 2026-09-09, Wave 3.** `value` is gone from `validate.js`'s formatted
+> errors and from `ApiFieldError`. Nothing consumed it, and the existing suites
+> assert on `field` and `message` only, so no test needed changing.
 
 Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |

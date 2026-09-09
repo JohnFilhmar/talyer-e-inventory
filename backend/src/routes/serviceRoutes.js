@@ -1,11 +1,16 @@
 import express from 'express';
 const router = express.Router();
-import { body } from 'express-validator';
+import { body, param } from 'express-validator';
 import * as serviceController from '../controllers/serviceController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import validationHandler from '../middleware/validationHandler.js';
 import { isValidPhoneNumber, normalizePhoneNumber } from '../utils/phoneValidation.js';
-import { SERVICE_STATUS, SERVICE_PRIORITY, PAYMENT_STATUS } from '../config/constants.js';
+import {
+  SERVICE_STATUS,
+  SERVICE_PRIORITY,
+  PAYMENT_STATUS,
+  PAYMENT_METHODS,
+} from '../config/constants.js';
 import {
   idRule,
   enumRule,
@@ -24,6 +29,53 @@ const phoneValidator = body('customer.phone')
     }
     return true;
   });
+
+// GAP-017. POST / was the only route in this file with a validator; the four
+// mutating PUTs and the DELETE went straight from authorize to the controller.
+//
+// Every one of them takes an :id, so validating it as a MongoId turns a
+// malformed id into a 400 naming the field rather than a CastError surfacing
+// as a 404 or a 500.
+const serviceIdValidation = [
+  param('id').isMongoId().withMessage('Valid service order ID is required')
+];
+
+const assignValidation = [
+  ...serviceIdValidation,
+  body('mechanicId').notEmpty().withMessage('Mechanic ID is required')
+    .bail()
+    .isMongoId().withMessage('Valid mechanic ID is required')
+];
+
+// updatePartsUsed destructured partsUsed and fed it straight to `for...of`, so
+// a body of {} threw `TypeError: partsUsed is not iterable` and surfaced as a
+// 500. The array and its element shape are both declared.
+const partsValidation = [
+  ...serviceIdValidation,
+  body('partsUsed').isArray().withMessage('partsUsed must be an array'),
+  body('partsUsed.*.product').isMongoId().withMessage('Invalid product ID'),
+  body('partsUsed.*.quantity').isInt({ min: 1 })
+    .withMessage('Part quantity must be at least 1').toInt()
+];
+
+// amountPaid was assigned with no numeric check, so "abc" cast to NaN. The
+// pre-save comparison chain then left payment.status unchanged while amountPaid
+// persisted as NaN, producing a document no later save could repair.
+const paymentValidation = [
+  ...serviceIdValidation,
+  body('amountPaid').notEmpty().withMessage('Amount paid is required')
+    .bail()
+    .isFloat({ min: 0 }).withMessage('Amount paid must be a non-negative number').toFloat(),
+  body('paymentMethod').optional()
+    .isIn(Object.values(PAYMENT_METHODS)).withMessage('Invalid payment method')
+];
+
+const statusValidation = [
+  ...serviceIdValidation,
+  body('status').notEmpty().withMessage('Status is required')
+    .bail()
+    .isIn(Object.values(SERVICE_STATUS)).withMessage('Invalid status')
+];
 
 // Query validation for the read routes (GAP-015d). These had no chain at all.
 const listServicesValidation = [
@@ -130,6 +182,8 @@ router.post(
 router.put(
   '/:id/assign',
   authorize('admin', 'salesperson'),
+  assignValidation,
+  validationHandler,
   serviceController.assignMechanic
 );
 
@@ -141,6 +195,8 @@ router.put(
 router.put(
   '/:id/status',
   authorize('admin', 'salesperson', 'mechanic'),
+  statusValidation,
+  validationHandler,
   serviceController.updateServiceOrderStatus
 );
 
@@ -152,6 +208,8 @@ router.put(
 router.put(
   '/:id/parts',
   authorize('admin', 'salesperson', 'mechanic'),
+  partsValidation,
+  validationHandler,
   serviceController.updatePartsUsed
 );
 
@@ -163,6 +221,8 @@ router.put(
 router.put(
   '/:id/payment',
   authorize('admin', 'salesperson'),
+  paymentValidation,
+  validationHandler,
   serviceController.updatePayment
 );
 
@@ -174,6 +234,8 @@ router.put(
 router.delete(
   '/:id',
   authorize('admin'),
+  serviceIdValidation,
+  validationHandler,
   serviceController.cancelServiceOrder
 );
 
