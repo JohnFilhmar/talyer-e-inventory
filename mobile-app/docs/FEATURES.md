@@ -58,9 +58,12 @@ on reads and rejected with 403 on cross-branch writes. This is enforced by
   whether or not the email exists, so it cannot be used to enumerate accounts.
   There is no mail transport, so the reset token is echoed in the response
   **only** when `NODE_ENV !== 'production'`.
-- Rate limiting: 10 requests / 15 min on the five credential endpoints only.
-  `/me`, `/refresh-token`, and `/logout` are on the general 300/15min limiter —
-  a strict limit there locks out a whole office sharing one IP.
+- Rate limiting: 10 requests / 15 min on the five credential endpoints only,
+  keyed by IP, since those are the routes reached without a token. `/me`,
+  `/refresh-token`, and `/logout` are on the general 3000/15min limiter, which
+  keys by the authenticated user and falls back to the IP only for
+  unauthenticated traffic — a strict IP-keyed limit there would lock out a
+  whole office sharing one address.
 
 **For mobile:** the refresh token is an httpOnly cookie. A native client has no
 cookie jar by default; this needs a deliberate decision (cookie-capable HTTP

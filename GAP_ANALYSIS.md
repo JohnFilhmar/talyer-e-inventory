@@ -47,8 +47,11 @@ guidance were right and the setting had drifted.
 
 **Wave 7 is closed as of 2026-09-10.** GAP-044, GAP-045, GAP-056 and GAP-057
 are fixed, along with GAP-058 which was raised into this wave. **Every wave in
-section 8 is now closed except Wave 8**, whose nine entries each need a decision
-from the owner before any code is written.
+section 8 is now closed except Wave 8.** Eight of its nine entries need a
+decision from the owner before any code is written. The ninth needed none:
+**GAP-039 was fixed on 2026-09-10**, a documentation correction its own Open
+questions field had recorded as requiring no decision, and which section 9's
+CONTRA-1 had already resolved in favour of the code.
 
 Three of the four turned up something their entry did not describe, and each
 note says what. GAP-056's shared guard had the same `String(x)` weakness the
@@ -179,8 +182,8 @@ time an entry's status drifted from the code; the wave audit checks membership,
 not whether a scheduled entry was actually recorded as done, which is the hole
 both slipped through.
 
-Remaining open: 9 of the 61 gaps now listed, and all nine are Wave 8: GAP-028,
-GAP-029, GAP-035, GAP-039, GAP-046, GAP-049, GAP-050, GAP-051 and GAP-052. None
+Remaining open: 8 of the 61 gaps now listed, and all eight are Wave 8: GAP-028,
+GAP-029, GAP-035, GAP-046, GAP-049, GAP-050, GAP-051 and GAP-052. None
 of them should be started from its checklist alone. Four change product or
 financial behaviour, three need infrastructure access or an owner decision, and
 the decision briefs are in section 9 and in each entry's Open questions. Two new entries were raised on
@@ -609,7 +612,10 @@ not because it is optional.
 ### Wave 8: requires a human decision first
 
 GAP-028, GAP-029, GAP-035, GAP-039, GAP-046, GAP-049, GAP-050, GAP-051, GAP-052.
-Do not start any of these from a checklist alone. GAP-029, GAP-046, GAP-049 and
+**GAP-039 closed on 2026-09-10, leaving eight.** It was the one member with no
+open question at all: a documentation correction to match the code, which
+CONTRA-1 had already adjudicated. Do not start any of the other eight from a
+checklist alone. GAP-029, GAP-046, GAP-049 and
 GAP-050 change product or financial behaviour; GAP-028, GAP-035 and GAP-051
 require infrastructure access or an owner decision. Their decision briefs are in
 section 9 and in each entry's Open questions field.
@@ -645,7 +651,11 @@ competing decision.
   `TRUST_PROXY` still matters for `authLimiter` and unauthenticated traffic, but
   no longer for authenticated requests.
 - **Decision required: none.** An agent may resolve this autonomously by editing
-  the two documentation sites to match the code. Do not change `rateLimit.js`.
+  the documentation sites to match the code. Do not change `rateLimit.js`.
+- **Resolved 2026-09-10** in favour of Position B, at four sites rather than the
+  two this register listed: `CLAUDE.md` under both *Security middleware* and
+  *Environment*, `backend/src/routes/authRoutes.js:98-100`, and
+  `mobile-app/docs/FEATURES.md:62`. `rateLimit.js` is unchanged. See GAP-039.
 
 ### CONTRA-2 (GAP-049): transaction numbers have two incompatible formats
 
@@ -5250,6 +5260,30 @@ None.
 
 ### GAP-039 [CONTRA] apiLimiter is documented as 300/IP and implemented as 3000/user
 
+> **FIXED 2026-09-10, Wave 8.** The documentation now states what
+> `rateLimit.js` implements: 3000 requests per 15 minutes on `apiLimiter`, keyed
+> by the verified JWT subject with an IP fallback for unauthenticated traffic,
+> and 10 per 15 minutes on `authLimiter`, keyed by IP alone because its routes
+> are the ones reached without a token. `rateLimit.js` is untouched, as this
+> entry required, and `git diff --stat` shows it absent from the change.
+>
+> **A fourth stale site the checklist did not list** was found by grepping for
+> the figure rather than trusting the entry's Location field:
+> `mobile-app/docs/FEATURES.md:62` also said "the general 300/15min limiter".
+> It is corrected too. Leaving it would have reproduced this contradiction in
+> the mobile client's own guide, which is where the next reader of that number
+> would have gone.
+>
+> The `TRUST_PROXY` paragraph under *Environment* needed the same correction as
+> the one under *Security middleware*. It said `express-rate-limit` "keys every
+> client by the direct TCP peer", which is now true only on the IP path;
+> authenticated requests key by user id and `TRUST_PROXY` does not reach them.
+>
+> The remaining "300" strings in this file are the evidence quotes in CONTRA-1
+> and in this entry's own Evidence field. They are the record of what was stale
+> and stay in place. The verification command below greps `CLAUDE.md` and
+> `backend/src/` only, and returns nothing.
+
 Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |
 Depends on none | Blocks none | Est. agent turns 2-3
@@ -7793,7 +7827,7 @@ lines, no empty catch blocks, and no page importing axios directly.
 {"id":"GAP-036","cat":"OPS","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/utils/seedBranches.js","CLAUDE.md"],"title":"seedBranches.js self-executes on import with no main-module guard"},
 {"id":"GAP-037","cat":"OPS","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":[".gitignore","backend/src/middleware/imageUpload.js","backend/src/server.js"],"title":"The repo-root uploads directory is neither gitignored nor mounted"},
 {"id":"GAP-038","cat":"SEC","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["backend/src/middleware/imageUpload.js"],"title":"Image processing returns the raw internal error message and path on 500"},
-{"id":"GAP-039","cat":"CONTRA","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["CLAUDE.md","backend/src/routes/authRoutes.js"],"title":"apiLimiter is documented as 300 per IP and implemented as 3000 per user"},
+{"id":"GAP-039","cat":"CONTRA","sev":"S3","cplx":"XS","diff":"D1","risk":"R1","conf":"C1","pri":2.0,"agent":"AGENT-READY","depends_on":[],"blocks":[],"files":["CLAUDE.md","backend/src/routes/authRoutes.js","mobile-app/docs/FEATURES.md"],"title":"apiLimiter is documented as 300 per IP and implemented as 3000 per user"},
 {"id":"GAP-040","cat":"CODE","sev":"S2","cplx":"M","diff":"D2","risk":"R3","conf":"C1","pri":1.25,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":["GAP-046","GAP-049"],"files":["backend/src/models/Counter.js","backend/src/utils/sequence.js","backend/src/controllers/salesController.js","backend/src/controllers/serviceController.js","backend/src/models/SalesOrder.js","backend/src/models/ServiceOrder.js","backend/src/models/StockTransfer.js","backend/src/models/Transaction.js","backend/src/models/Product.js","backend/src/models/StockMovement.js"],"title":"Every human-readable identifier is generated with countDocuments plus one"},
 {"id":"GAP-041","cat":"CODE","sev":"S2","cplx":"M","diff":"D3","risk":"R3","conf":"C1","pri":1.25,"agent":"AGENT-ASSISTED","depends_on":["GAP-040"],"blocks":[],"files":["backend/src/utils/currency.js","backend/src/models/SalesOrder.js","backend/src/models/ServiceOrder.js","backend/src/utils/salesCompletion.js"],"title":"All money is IEEE-754 floating point with no rounding at any boundary"},
 {"id":"GAP-042","cat":"FEAT","sev":"S2","cplx":"M","diff":"D2","risk":"R1","conf":"C1","pri":1.25,"agent":"AGENT-ASSISTED","depends_on":[],"blocks":[],"files":["frontend/src/app/(protected)/dashboard/page.tsx"],"title":"The dashboard, the post-login landing page, is entirely non-functional"},
