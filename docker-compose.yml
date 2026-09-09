@@ -1,5 +1,18 @@
 services:
   mongo:
+    # Memory limit. Sized from the operator's VPS figures (6 cores, 12 GB RAM)
+    # and the fact that this box also hosts their other systems, so the two
+    # talyer stacks together take 4.5 GB of 12 and leave 7.5 GB for everything
+    # else. Staging overrides these downward.
+    #
+    # Without a limit a leak or a runaway query in either stack can take the
+    # whole box with it, including production and the unrelated systems beside
+    # it. mongo:7 reads its cgroup limit when sizing the WiredTiger cache, so
+    # capping the container is enough; no explicit cacheSizeGB is needed.
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
     # Capped and rotated. The default json-file driver has no limit, the
     # backend writes two log lines per request, and staging and production
     # share one VPS: three unbounded disk consumers compound on one box.
@@ -26,6 +39,11 @@ services:
       retries: 10
 
   redis:
+    # Memory limit; see the note on the mongo service.
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     # Capped and rotated. The default json-file driver has no limit, the
     # backend writes two log lines per request, and staging and production
     # share one VPS: three unbounded disk consumers compound on one box.
@@ -50,6 +68,11 @@ services:
       retries: 10
 
   backend:
+    # Memory limit; see the note on the mongo service.
+    deploy:
+      resources:
+        limits:
+          memory: 768M
     # Capped and rotated. The default json-file driver has no limit, the
     # backend writes two log lines per request, and staging and production
     # share one VPS: three unbounded disk consumers compound on one box.
@@ -94,6 +117,11 @@ services:
       - backend-uploads:/app/uploads
 
   frontend:
+    # Memory limit; see the note on the mongo service.
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     # Capped and rotated. The default json-file driver has no limit, the
     # backend writes two log lines per request, and staging and production
     # share one VPS: three unbounded disk consumers compound on one box.

@@ -231,6 +231,27 @@ jobs:
           echo "::error::backend did not answer $url within the timeout."
           exit 1
 
+      # Runs only after the health check has passed, so a failed deploy keeps
+      # the previous image available to roll back to. Dangling layers only:
+      # `docker image prune -f` without `-a` removes untagged, unreferenced
+      # layers and leaves images the other stack, or anything else on this box,
+      # still refers to. `system prune` would be wrong here for that reason.
+      #
+      # Every deploy rebuilds both images from scratch, so without this the disk
+      # creeps upward until it becomes an outage, and this VPS is shared with
+      # the operator's other systems.
+      - name: Prune unreferenced image layers
+        # A failure to reclaim disk is not a failed deploy: the stack is up and
+        # healthy by this point.
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          echo "Disk before:"
+          df -h / | tail -1
+          docker image prune -f
+          echo "Disk after:"
+          df -h / | tail -1
+
       - name: Diagnose failure
         if: failure()
         run: |

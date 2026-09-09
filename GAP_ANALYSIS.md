@@ -45,11 +45,13 @@ bringing reality back in line with `docs/DEPLOYMENT.md:46`, which had said
 "public" throughout. No documentation change is needed; the code and the deploy
 guidance were right and the setting had drifted.
 
-**Wave 5 is closed as of 2026-09-09, with one half-item.** GAP-021, GAP-023,
-GAP-024, GAP-025, GAP-030, GAP-034, GAP-038, GAP-048 and GAP-055 are fixed.
-**GAP-027 is only partially fixed**: log rotation is in, memory and CPU limits
-are not, because they need VPS figures that are not in the repository and a
-guessed limit can OOM-kill production. It stays open.
+**Wave 5 is closed as of 2026-09-09**, all ten entries. GAP-021, GAP-023,
+GAP-024, GAP-025, GAP-030, GAP-034, GAP-038, GAP-048 and GAP-055 were fixed
+first. **GAP-027 was left half done deliberately** because its memory limits
+needed VPS figures that are not in the repository and a guessed limit can
+OOM-kill production; the owner supplied them the same day, so the limits, the
+staging overrides and the image-prune step all landed in a follow-up and the
+entry is now closed. Its open question is answered on the entry.
 
 Three entries understated their scope again, and the notes say how: GAP-034's
 `EXPOSED_HEADERS` was consumed in `server.js`, GAP-025's mobile test script
@@ -121,7 +123,15 @@ were resolved rather than dismissed. That showed the remaining alerts are mostly
 fixable, so the cleanup is engineering work rather than a human dismissal
 exercise, and it needed an entry rather than a paragraph in section 13.
 
-Remaining open: 19 of the 59 gaps now listed. Two new entries were raised on
+**GAP-033 was found already fixed on 2026-09-09** while auditing what Wave 5's
+follow-up left behind. Its code change shipped in Wave 1 and no note was written,
+so it had been counted open ever since. It is marked fixed retroactively on its
+entry, with the missing test recorded there as a residual. That is the second
+time an entry's status drifted from the code; the wave audit checks membership,
+not whether a scheduled entry was actually recorded as done, which is the hole
+both slipped through.
+
+Remaining open: 17 of the 59 gaps now listed. Two new entries were raised on
 2026-09-08 from findings surfaced while working Wave 2 and deliberately not
 fixed there: **GAP-053** (the refresh cookie repeats GAP-005's fail-open shape,
 left alone because the naive inversion breaks local HTTP login) and
@@ -3979,15 +3989,46 @@ None.
 
 ### GAP-027 [OPS] No resource limits or log rotation; staging and production share one box
 
-> **PARTIALLY FIXED 2026-09-09, Wave 5.** Log rotation is done: all four
-> services in `docker-compose.yml` now cap the json-file driver at
-> `max-size: 10m` and `max-file: 3`, which the overlays inherit. That closes the
-> unbounded-log third of the problem.
+> **FIXED 2026-09-09, Wave 5 and its follow-up.** All three parts are done.
 >
-> **Memory and CPU limits are still open and still need the operator.** The open
-> question below is unchanged: without the VPS figures any limit is a guess that
-> could OOM-kill production, so none was written. The image-prune item is also
-> outstanding.
+> Log rotation: all four services in `docker-compose.yml` cap the json-file
+> driver at `max-size: 10m` and `max-file: 3`, which the overlays inherit.
+>
+> Memory limits: the operator supplied the figures the open question asked for
+> on 2026-09-09, a Cloud VPS 6 with 6 cores, 12 GB RAM and 200 GB disk, and
+> stated that the same box hosts their other systems. Each service now carries
+> `deploy.resources.limits.memory`, and the staging overlay overrides every one
+> of them downward:
+>
+> | Service | Production | Staging |
+> |---|---|---|
+> | mongo | 1536M | 768M |
+> | backend | 768M | 384M |
+> | frontend | 512M | 256M |
+> | redis | 256M | 128M |
+> | total | 3.0G | 1.5G |
+>
+> That is 4.5 GB of 12 for both stacks together, leaving 7.5 GB for the host and
+> the operator's other systems. The split is deliberately conservative for that
+> reason, and it is the number to raise first if a container is OOM-killed.
+> `mongo:7` reads its cgroup limit when sizing the WiredTiger cache, so capping
+> the container is sufficient and no explicit `--wiredTigerCacheSizeGB` is
+> needed. No CPU limits were added, as the entry's **Do not** section requires.
+>
+> Image pruning: the `deploy` job gains a **Prune unreferenced image layers**
+> step running `docker image prune -f`. Two details are deliberate. It runs
+> *after* the health check, so a failed deploy keeps the previous image to roll
+> back to; and it prunes dangling layers only, not `-a` and not
+> `docker system prune`, because a broader prune on a shared box would reclaim
+> images the operator's other systems still reference. The step is
+> `continue-on-error: true`: failing to reclaim disk is not a failed deploy.
+>
+> Verified with `docker compose -p talyer-production config` and
+> `-p talyer-staging config` on the resolved output of both stacks: every
+> service reports a memory limit and `max-size: 10m` with `max-file: 3`, and
+> every staging limit is strictly lower than its production counterpart.
+> `docs/DEPLOYMENT.md` section **Disk usage** is rewritten accordingly and no
+> longer describes pruning as an open item.
 
 Severity S2 Major | Complexity S | Difficulty D2 Standard | Risk R2 |
 Confidence C1 Verified | Priority score 2.5 | Agent suitability AGENT-ASSISTED |
@@ -4060,10 +4101,11 @@ Revert the compose files. Containers return to unbounded.
 
 **Open questions**
 
-What are the VPS memory and CPU figures, and what split between staging and
-production does the owner want? Without those numbers any limit is a guess that
-could OOM-kill production, which is why this entry is AGENT-ASSISTED and the
-checklist defers to operator-supplied values.
+Answered on 2026-09-09. The VPS is a Cloud VPS 6 with 6 cores, 12 GB RAM and
+200 GB disk, and it also hosts the owner's other systems, so the split above
+takes 4.5 GB of 12 and leaves the rest alone. The figures are recorded in the
+note at the top of this entry and in `docs/DEPLOYMENT.md`; anyone resizing the
+box should revisit them there.
 
 ---
 
@@ -4566,6 +4608,21 @@ None.
 ---
 
 ### GAP-033 [SEC] The defensive .select() in userController excludes fields that do not exist
+
+> **FIXED in Wave 1, recorded 2026-09-09.** The code change shipped in
+> `4df8f26`, the Wave 1 commit, but no note was ever written on this entry, so
+> the audit went on counting it open for five waves. Nothing here was left
+> undone in the code: `backend/src/controllers/userController.js:12` declares
+> `PUBLIC_USER_FIELDS` as
+> `-password -refreshToken -resetPasswordToken -resetPasswordExpire`, spelled to
+> match `models/User.js:77` and `:81`, and all six reads use it. A comment above
+> the constant records the old misspelling so it is not reintroduced.
+>
+> Residual: the checklist's third item, a test that temporarily selects the
+> reset fields and asserts they are absent from a user-list response, was not
+> written. `backend/tests/user.test.js` asserts only that `refreshToken` is
+> absent. The guard is therefore correct but unguarded by a test, which is worth
+> folding into GAP-044's scope rather than reopening this entry.
 
 Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability AGENT-READY |

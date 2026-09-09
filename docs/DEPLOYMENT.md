@@ -274,15 +274,38 @@ talyer-e-inventory_mongo-data:/from -v talyer-production_mongo-data:/to alpine c
 /from/. /to/` for each volume, adjusting names to match `docker volume ls`) before running the new
 volumes for the first time.
 
-## Disk usage: no image pruning
+## Disk usage: image pruning and log rotation
 
 Every deploy runs `docker compose up -d --build`, which rebuilds both images on the VPS from
-scratch each time. Old, now-unreferenced image layers are not cleaned up by anything in this
-pipeline, so disk usage on the runner creeps upward with every deploy. There is no cron or
-post-deploy step doing this today. Add one — either a periodic `docker image prune -f` (or
-`docker system prune -f` if build cache growth is also a problem) on a cron on the VPS, or a final
-step in the `deploy` job that runs it after a successful health check — before disk pressure
-becomes an outage.
+scratch each time, so old unreferenced layers accumulate. The `deploy` job now ends with a
+**Prune unreferenced image layers** step that runs `docker image prune -f` after the health check
+has passed.
+
+Two details there are deliberate. It runs *after* the health check, so a failed deploy keeps the
+previous image to roll back to. And it prunes dangling layers only, not `-a` and not
+`docker system prune`: this box also runs the operator's other systems, and a broader prune would
+reclaim images those still need.
+
+Container logs are capped separately. Every service in `docker-compose.yml` sets the `json-file`
+driver to `max-size: 10m` and `max-file: 3`, so the eight containers across both stacks are bounded
+at roughly 240 MB of logs in total rather than growing without limit. The backend writes two log
+lines per request, so this matters more than it looks.
+
+**Memory limits.** Each service carries a `deploy.resources.limits.memory`, sized from this VPS
+(6 cores, 12 GB RAM, 200 GB disk) and the fact that it is shared with other systems:
+
+| Service  | Production | Staging |
+|---|---|---|
+| mongo    | 1536M | 768M |
+| backend  | 768M  | 384M |
+| frontend | 512M  | 256M |
+| redis    | 256M  | 128M |
+| **total**| **3.0G** | **1.5G** |
+
+That is 4.5 GB of 12 for both talyer stacks, leaving 7.5 GB for the host and everything else on the
+box. Raise these first if a container starts getting OOM-killed; they are deliberately conservative
+because the box is shared. `mongo:7` reads its cgroup limit when sizing the WiredTiger cache, so
+capping the container is sufficient and no explicit `--wiredTigerCacheSizeGB` is needed.
 
 ## Putting it behind nginx
 
