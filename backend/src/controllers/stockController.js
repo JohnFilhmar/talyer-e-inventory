@@ -8,7 +8,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
 import CacheUtil from '../utils/cache.js';
 import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMovement.js';
-import { CACHE_TTL, USER_ROLES, PAGINATION, STOCK_TRANSFER_STATUS } from '../config/constants.js';
+import { USER_ROLES, PAGINATION, STOCK_TRANSFER_STATUS } from '../config/constants.js';
 import { resolveBranchScope, canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
 import { asObjectId, asDate, asEnum } from '../utils/narrowing.js';
@@ -1058,7 +1058,6 @@ export const updateStockTransferStatus = asyncHandler(async (req, res) => {
     });
 
     const destOldQuantity = destStock ? destStock.quantity : 0;
-    const isNewDestStock = !destStock;
 
     if (destStock) {
       destStock.quantity += transfer.quantity;

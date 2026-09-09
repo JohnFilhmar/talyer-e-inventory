@@ -1,10 +1,9 @@
 import Supplier from '../models/Supplier.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiResponse from '../utils/apiResponse.js';
-import CacheUtil from '../utils/cache.js';
 import { escapeRegex } from '../utils/regex.js';
 import { pickFields } from '../utils/pickFields.js';
-import { CACHE_TTL, PAGINATION } from '../config/constants.js';
+import { PAGINATION } from '../config/constants.js';
 
 // The fields PUT /api/suppliers/:id accepts: the schema's top-level paths,
 // matching `UpdateSupplierPayload` in frontend/src/types/supplier.ts.

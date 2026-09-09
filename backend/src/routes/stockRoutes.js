@@ -1,6 +1,6 @@
 import express from 'express';
 const router = express.Router();
-import { body, param, query } from 'express-validator';
+import { body, param } from 'express-validator';
 import * as stockController from '../controllers/stockController.js';
 import { STOCK_SORT_FIELDS } from '../controllers/stockController.js';
 import { protect, authorize } from '../middleware/auth.js';
