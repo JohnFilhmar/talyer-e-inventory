@@ -15,6 +15,7 @@ import { CORS } from './config/constants.js';
 import { resolveTrustProxy } from './utils/trustProxy.js';
 import { seedAdminUser } from './utils/seedAdmin.js';
 import { UPLOADS_ROOT } from './utils/uploadsPath.js';
+import { forLog } from './utils/logSafe.js';
 
 // Initialize express app
 const app = express();
