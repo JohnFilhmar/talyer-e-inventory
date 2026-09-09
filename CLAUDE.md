@@ -22,7 +22,7 @@ Two independent npm packages, no workspace root. Every command must be run from 
 # Backend (cd backend)
 npm run dev                       # nodemon on src/server.js, port 5000
 npm start                         # node src/server.js
-npm test                          # jest --runInBand (NODE_ENV=test) — green: 15 suites, 474 tests
+npm test                          # jest --runInBand (NODE_ENV=test) — green: 29 suites, 825 tests, 1 pending
 npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
@@ -114,6 +114,24 @@ back onto the whole router: `/me` and `/refresh-token` are called on every prote
 and on every token expiry, so a strict limiter there locks out a whole office sharing one IP.
 Both `skip` whenever `NODE_ENV === 'test'`, so the Jest suites never see rate limiting. Both key
 clients by `req.ip`, which is why `TRUST_PROXY` (see Environment) matters behind any reverse proxy.
+
+**Narrow request values where they are used.** Every value that reaches a Mongo filter goes
+through [utils/narrowing.js](backend/src/utils/narrowing.js) in the controller that uses it:
+`asObjectId`, `asEnum`, `asDate`, `asCount`. The route's express-validator chain is not a
+substitute. It lives in a different module, so the controller is safe only for as long as every
+route in front of it keeps its chain, an assumption that has failed three times here
+(`resolveBranchScope`, GAP-017's service routes, GAP-015d's read routes). It is also what CodeQL
+reports, since the analysis does not model validator chains.
+
+Two details are load-bearing:
+
+- **Each helper returns a value the caller constructed**, not the caller's own: `asEnum` returns
+  the entry from the allowed list rather than the input that matched it. That is what makes it a
+  barrier rather than an assertion.
+- **They require a string; they do not coerce one.** `String(x)` is not a type check: a
+  one-element array stringifies to its element, so `String(['507f1f77bcf86cd799439011'])` is that
+  id exactly and passes a regex test. The guard in `branchScope.js` had that shape and a comment
+  claiming otherwise.
 
 **CSRF.** `cookieParser()` is mounted on `/api/auth` only, not globally — `authController` is the
 sole reader of `req.cookies` in the backend, and parsing cookies for routers that never consult
@@ -501,7 +519,20 @@ first when every request 404s.
 
 ## Testing
 
-Backend only — the frontend has no test suite.
+```bash
+cd backend  && npm test        # jest --runInBand, 29 suites / 825 tests + 1 pending
+cd frontend && npm test        # vitest run
+```
+
+**The frontend suite is Vitest** ([vitest.config.ts](frontend/vitest.config.ts)), added with
+GAP-044 and pinned to 3.x: 4 and 5 require `@types/node` 22 or newer while the package pins 20.
+It covers the offline outbox's classification table, which `sync.ts` itself describes as a
+data-loss bug if it is wrong in either direction. `environment: 'node'`, since these are module
+tests; a component suite would opt into jsdom per file. CI runs it as `frontend-test`.
+
+**One backend test is deliberately pending.** `concurrency.test.js` holds the oversell case as a
+specification for GAP-046, marked `.skip` with a comment naming it. It is written to fail against
+today's code: remove the skip before starting that gap.
 
 Each suite builds its own bare Express app and mounts just the router under test, so global
 middleware and CORS are absent from tests:
@@ -512,7 +543,7 @@ app.use(express.json());
 app.use('/api/stock', stockRoutes);
 ```
 
-`npm test` is green — 15 suites / 474 tests, verified by CI's `backend-test` job:
+`npm test` is green — 29 suites / 825 tests, verified by CI's `backend-test` job:
 
 ```bash
 npm test

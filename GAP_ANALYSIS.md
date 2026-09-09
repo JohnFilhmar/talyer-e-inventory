@@ -45,6 +45,25 @@ bringing reality back in line with `docs/DEPLOYMENT.md:46`, which had said
 "public" throughout. No documentation change is needed; the code and the deploy
 guidance were right and the setting had drifted.
 
+**Wave 7 is closed as of 2026-09-10.** GAP-044, GAP-045, GAP-056 and GAP-057
+are fixed, along with GAP-058 which was raised into this wave. **Every wave in
+section 8 is now closed except Wave 8**, whose nine entries each need a decision
+from the owner before any code is written.
+
+Three of the four turned up something their entry did not describe, and each
+note says what. GAP-056's shared guard had the same `String(x)` weakness the
+code it replaced did, found by writing its tests: a one-element array
+stringifies to its element and passed the ObjectId regex. GAP-057's aggregation
+returned empty pages at first because `$match` does not cast against the schema
+the way `find` does. GAP-044's new concurrency suite found that two simultaneous
+replays of one `clientRequestId` answer 500 rather than the documented 200,
+which is recorded on GAP-046 rather than left in a commit message.
+
+**The frontend has a test runner for the first time**, Vitest with nine tests
+over the offline outbox's classification table, plus a `frontend-test` job in
+CI. That table is the one `sync.ts` describes as a data-loss bug in either
+direction, and nothing had ever checked it.
+
 **GAP-058 was raised and fixed on 2026-09-09**, found while auditing what Wave
 6 left behind. GAP-001's note had recorded the remainder in its own words,
 "access tokens already issued stay valid for their 7-day life", and no entry was
@@ -160,7 +179,11 @@ time an entry's status drifted from the code; the wave audit checks membership,
 not whether a scheduled entry was actually recorded as done, which is the hole
 both slipped through.
 
-Remaining open: 13 of the 61 gaps now listed. Two new entries were raised on
+Remaining open: 9 of the 61 gaps now listed, and all nine are Wave 8: GAP-028,
+GAP-029, GAP-035, GAP-039, GAP-046, GAP-049, GAP-050, GAP-051 and GAP-052. None
+of them should be started from its checklist alone. Four change product or
+financial behaviour, three need infrastructure access or an owner decision, and
+the decision briefs are in section 9 and in each entry's Open questions. Two new entries were raised on
 2026-09-08 from findings surfaced while working Wave 2 and deliberately not
 fixed there: **GAP-053** (the refresh cookie repeats GAP-005's fail-open shape,
 left alone because the naive inversion breaks local HTTP login) and
@@ -5889,6 +5912,44 @@ None.
 
 ### GAP-044 [TEST] No concurrency test exists and the StockMovement ledger is never asserted
 
+> **FIXED 2026-09-10, Wave 7.** All three holes are closed.
+>
+> `backend/tests/ledger.test.js` is new and asserts the ledger after a real
+> request on every stock-mutating path: restock, both adjustment directions, a
+> completed sale and parts used on a service order. Each checks the type, the
+> `quantityBefore`/`quantityAfter` pair and the `reference`, so a
+> `createMovementWithOldQuantity` call that is deleted, or moved before the
+> `stock.save()` it derives its pair from, now fails a test instead of silently
+> putting a hole in the audit trail.
+>
+> `backend/tests/concurrency.test.js` is the first suite in the project to fire
+> concurrent requests. Three pass: five simultaneous creates get five distinct
+> numbers, a sequential replay returns 200 with the same order, and the ledger
+> reconciles with the quantity it explains. **The oversell test is written and
+> marked pending against GAP-046**, as the entry asks, rather than left red.
+>
+> **Writing it surfaced something the entry did not anticipate.** Two truly
+> simultaneous replays of one `clientRequestId` do not both reach the dedupe
+> check's answer: the check is a read followed by a write, so both pass it and
+> the unique index rejects the second insert with a duplicate key, which
+> surfaces as a 500 rather than the documented 200-with-existing-order. The
+> important half holds, verified in the test: exactly one order exists, stock is
+> committed once, and the loser's reservation is rolled back rather than
+> stranded. It is also self-healing, since `sync.ts` treats a 5xx as retryable
+> and the retry gets its 200. Recorded on GAP-046, which owns atomicity on this
+> path, because answering 200 there means deciding what the losing request does
+> with its reservation, which is GAP-046's decision to make.
+>
+> The frontend has a test runner for the first time. Vitest, pinned to 3.x
+> because 4 and 5 require `@types/node` 22 or newer while this package pins 20,
+> and bumping that is a change to every type in the app rather than a test-setup
+> detail. `src/lib/offline/sync.test.ts` covers the classification table that
+> `sync.ts` calls a data-loss bug in either direction: nine tests over the
+> network, 4xx and 5xx branches, the attempt cap, the continue-versus-stop rule,
+> and the `clientRequestId` reuse rule. `ci.yml` gains a `frontend-test` job.
+>
+> Backend: 29 suites, 825 tests passing with 1 pending. Frontend: 9 tests.
+
 Severity S2 Major | Complexity M | Difficulty D3 Specialist | Risk R1 |
 Confidence C1 Verified | Priority score 1.25 | Agent suitability AGENT-READY |
 Depends on none | Blocks none | Est. agent turns 6-12
@@ -5981,6 +6042,32 @@ None.
 ---
 
 ### GAP-045 [TEST] branch.test.js tests Mongoose directly; four branch endpoints are unverified
+
+> **FIXED 2026-09-10, Wave 7.** The five describe blocks named for HTTP routes
+> issue real requests now. They previously called `Branch.create` and
+> `Branch.find` and asserted on the driver's return value, so the controller,
+> the `protect` and `authorize` chain, the validator chain and the
+> `ApiResponse` envelope were never entered for list, read-one, create, update
+> or delete. The `expect(true).toBe(true)` test is gone.
+>
+> Every branch route now has a role-guard test asserting a salesperson gets 403
+> and that the data is unchanged afterwards, which is the assertion that would
+> have caught a dropped `authorize`.
+>
+> The uncovered endpoints listed on this entry are covered:
+> `POST /api/auth/register-customer` gains three tests including the
+> privilege-escalation one its sibling `/register` already had, asserting an
+> attacker-supplied `role` and `branch` are ignored; `GET /api/stock/movements`,
+> its per-branch and per-product siblings gain read tests including an
+> out-of-enum type rejection; and `POST /api/products/:id/images` gains a real
+> multipart upload through supertest's `.attach()`, covering the wiring between
+> multer, the upload error handler, the role guard and the controller, which
+> `imageUpload.test.js` deliberately does not reach.
+>
+> Two things the entry did not know: `createTestUser` defaults to **admin** so a
+> genuine non-admin has to be asked for by name, and product images are
+> subdocuments with a `url` and an `isPrimary` flag rather than bare strings.
+> Both are now written down in tests rather than rediscovered.
 
 Severity S2 Major | Complexity M | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 1.25 | Agent suitability AGENT-READY |
@@ -6077,6 +6164,26 @@ None.
 ---
 
 ### GAP-046 [CODE] No atomicity on stock quantity writes: lost updates and oversell
+
+> **Still open. Two things were added to its scope on 2026-09-10 by GAP-044's
+> new concurrency suite, which is the first thing in this project ever to fire
+> two requests at one document.**
+>
+> First, the specification now exists as a pending test:
+> `backend/tests/concurrency.test.js` holds the oversell case, marked `.skip`
+> with a comment naming this entry. Remove the skip before starting and watch it
+> fail; it is written to fail against today's code.
+>
+> Second, a case this entry did not describe. Two truly simultaneous replays of
+> one `clientRequestId` both pass the dedupe check, because it is a read
+> followed by a write, and the unique index then rejects the second insert with
+> a duplicate key that surfaces as a **500 rather than the documented 200 with
+> the existing order**. Measured, not inferred: exactly one order is created,
+> the stock is committed once, and the losing request's reservation is rolled
+> back rather than stranded, and `sync.ts` retries the 5xx so nothing is lost.
+> It is in this entry's scope rather than its own because answering 200 there
+> means deciding what the losing request does with its reservation, which is the
+> same decision this entry has to make.
 
 Severity S1 Critical | Complexity L | Difficulty D3 Specialist | Risk R3 |
 Confidence C1 Verified | Priority score 1.14 | Agent suitability HUMAN-FIRST |
@@ -7164,6 +7271,37 @@ is over-reserved.
 
 ### GAP-056 [SEC] Twenty-six NoSQL-injection alerts remain, and most are resolvable rather than dismissible
 
+> **FIXED 2026-09-10, Wave 7.** All twenty-six were narrowed rather than
+> dismissed: fifteen in `stockController.js`, four in `userController.js`, five
+> in `salesController.js`, one each in `serviceController.js` and
+> `productController.js`.
+>
+> `backend/src/utils/narrowing.js` is the single home the entry asked for.
+> `asObjectId` returns a checked string, `asEnum` returns the entry from the
+> allowed list rather than the input that matched it, `asDate` a real `Date`,
+> `asCount` a non-negative integer. Returning a value the caller constructed,
+> instead of asserting something about the caller's, is what makes them barriers
+> rather than comments. `branchScope.js` lost its private copy of the ObjectId
+> regex to it, which the entry asked for before a third copy appeared.
+>
+> **Writing the tests found a hole in the shape the original guard used.**
+> `String(x)` is not a type check: a one-element array stringifies to its
+> element, so `String(['507f1f77bcf86cd799439011'])` is that id exactly and
+> passed the regex. `branchScope.js` carried a comment claiming an array could
+> not slip past it. A two-element array was always rejected, since it
+> stringifies with a comma, so this closed a narrow case rather than a wide one,
+> but the comment was wrong and the code now matches it. Every helper requires a
+> string.
+>
+> Dates matter for a subtler reason: `new Date('nonsense')` is `Invalid Date`,
+> which Mongoose casts into a filter as `null` rather than rejecting, so an
+> unparseable date silently changed what a range query meant instead of failing.
+>
+> `backend/tests/narrowing.test.js` is new, 11 tests and no database. The
+> `CodeQL` check run on the pull request is green with no new alerts; the count
+> on `refs/heads/master` is what the acceptance criteria measure and it is read
+> after the merge, since alerts are keyed per ref.
+
 Severity S3 Moderate | Complexity M | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 0.5 | Agent suitability AGENT-READY |
 Depends on none | Blocks none | Est. agent turns 10-20
@@ -7273,6 +7411,35 @@ None.
 ---
 
 ### GAP-057 [CODE] Stock list sorting orders one page, and the API's own sort key has never applied
+
+> **FIXED 2026-09-10, Wave 7.** `GET /stock` and `GET /stock/branch/:branchId`
+> take `sortBy` and `sortOrder`, checked against an exported `STOCK_SORT_FIELDS`
+> the route validators reuse, so an unknown field is a 400 rather than a
+> silently ignored parameter. The stock page sends them and its client-side
+> comparator is gone.
+>
+> Ordering by a populated field needs an aggregation, so `orderedStockIds` runs
+> one that joins the product or the branch, sorts, then paginates, and returns
+> **ids only**. The caller loads those ids through the normal `find` with its
+> populate chain and reapplies the order. That is deliberate: the New Sale
+> picker and the offline mirror depend on the exact populated shape, including
+> nested fitment, and reproducing it inside an aggregation would be a second
+> definition of it to keep in step. `available` is a virtual, so it is
+> recomputed in the pipeline from the two fields it derives from.
+>
+> **`_id` is always the final sort key.** Without a tiebreak two rows with the
+> same name can swap places between requests, which is how a row appears on two
+> pages or on none.
+>
+> One trap worth recording: **an aggregation `$match` does not cast against the
+> schema the way `find` does.** A 24-character string is compared as a string
+> and matches nothing, so the first version returned empty pages for every
+> filtered query rather than failing. `castIds` converts the two id fields this
+> controller filters by.
+>
+> Seven tests in `backend/tests/stock.test.js` cover ordering across three
+> pages, the reverse, no row appearing twice or being skipped, a field on the
+> stock document, the virtual, the rejected sort field, and branch stock.
 
 Severity S3 Moderate | Complexity M | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 0.5 | Agent suitability AGENT-READY |

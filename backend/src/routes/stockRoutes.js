@@ -2,6 +2,7 @@ import express from 'express';
 const router = express.Router();
 import { body, param, query } from 'express-validator';
 import * as stockController from '../controllers/stockController.js';
+import { STOCK_SORT_FIELDS } from '../controllers/stockController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import { USER_ROLES, STOCK_TRANSFER_STATUS } from '../config/constants.js';
 import { checkBranchAccess } from '../middleware/branchAccess.js';
@@ -95,9 +96,19 @@ const stockIdValidation = [
 
 // Query validation for the read routes (GAP-015d). These had no chain at all,
 // so their filter values reached Mongo unconstrained.
+// `sortBy` is used as a sort key, so it is checked against the same list the
+// controller honours rather than being passed through. An unknown field 400s
+// instead of being silently ignored, which is how a sort control comes to look
+// like it works.
+const sortRules = () => [
+  enumRule('sortBy', STOCK_SORT_FIELDS),
+  enumRule('sortOrder', ['asc', 'desc']),
+];
+
 const listStockValidation = [
   idRule('branch'),
   idRule('product'),
+  ...sortRules(),
   // Reaches an escaped $regex over product name, SKU, barcode, brand and
   // productModel. textRule trims, caps the length and rejects a repeated
   // parameter, which Express would otherwise hand over as an array.
@@ -137,6 +148,7 @@ const branchStockValidation = [
   idRule('category'),
   textRule('search'),
   boolRule('lowStock'),
+  ...sortRules(),
   ...paginationRules()
 ];
 

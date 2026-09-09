@@ -1,7 +1,8 @@
 import request from 'supertest';
+import sharp from 'sharp';
 import express from 'express';
 import * as dbHandler from './setup/dbHandler.js';
-import { createTestUser, createTestAdmin } from './setup/testHelpers.js';
+import { createTestUser, createTestAdmin, createTestSalesperson } from './setup/testHelpers.js';
 import productRoutes from '../src/routes/productRoutes.js';
 import Product from '../src/models/Product.js';
 import Category from '../src/models/Category.js';
@@ -1470,5 +1471,71 @@ describe('Product API Tests', () => {
 
       expect(res.status).toBe(404);
     });
+  });
+});
+
+describe('POST /api/products/:id/images', () => {
+  // The multipart route received no request from any suite. imageUpload.test.js
+  // covers the middleware in isolation, so the wiring in between, multer, the
+  // upload error handler, the role guard and the controller that appends the
+  // URL, was the untested part (GAP-045).
+  const jpeg = async () =>
+    sharp({ create: { width: 60, height: 40, channels: 3, background: { r: 10, g: 20, b: 30 } } })
+      .jpeg()
+      .toBuffer();
+
+  it('accepts an upload from an admin and appends the image', async () => {
+    const admin = await createTestAdmin();
+    const category = await Category.create({ name: 'Imaging', code: 'IMG' });
+    const product = await createTestProduct({ name: 'Imaged', category: category._id });
+
+    const res = await request(app)
+      .post(`/api/products/${product._id}/images`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .attach('image', await jpeg(), 'part.jpg');
+
+    expect(res.statusCode).toBe(201);
+
+    const updated = await Product.findById(product._id);
+    expect(updated.images).toHaveLength(1);
+    // Images are subdocuments with a url and an isPrimary flag, not bare
+    // strings, and the first one uploaded becomes the primary.
+    expect(updated.images[0].url).toMatch(/\/uploads\/products\//);
+    expect(updated.images[0].isPrimary).toBe(true);
+  });
+
+  it('refuses a non-admin', async () => {
+    // createTestUser defaults to admin, so a real non-admin has to be asked for
+    // by name. A salesperson needs a branch to exist.
+    const branch = await Branch.create({
+      name: 'Home',
+      code: 'HOME-IMG',
+      address: { street: '1 St', city: 'City', province: 'Province', postalCode: '1000' },
+      contact: { phone: '09171234567', email: 'home@example.com' },
+    });
+    const user = await createTestSalesperson(branch._id);
+    const category = await Category.create({ name: 'Imaging', code: 'IMG' });
+    const product = await createTestProduct({ name: 'Guarded', category: category._id });
+
+    const res = await request(app)
+      .post(`/api/products/${product._id}/images`)
+      .set('Authorization', `Bearer ${user.token}`)
+      .attach('image', await jpeg(), 'part.jpg');
+
+    expect(res.statusCode).toBe(403);
+    expect((await Product.findById(product._id)).images).toHaveLength(0);
+  });
+
+  it('rejects a file that is not an image', async () => {
+    const admin = await createTestAdmin();
+    const category = await Category.create({ name: 'Imaging', code: 'IMG' });
+    const product = await createTestProduct({ name: 'Textual', category: category._id });
+
+    const res = await request(app)
+      .post(`/api/products/${product._id}/images`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .attach('image', Buffer.from('not an image'), 'notes.txt');
+
+    expect(res.statusCode).toBe(400);
   });
 });

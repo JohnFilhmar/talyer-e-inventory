@@ -51,362 +51,235 @@ const createTestBranch = async (data = {}) => {
   });
 };
 
-describe('Branch API - Get All Branches', () => {
-  describe('GET /api/branches', () => {
-    it('should get all branches with valid token', async () => {
-      // Create admin and login
-      const admin = await createTestAdmin();
-      const loginRes = await request(app)
-        .post('/api/auth/login')
-        .send({ email: admin.email, password: 'password123' });
-      
-      // Since we're not using auth routes in this test app, we'll create branches directly
-      await createTestBranch({ name: 'Branch 1', code: 'BR-001' });
-      await createTestBranch({ name: 'Branch 2', code: 'BR-002' });
+/**
+ * These five blocks were named for HTTP routes and tested Mongoose.
+ *
+ * They called `Branch.create` and `Branch.find` directly and asserted on the
+ * driver's return value, so the controller, the `protect` and `authorize`
+ * chain, the validator chain and the `ApiResponse` envelope were never entered
+ * for list, read-one, create, update or delete. One test's only assertion was
+ * `expect(true).toBe(true)`. `createBranch` could have 500'd, dropped its role
+ * check or returned the wrong shape with all 41 tests green (GAP-045).
+ *
+ * Every test below issues a real request through the mounted router.
+ */
+describe('GET /api/branches', () => {
+  it('returns the branches in the response envelope', async () => {
+    const admin = await createTestAdmin();
+    await createTestBranch({ name: 'Branch 1', code: 'BR-001' });
+    await createTestBranch({ name: 'Branch 2', code: 'BR-002' });
 
-      // This test will fail without proper auth setup in test app
-      // We'll test the controller logic separately
-      expect(true).toBe(true);
-    });
+    const res = await request(app)
+      .get('/api/branches')
+      .set('Authorization', `Bearer ${admin.token}`);
 
-    it('should return paginated results', async () => {
-      // Create multiple branches
-      for (let i = 1; i <= 5; i++) {
-        await createTestBranch({ 
-          name: `Branch ${i}`, 
-          code: `BR-00${i}` 
-        });
-      }
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveLength(2);
+  });
 
-      const branches = await Branch.find();
-      expect(branches.length).toBe(5);
-    });
+  it('refuses an unauthenticated request', async () => {
+    const res = await request(app).get('/api/branches');
 
-    it('should filter branches by active status', async () => {
-      await createTestBranch({ name: 'Active Branch', code: 'ACT-001', isActive: true });
-      await createTestBranch({ name: 'Inactive Branch', code: 'INACT-001', isActive: false });
+    expect(res.statusCode).toBe(401);
+  });
 
-      const activeBranches = await Branch.find({ isActive: true });
-      const inactiveBranches = await Branch.find({ isActive: false });
+  it('paginates', async () => {
+    const admin = await createTestAdmin();
+    for (let i = 1; i <= 5; i += 1) {
+      await createTestBranch({ name: `Branch ${i}`, code: `BR-00${i}` });
+    }
 
-      expect(activeBranches.length).toBe(1);
-      expect(inactiveBranches.length).toBe(1);
-    });
+    const res = await request(app)
+      .get('/api/branches?page=1&limit=2')
+      .set('Authorization', `Bearer ${admin.token}`);
 
-    it('should filter branches by city', async () => {
-      await createTestBranch({ 
-        name: 'Manila Branch', 
-        code: 'MNL-001',
-        address: { street: '123 St', city: 'Manila', province: 'Metro Manila' }
-      });
-      await createTestBranch({ 
-        name: 'Cebu Branch', 
-        code: 'CEB-001',
-        address: { street: '456 St', city: 'Cebu', province: 'Cebu' }
-      });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.pagination.total).toBe(5);
+    expect(res.body.pagination.pages).toBe(3);
+  });
 
-      const manilaBranches = await Branch.find({ 'address.city': /Manila/i });
-      expect(manilaBranches.length).toBe(1);
-      expect(manilaBranches[0].name).toBe('Manila Branch');
-    });
+  it('filters by active status', async () => {
+    const admin = await createTestAdmin();
+    await createTestBranch({ name: 'Active Branch', code: 'ACT-001', isActive: true });
+    await createTestBranch({ name: 'Inactive Branch', code: 'INACT-001', isActive: false });
 
-    it('should search branches by name or code', async () => {
-      await createTestBranch({ name: 'Main Branch', code: 'MAIN-001' });
-      await createTestBranch({ name: 'Sub Branch', code: 'SUB-001' });
+    const res = await request(app)
+      .get('/api/branches?active=true')
+      .set('Authorization', `Bearer ${admin.token}`);
 
-      const searchResults = await Branch.find({
-        $or: [
-          { name: { $regex: 'Main', $options: 'i' } },
-          { code: { $regex: 'Main', $options: 'i' } }
-        ]
-      });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].name).toBe('Active Branch');
+  });
 
-      expect(searchResults.length).toBe(1);
-      expect(searchResults[0].name).toBe('Main Branch');
-    });
+  it('searches by name', async () => {
+    const admin = await createTestAdmin();
+    await createTestBranch({ name: 'Main Branch', code: 'MAIN-001' });
+    await createTestBranch({ name: 'Sub Branch', code: 'SUB-001' });
+
+    const res = await request(app)
+      .get('/api/branches?search=Main')
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].name).toBe('Main Branch');
   });
 });
 
-describe('Branch API - Get Single Branch', () => {
-  describe('GET /api/branches/:id', () => {
-    it('should get single branch by ID', async () => {
-      const branch = await createTestBranch({ name: 'Test Branch', code: 'TEST-001' });
+describe('GET /api/branches/:id', () => {
+  it('returns one branch', async () => {
+    const admin = await createTestAdmin();
+    const branch = await createTestBranch({ name: 'Readable', code: 'READ-001' });
 
-      const foundBranch = await Branch.findById(branch._id);
-      
-      expect(foundBranch).toBeTruthy();
-      expect(foundBranch.name).toBe('Test Branch');
-      expect(foundBranch.code).toBe('TEST-001');
-    });
+    const res = await request(app)
+      .get(`/api/branches/${branch._id}`)
+      .set('Authorization', `Bearer ${admin.token}`);
 
-    it('should return null for non-existent branch', async () => {
-      const fakeId = '507f1f77bcf86cd799439011';
-      const branch = await Branch.findById(fakeId);
-      
-      expect(branch).toBeNull();
-    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.name).toBe('Readable');
+  });
 
-    it('should populate manager information', async () => {
-      const { user: manager } = await createTestAdmin();
-      const branch = await createTestBranch({ 
-        name: 'Test Branch', 
-        code: 'TEST-001',
-        manager: manager._id
-      });
+  it('404s for an id that does not exist', async () => {
+    const admin = await createTestAdmin();
 
-      const foundBranch = await Branch.findById(branch._id).populate('manager', 'name email');
-      
-      expect(foundBranch.manager).toBeTruthy();
-      expect(foundBranch.manager.name).toBe(manager.name);
-    });
+    const res = await request(app)
+      .get('/api/branches/507f1f77bcf86cd799439011')
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('400s on a malformed id rather than reaching the query', async () => {
+    const admin = await createTestAdmin();
+
+    const res = await request(app)
+      .get('/api/branches/not-an-id')
+      .set('Authorization', `Bearer ${admin.token}`);
+
+    expect(res.statusCode).toBe(400);
   });
 });
 
-describe('Branch API - Create Branch', () => {
-  describe('POST /api/branches', () => {
-    it('should create branch with valid data', async () => {
-      const branchData = {
-        name: 'New Branch',
-        code: 'NEW-001',
-        address: {
-          street: '123 New Street',
-          city: 'New City',
-          province: 'New Province',
-          postalCode: '2000'
-        },
-        contact: {
-          phone: '+63 2 9876 5432',
-          email: 'new@branch.com'
-        }
-      };
+describe('POST /api/branches', () => {
+  const payload = {
+    name: 'New Branch',
+    code: 'NEW-001',
+    address: { street: '1 New St', city: 'City', province: 'Province', postalCode: '1000' },
+    contact: { phone: '+63 2 1234 5678', email: 'new@branch.com' },
+  };
 
-      const branch = await Branch.create(branchData);
+  it('creates a branch for an admin', async () => {
+    const admin = await createTestAdmin();
 
-      expect(branch).toBeTruthy();
-      expect(branch.name).toBe('New Branch');
-      expect(branch.code).toBe('NEW-001');
-      expect(branch.address.city).toBe('New City');
-    });
+    const res = await request(app)
+      .post('/api/branches')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send(payload);
 
-    it('should fail without required fields', async () => {
-      const branchData = {
-        name: 'Incomplete Branch'
-        // Missing code, address, contact
-      };
+    expect(res.statusCode).toBe(201);
+    expect(res.body.data.code).toBe('NEW-001');
+    expect(await Branch.countDocuments()).toBe(1);
+  });
 
-      await expect(Branch.create(branchData)).rejects.toThrow();
-    });
+  it('refuses a salesperson', async () => {
+    // A salesperson must be assigned to a branch, so one has to exist first.
+    const home = await createTestBranch({ name: 'Home', code: 'HOME-001' });
+    const salesperson = await createTestSalesperson(home._id);
 
-    it('should fail with duplicate branch name', async () => {
-      await createTestBranch({ name: 'Duplicate Branch', code: 'DUP-001' });
+    const res = await request(app)
+      .post('/api/branches')
+      .set('Authorization', `Bearer ${salesperson.token}`)
+      .send(payload);
 
-      await expect(
-        createTestBranch({ name: 'Duplicate Branch', code: 'DUP-002' })
-      ).rejects.toThrow();
-    });
+    expect(res.statusCode).toBe(403);
+    // Only the salesperson's own branch, so nothing was created.
+    expect(await Branch.countDocuments()).toBe(1);
+  });
 
-    it('should fail with duplicate branch code', async () => {
-      await createTestBranch({ name: 'Branch One', code: 'SAME-001' });
+  it('rejects a duplicate code', async () => {
+    const admin = await createTestAdmin();
+    await createTestBranch({ name: 'Existing', code: 'NEW-001' });
 
-      await expect(
-        createTestBranch({ name: 'Branch Two', code: 'SAME-001' })
-      ).rejects.toThrow();
-    });
+    const res = await request(app)
+      .post('/api/branches')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send(payload);
 
-    it('should fail with invalid branch code format', async () => {
-      await expect(
-        createTestBranch({ name: 'Invalid Code', code: 'invalid code' })
-      ).rejects.toThrow();
-    });
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    expect(await Branch.countDocuments()).toBe(1);
+  });
 
-    it('should convert branch code to uppercase', async () => {
-      const branch = await createTestBranch({ name: 'Test', code: 'lower-001' });
-      expect(branch.code).toBe('LOWER-001');
-    });
+  it('rejects a payload with no name', async () => {
+    const admin = await createTestAdmin();
+    const { name, ...withoutName } = payload;
 
-    it('should fail if manager is a customer', async () => {
-      // Create a branch first for the customer
-      const branch = await createTestBranch({ name: 'Customer Branch', code: 'CUST-BR-001' });
-      
-      const { user: customer } = await createTestUser({ 
-        name: 'Customer User',
-        email: 'customer@test.com',
-        password: 'password123',
-        role: 'customer',
-        branch: branch._id
-      });
+    const res = await request(app)
+      .post('/api/branches')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send(withoutName);
 
-      // This validation would happen in controller, not model
-      // So we just test that customer exists
-      expect(customer.role).toBe('customer');
-    });
-
-    it('should accept admin as manager', async () => {
-      const { user: admin } = await createTestAdmin();
-      const branch = await createTestBranch({
-        name: 'Managed Branch',
-        code: 'MGD-001',
-        manager: admin._id
-      });
-
-      expect(branch.manager.toString()).toBe(admin._id.toString());
-    });
-
-    it('should create branch with default settings', async () => {
-      const branch = await createTestBranch({ name: 'Default Settings', code: 'DEF-001' });
-
-      expect(branch.settings.taxRate).toBe(0);
-      expect(branch.settings.currency).toBe('PHP');
-      expect(branch.settings.timezone).toBe('Asia/Manila');
-      expect(branch.settings.allowNegativeStock).toBe(false);
-      expect(branch.settings.lowStockThreshold).toBe(10);
-    });
-
-    it('should create branch with custom settings', async () => {
-      const branch = await createTestBranch({
-        name: 'Custom Settings',
-        code: 'CUST-001',
-        settings: {
-          taxRate: 12,
-          currency: 'USD',
-          timezone: 'America/New_York',
-          allowNegativeStock: true,
-          lowStockThreshold: 5
-        }
-      });
-
-      expect(branch.settings.taxRate).toBe(12);
-      expect(branch.settings.currency).toBe('USD');
-      expect(branch.settings.lowStockThreshold).toBe(5);
-    });
-
-    it('should validate tax rate range', async () => {
-      await expect(
-        createTestBranch({
-          name: 'Invalid Tax',
-          code: 'TAX-001',
-          settings: { taxRate: 150 }
-        })
-      ).rejects.toThrow();
-    });
-
-    it('should validate phone number format', async () => {
-      await expect(
-        createTestBranch({
-          name: 'Invalid Phone',
-          code: 'PHONE-001',
-          contact: {
-            phone: 'invalid-phone',
-            email: 'test@test.com'
-          }
-        })
-      ).rejects.toThrow();
-    });
-
-    it('should validate email format', async () => {
-      await expect(
-        createTestBranch({
-          name: 'Invalid Email',
-          code: 'EMAIL-001',
-          contact: {
-            phone: '+63 2 1234 5678',
-            email: 'invalid-email'
-          }
-        })
-      ).rejects.toThrow();
-    });
+    expect(res.statusCode).toBe(400);
   });
 });
 
-describe('Branch API - Update Branch', () => {
-  describe('PUT /api/branches/:id', () => {
-    it('should update branch with valid data', async () => {
-      const branch = await createTestBranch({ name: 'Old Name', code: 'OLD-001' });
+describe('PUT /api/branches/:id', () => {
+  it('updates a branch for an admin', async () => {
+    const admin = await createTestAdmin();
+    const branch = await createTestBranch({ name: 'Before', code: 'UPD-001' });
 
-      const updated = await Branch.findByIdAndUpdate(
-        branch._id,
-        { name: 'New Name' },
-        { new: true, runValidators: true }
-      );
+    const res = await request(app)
+      .put(`/api/branches/${branch._id}`)
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({ name: 'After' });
 
-      expect(updated.name).toBe('New Name');
-      expect(updated.code).toBe('OLD-001'); // Code unchanged
-    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.name).toBe('After');
+    expect((await Branch.findById(branch._id)).name).toBe('After');
+  });
 
-    it('should update only provided fields', async () => {
-      const branch = await createTestBranch({ 
-        name: 'Original',
-        code: 'ORIG-001',
-        description: 'Original description'
-      });
+  it('refuses a salesperson', async () => {
+    const branch = await createTestBranch({ name: 'Before', code: 'UPD-002' });
+    const salesperson = await createTestSalesperson(branch._id);
 
-      const updated = await Branch.findByIdAndUpdate(
-        branch._id,
-        { description: 'Updated description' },
-        { new: true }
-      );
+    const res = await request(app)
+      .put(`/api/branches/${branch._id}`)
+      .set('Authorization', `Bearer ${salesperson.token}`)
+      .send({ name: 'After' });
 
-      expect(updated.name).toBe('Original');
-      expect(updated.description).toBe('Updated description');
-    });
-
-    it('should fail with invalid branch ID', async () => {
-      const branch = await Branch.findById('507f1f77bcf86cd799439011');
-      expect(branch).toBeNull();
-    });
-
-    it('should validate updated data', async () => {
-      const branch = await createTestBranch({ name: 'Test', code: 'TEST-001' });
-
-      await expect(
-        Branch.findByIdAndUpdate(
-          branch._id,
-          { code: 'invalid code' },
-          { new: true, runValidators: true }
-        )
-      ).rejects.toThrow();
-    });
+    expect(res.statusCode).toBe(403);
+    expect((await Branch.findById(branch._id)).name).toBe('Before');
   });
 });
 
-describe('Branch API - Delete Branch', () => {
-  describe('DELETE /api/branches/:id', () => {
-    it('should soft delete branch (set isActive to false)', async () => {
-      const branch = await createTestBranch({ name: 'To Delete', code: 'DEL-001' });
+describe('DELETE /api/branches/:id', () => {
+  it('deactivates rather than removing, for an admin', async () => {
+    const admin = await createTestAdmin();
+    const branch = await createTestBranch({ name: 'Doomed', code: 'DEL-001' });
 
-      branch.isActive = false;
-      await branch.save();
+    const res = await request(app)
+      .delete(`/api/branches/${branch._id}`)
+      .set('Authorization', `Bearer ${admin.token}`);
 
-      const deleted = await Branch.findById(branch._id);
-      expect(deleted.isActive).toBe(false);
-    });
+    expect(res.statusCode).toBe(200);
+    const after = await Branch.findById(branch._id);
+    // A soft delete: the row is still there for every order that references it.
+    expect(after).not.toBeNull();
+    expect(after.isActive).toBe(false);
+  });
 
-    it('should not hard delete branch with assigned users', async () => {
-      const branch = await createTestBranch({ name: 'With Users', code: 'USERS-001' });
-      
-      await createTestUser({
-        name: 'Assigned User',
-        email: 'assigned@test.com',
-        password: 'password123',
-        role: 'salesperson',
-        branch: branch._id
-      });
+  it('refuses a salesperson', async () => {
+    const branch = await createTestBranch({ name: 'Safe', code: 'DEL-002' });
+    const salesperson = await createTestSalesperson(branch._id);
 
-      const userCount = await User.countDocuments({ branch: branch._id });
-      expect(userCount).toBe(1);
-    });
+    const res = await request(app)
+      .delete(`/api/branches/${branch._id}`)
+      .set('Authorization', `Bearer ${salesperson.token}`);
 
-    it('should allow deletion of branch without users', async () => {
-      const branch = await createTestBranch({ name: 'No Users', code: 'NOUSERS-001' });
-
-      const userCount = await User.countDocuments({ branch: branch._id });
-      expect(userCount).toBe(0);
-
-      branch.isActive = false;
-      await branch.save();
-
-      expect(branch.isActive).toBe(false);
-    });
+    expect(res.statusCode).toBe(403);
+    expect((await Branch.findById(branch._id)).isActive).toBe(true);
   });
 });
 

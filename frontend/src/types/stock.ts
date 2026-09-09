@@ -221,6 +221,9 @@ export interface StockListParams {
   search?: string;
   lowStock?: string;
   outOfStock?: string;
+  /** Must be one of the API's STOCK_SORT_FIELDS; an unknown field is a 400. */
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
   page?: number;
   limit?: number;
 }

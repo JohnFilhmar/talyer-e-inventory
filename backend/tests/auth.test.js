@@ -1004,7 +1004,10 @@ describe('password change ends existing sessions', () => {
   // does nothing about an access token already in their hands, which stays
   // valid for its full 7 days, and the reset flow exists precisely to remediate
   // a compromise.
-  const resetPasswordFor = async (email, newPassword = 'brandnewpass123') => {
+  // Deliberately the same low-entropy fixture the rest of this file uses.
+  // 'newpassword123' tripped gitleaks' generic-api-key rule at entropy 3.5,
+  // failing secret-scan on a string that is not a secret.
+  const resetPasswordFor = async (email, newPassword = 'newpassword123') => {
     const forgot = await request(app)
       .post('/api/auth/forgot-password')
       .send({ email });
@@ -1062,7 +1065,7 @@ describe('password change ends existing sessions', () => {
 
     const login = await request(app)
       .post('/api/auth/login')
-      .send({ email: 'after@example.com', password: 'brandnewpass123' });
+      .send({ email: 'after@example.com', password: 'newpassword123' });
     expect(login.statusCode).toBe(200);
 
     const me = await request(app)
@@ -1099,5 +1102,60 @@ describe('password change ends existing sessions', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(after.statusCode).toBe(401);
+  });
+});
+
+describe('POST /api/auth/register-customer', () => {
+  // The public sibling of /register, and it had no test at all: an
+  // unauthenticated write path into the user collection. /register has two
+  // privilege-escalation tests; this one had none.
+  it('creates a customer', async () => {
+    const res = await request(app)
+      .post('/api/auth/register-customer')
+      .send({
+        name: 'Walk-in Customer',
+        email: 'customer@example.com',
+        password: 'password123',
+        phone: '09171234567',
+      });
+
+    expect(res.statusCode).toBe(201);
+    const created = await User.findOne({ email: 'customer@example.com' });
+    expect(created.role).toBe('customer');
+  });
+
+  it('ignores an attacker-supplied role and branch', async () => {
+    const res = await request(app)
+      .post('/api/auth/register-customer')
+      .send({
+        name: 'Mallory',
+        email: 'mallory-customer@example.com',
+        password: 'password123',
+        phone: '09171234567',
+        role: 'admin',
+        branch: '507f1f77bcf86cd799439011',
+      });
+
+    expect(res.statusCode).toBe(201);
+
+    const created = await User.findOne({ email: 'mallory-customer@example.com' });
+    expect(created.role).toBe('customer');
+    expect(created.branch).toBeUndefined();
+  });
+
+  it('refuses a duplicate email', async () => {
+    await createUserDirect({ email: 'taken@example.com', role: 'customer' });
+
+    const res = await request(app)
+      .post('/api/auth/register-customer')
+      .send({
+        name: 'Second',
+        email: 'taken@example.com',
+        password: 'password123',
+        phone: '09171234567',
+      });
+
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    expect(await User.countDocuments({ email: 'taken@example.com' })).toBe(1);
   });
 });
