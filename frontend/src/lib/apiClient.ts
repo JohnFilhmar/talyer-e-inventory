@@ -12,7 +12,11 @@ import type { RefreshTokenResponse } from '@/types/auth';
  * - Credentials included for httpOnly cookie support
  */
 const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000',
+  // The fallback carries `/api` because the backend mounts every router under
+  // it. Without the suffix a missing NEXT_PUBLIC_API_URL does not fail loudly,
+  // it 404s every request, which reads as a broken backend rather than a
+  // missing variable.
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
@@ -211,7 +215,7 @@ apiClient.interceptors.response.use(
         // no header, which the backend treats as a pre-CSRF session and lets
         // through once.
         const { data } = await axios.post<ApiResponse<RefreshTokenResponse>>(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/auth/refresh-token`,
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/refresh-token`,
           {},
           {
             withCredentials: true,

@@ -1,7 +1,7 @@
 # Talyer E-Inventory System
 
 > **Status:** Deployed — production runs from `master`, staging from `staging`  
-> **Backend tests:** 421 passing across 14 suites  
+> **Tests:** backend 825 passing across 29 suites (1 pending) · frontend 9 passing (Vitest)  
 > **Clients:** Web (Next.js, offline-capable PWA) · Mobile (Expo, in development)
 
 A multi-branch inventory and business management system for motorparts and
@@ -69,9 +69,9 @@ Beyond the MVP feature set documented further down:
 | 6 | Service Orders | ✅ | ✅ | 38/38 | Complete |
 | - | User Management | ✅ | ✅ | -/- | Complete |
 
-**Total Backend Tests:** 272 passing (100%)  
+**Total Backend Tests:** 825 passing across 29 suites, 1 pending  
 **Total Features Implemented:** 7 major modules  
-**API Endpoints:** 70+ endpoints  
+**API Endpoints:** 87  
 **Database Models:** 11 models  
 **Frontend Pages:** 25+ pages  
 **React Components:** 100+ components
@@ -199,7 +199,7 @@ Four distinct user roles with tailored permissions:
 ## 🛠️ Tech Stack
 
 ### Backend
-- **Runtime:** Node.js 18+
+- **Runtime:** Node.js 22
 - **Framework:** Express.js 5.x
 - **Database:** MongoDB (via Mongoose ODM 8.x)
 - **Caching:** Redis 7.x
@@ -210,10 +210,10 @@ Four distinct user roles with tailored permissions:
 - **Real-time:** Socket.io (ready for Phase 9)
 
 ### Frontend
-- **Framework:** Next.js 15+ (App Router)
+- **Framework:** Next.js 16 (App Router)
 - **Language:** TypeScript 5+
 - **UI Library:** React 19+
-- **Styling:** Tailwind CSS 3.x
+- **Styling:** Tailwind CSS 4
 - **State Management:** 
   - TanStack Query (React Query) for server state
   - Zustand for auth state
@@ -381,7 +381,7 @@ talyer-e-inventory/
 ## 🚀 Getting Started
 
 ### Prerequisites
-- **Node.js 18+** installed
+- **Node.js 22** installed
 - **MongoDB** instance (local or cloud like MongoDB Atlas)
 - **Redis server** (optional but recommended for caching)
 - **Git** for version control
@@ -535,8 +535,9 @@ npm test -- --coverage     # Run with coverage report
 ```
 
 **Current Test Results:**
-- Total Tests: 272
-- Passing: 272 (100%)
+- Backend: 826 total, 825 passing, 1 pending (`concurrency.test.js`
+  holds the GAP-046 oversell case as a specification)
+- Frontend: 9 passing (Vitest, the offline outbox classification table)
 - Coverage: Comprehensive coverage of all MVP features
 
 ### Initial Setup
@@ -553,100 +554,125 @@ After starting the application:
 
 ## 📡 API Endpoints
 
-### Authentication (`/api/auth`)
-- `POST /register` - Register new customer
-- `POST /register-customer` - Public customer registration
-- `POST /login` - User login (returns access token + httpOnly refresh cookie)
-- `POST /logout` - User logout
-- `POST /refresh-token` - Refresh access token (reads from httpOnly cookie)
-- `POST /forgot-password` - Request password reset
-- `POST /reset-password` - Reset password with token
-- `GET /me` - Get current user profile
+**Generated from the route files, not written by hand.** The previous list documented eight
+endpoints that do not exist and omitted about twenty that do, including every
+`PATCH /:id/restore`. Regenerate with:
 
-### User Management (`/api/users`) - Admin Only
-- `GET /` - List all users (paginated, filterable)
-- `GET /all` - Get all users (no pagination)
-- `GET /managers` - Get admin/salesperson users
-- `GET /:id` - Get single user
-- `POST /` - Create new user
-- `PUT /:id` - Update user
-- `PATCH /:id/deactivate` - Deactivate user
-- `PATCH /:id/activate` - Activate user
-- `PATCH /:id/password` - Change user password (admin)
+```bash
+python scripts/gen_endpoints.py
+```
+
+87 routes across ten routers. Paths are relative to the mount prefix in each heading. Every
+route requires a Bearer token except the five credential endpoints and the root index; the
+role each one demands is in the `authorize(...)` call in its route file, which is the only
+place that cannot drift.
+
+### Authentication (`/api/auth`)
+- `POST /register`
+- `POST /register-customer`
+- `POST /login`
+- `POST /refresh-token`
+- `POST /forgot-password`
+- `POST /reset-password`
+- `POST /logout`
+- `GET /me`
+
+### User Management (`/api/users`)
+- `GET /`
+- `POST /`
+- `GET /:id`
+- `PUT /:id`
+- `PATCH /:id/deactivate`
+- `PATCH /:id/activate`
+- `PATCH /:id/password`
 
 ### Branch Management (`/api/branches`)
-- `GET /` - List branches (cached, filterable)
-- `GET /:id` - Get single branch (cached)
-- `GET /:id/stats` - Get branch statistics
-- `POST /` - Create branch (admin)
-- `PUT /:id` - Update branch (admin)
-- `DELETE /:id` - Deactivate branch (admin)
+- `GET /`
+- `GET /:id`
+- `GET /:id/stats`
+- `POST /`
+- `PUT /:id`
+- `DELETE /:id`
+- `PATCH /:id/restore`
 
 ### Category Management (`/api/categories`)
-- `GET /` - List categories (hierarchical)
-- `GET /:id` - Get single category with children
-- `POST /` - Create category (admin)
-- `PUT /:id` - Update category (admin)
-- `DELETE /:id` - Delete category (admin, checks for products/children)
+- `GET /`
+- `POST /`
+- `GET /:id`
+- `PUT /:id`
+- `DELETE /:id`
+- `PATCH /:id/restore`
+- `GET /:id/children`
 
 ### Motorcycle Model Management (`/api/motorcycle-models`)
-- `GET /` - List motorcycle models (filter by `make`, `active`, `search`)
-- `GET /makes` - Distinct list of makes
-- `GET /:id` - Get single motorcycle model
-- `POST /` - Create motorcycle model (admin)
-- `PUT /:id` - Update motorcycle model (admin)
-- `DELETE /:id` - Deactivate motorcycle model (admin, refuses while products reference it)
+- `GET /makes`
+- `GET /`
+- `POST /`
+- `GET /:id`
+- `PUT /:id`
+- `DELETE /:id`
+- `PATCH /:id/restore`
 
 ### Product Management (`/api/products`)
-- `GET /` - List products (paginated, searchable, filterable — including `motorcycleModel`, a comma-joined list matched as ANY)
-- `GET /search` - Search products; matches name, SKU, brand, product model, barcode **and the motorcycles a product fits**. Accepts `motorcycleModel` on its own, with no `q`
-- `GET /:id` - Get single product
-- `POST /` - Create product (admin, salesperson)
-- `PUT /:id` - Update product (admin, salesperson)
-- `DELETE /:id` - Delete product (admin)
-- `POST /:id/images` - Add product image
-- `DELETE /:id/images/:imageId` - Delete product image
+- `GET /search`
+- `GET /`
+- `POST /`
+- `GET /:id`
+- `PUT /:id`
+- `DELETE /:id`
+- `PATCH /:id/restore`
+- `POST /:id/images`
+- `POST /:id/images/url`
+- `DELETE /:id/images/:imageId`
 
 ### Stock Management (`/api/stock`)
-- `GET /` - List stock by branch (paginated, filterable)
-- `GET /branch/:branchId` - Get branch stock
-- `GET /product/:productId` - Get product stock across branches
-- `GET /:id` - Get single stock record
-- `POST /add` - Add stock to branch (admin, salesperson)
-- `POST /adjust` - Adjust stock quantity (admin, salesperson)
-- `POST /transfer` - Create stock transfer (admin, salesperson)
-- `GET /transfers` - List transfers (paginated)
-- `PATCH /transfers/:id/approve` - Approve transfer (admin, destination branch manager)
-- `PATCH /transfers/:id/complete` - Complete transfer (admin)
-- `PATCH /transfers/:id/reject` - Reject transfer (admin, destination branch manager)
+- `GET /`
+- `GET /low-stock`
+- `GET /movements`
+- `GET /movements/stock/:stockId`
+- `GET /movements/product/:productId`
+- `GET /movements/branch/:branchId`
+- `GET /transfers`
+- `GET /transfers/:id`
+- `POST /transfers`
+- `PUT /transfers/:id`
+- `GET /branch/:branchId`
+- `GET /product/:productId`
+- `POST /restock`
+- `PUT /:id/restock`
+- `POST /adjust`
+- `PUT /:id/adjust`
 
 ### Supplier Management (`/api/suppliers`)
-- `GET /` - List suppliers (paginated)
-- `GET /:id` - Get single supplier
-- `POST /` - Create supplier (admin)
-- `PUT /:id` - Update supplier (admin)
-- `DELETE /:id` - Delete supplier (admin)
+- `GET /`
+- `GET /:id`
+- `POST /`
+- `PUT /:id`
+- `DELETE /:id`
+- `PATCH /:id/restore`
 
 ### Sales Management (`/api/sales`)
-- `GET /` - List sales orders (paginated, filterable)
-- `GET /:id` - Get single sales order
-- `GET /:id/invoice` - Get sales invoice
-- `POST /` - Create sales order (admin, salesperson)
-- `PUT /:id/status` - Update order status (admin, salesperson)
-- `PUT /:id/payment` - Update payment (admin, salesperson)
-- `DELETE /:id` - Cancel order (admin)
+- `GET /stats`
+- `GET /`
+- `GET /branch/:branchId`
+- `GET /:id`
+- `GET /:id/invoice`
+- `POST /`
+- `PUT /:id/status`
+- `PUT /:id/payment`
+- `DELETE /:id`
 
 ### Service Management (`/api/services`)
-- `GET /` - List service orders (paginated, filterable)
-- `GET /my-jobs` - Get mechanic's assigned jobs (mechanic)
-- `GET /:id` - Get single service order
-- `GET /:id/invoice` - Get service invoice
-- `POST /` - Create service order (admin, salesperson)
-- `PUT /:id/assign` - Assign mechanic (admin)
-- `PUT /:id/status` - Update status (admin, mechanic)
-- `PUT /:id/parts` - Update parts used (admin, mechanic)
-- `PUT /:id/payment` - Update payment (admin, salesperson)
-- `DELETE /:id` - Cancel service (admin)
+- `GET /`
+- `GET /my-jobs`
+- `GET /:id`
+- `GET /:id/invoice`
+- `POST /`
+- `PUT /:id/assign`
+- `PUT /:id/status`
+- `PUT /:id/parts`
+- `PUT /:id/payment`
+- `DELETE /:id`
 
 ## 🔒 Authentication & Authorization
 
@@ -763,7 +789,7 @@ After starting the application:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        Frontend Layer                        │
-│  Next.js 15 + React 19 + TypeScript + Tailwind CSS         │
+│  Next.js 16 + React 19 + TypeScript + Tailwind CSS 4       │
 │  • App Router (Protected & Public Routes)                   │
 │  • TanStack Query (Server State)                            │
 │  • Zustand (Auth State)                                     │
@@ -908,7 +934,7 @@ Create Order → Validate Stock → Reserve Stock
 ├─────────────────────────────────────────────────────┤
 │             Integration Tests                       │
 │              (API Endpoints)                        │
-│  • 272 tests (100% passing)                        │
+│  • 825 tests, 1 pending                             │
 │  • Jest + Supertest                                 │
 │  • MongoDB Memory Server                            │
 ├─────────────────────────────────────────────────────┤
