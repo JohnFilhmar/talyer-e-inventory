@@ -190,6 +190,17 @@ jobs:
 
       - uses: actions/checkout@v7
 
+      # Both overlays attach the backend to the shared `metrics` network and
+      # declare it external, so it must exist before `compose up` or the deploy
+      # fails with "network metrics declared as external, but could not be
+      # found". It is created once per box and shared with every other project
+      # that onboards, so this only does anything on a fresh host.
+      - name: Ensure the shared metrics network exists
+        run: |
+          set -euo pipefail
+          docker network inspect metrics >/dev/null 2>&1 \
+            || docker network create metrics
+
       - name: Deploy stack
         run: |
           set -euo pipefail
@@ -230,6 +241,33 @@ jobs:
 
           echo "::error::backend did not answer $url within the timeout."
           exit 1
+
+      # Prometheus reads rule files from a directory the monitoring stack mounts
+      # read-only; see /opt/vps-monitoring/README.md, "Onboarding a project".
+      #
+      # The copy goes through a container rather than `cp` because the runner
+      # user is `runner`, it has no sudo, and /opt/monitoring/rules is root-owned.
+      # `runner` is in the `docker` group, so a bind mount writes as root. That
+      # grants nothing the docker group did not already imply. The alternative is
+      # for the operator to chown that directory, which this avoids needing.
+      #
+      # Reloading is a POST to the lifecycle API, which the monitoring stack
+      # enables with --web.enable-lifecycle. A rules file with a syntax error is
+      # rejected by the reload and the previous rules stay loaded.
+      - name: Install Prometheus alert rules
+        # Monitoring is diagnostics. A healthy deploy must not be reported as
+        # failed because a rules file could not be copied.
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /opt/monitoring/rules:/out \
+            -v "$PWD/monitoring/rules:/in:ro" \
+            alpine:3 sh -c 'cp /in/talyer.yml /out/talyer.yml'
+
+          echo "Reloading Prometheus ..."
+          curl -fsS -X POST http://localhost:9091/-/reload
+          echo "Alert rules installed and Prometheus reloaded."
 
       # Runs only after the health check has passed, so a failed deploy keeps
       # the previous image available to roll back to. Dangling layers only:

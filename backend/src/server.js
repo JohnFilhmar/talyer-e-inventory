@@ -18,6 +18,7 @@ import { resolveTrustProxy } from './utils/trustProxy.js';
 import { seedAdminUser } from './utils/seedAdmin.js';
 import { UPLOADS_ROOT } from './utils/uploadsPath.js';
 import logger from './utils/logger.js';
+import { metricsMiddleware, startMetricsServer } from './utils/metrics.js';
 
 // Initialize express app
 const app = express();
@@ -96,6 +97,12 @@ app.use(
     },
   })
 );
+
+// Observe every request. Mounted before the routers so `req.route` is set by
+// the time the response finishes, which is what lets the metric label the
+// matched *pattern* rather than the URL. See utils/metrics.js: labelling by URL
+// is how a scanner probing random paths turns into unbounded cardinality.
+app.use(metricsMiddleware);
 
 // CORS middleware using constants configuration
 app.use((req, res, next) => {
@@ -266,7 +273,11 @@ const startServer = async () => {
       process.exit(1);
     });
 
-    registerShutdownHandlers(server);
+    // Its own port, published to nothing. See utils/metrics.js for why it is
+    // not mounted on the application port.
+    const metricsServer = startMetricsServer();
+
+    registerShutdownHandlers(server, metricsServer);
   } catch (error) {
     logger.error({ err: { name: error.name, message: error.message } }, 'failed to start server');
     process.exit(1);
@@ -291,7 +302,7 @@ const SHUTDOWN_GRACE_MS = Number(process.env.SHUTDOWN_GRACE_MS) || 10000;
 
 let shuttingDown = false;
 
-const registerShutdownHandlers = (server) => {
+const registerShutdownHandlers = (server, metricsServer) => {
   const shutdown = async (signal) => {
     // A second signal during shutdown must not start a second sequence.
     if (shuttingDown) return;
@@ -308,6 +319,13 @@ const registerShutdownHandlers = (server) => {
     try {
       await new Promise((resolve) => server.close(resolve));
       logger.info('http server closed');
+
+      // Closed after the application server, not before: it is what a scrape
+      // reads, and keeping it up until the last request has drained means the
+      // final seconds of a shutdown are still observable.
+      if (metricsServer) {
+        await new Promise((resolve) => metricsServer.close(resolve));
+      }
 
       await disconnectRedis();
       await mongoose.connection.close();

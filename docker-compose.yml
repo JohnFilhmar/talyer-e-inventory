@@ -14,7 +14,7 @@ services:
         limits:
           memory: 1536M
     # Capped and rotated. The default json-file driver has no limit, the
-    # backend writes two log lines per request, and staging and production
+    # backend writes one JSON line per completed request, and staging and production
     # share one VPS: three unbounded disk consumers compound on one box.
     #
     # Memory and CPU limits are the other half of GAP-027 and are deliberately
@@ -45,7 +45,7 @@ services:
         limits:
           memory: 256M
     # Capped and rotated. The default json-file driver has no limit, the
-    # backend writes two log lines per request, and staging and production
+    # backend writes one JSON line per completed request, and staging and production
     # share one VPS: three unbounded disk consumers compound on one box.
     #
     # Memory and CPU limits are the other half of GAP-027 and are deliberately
@@ -74,7 +74,7 @@ services:
         limits:
           memory: 768M
     # Capped and rotated. The default json-file driver has no limit, the
-    # backend writes two log lines per request, and staging and production
+    # backend writes one JSON line per completed request, and staging and production
     # share one VPS: three unbounded disk consumers compound on one box.
     #
     # Memory and CPU limits are the other half of GAP-027 and are deliberately
@@ -112,6 +112,11 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-0}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # The port the metrics listener binds inside the container. Not
+      # published; the production and staging overlays attach the container to
+      # the shared `metrics` network so Prometheus can reach it there.
+      METRICS_PORT: ${METRICS_PORT:-9464}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-}
     volumes:
       - backend-uploads:/app/uploads
@@ -123,7 +128,7 @@ services:
         limits:
           memory: 512M
     # Capped and rotated. The default json-file driver has no limit, the
-    # backend writes two log lines per request, and staging and production
+    # backend writes one JSON line per completed request, and staging and production
     # share one VPS: three unbounded disk consumers compound on one box.
     #
     # Memory and CPU limits are the other half of GAP-027 and are deliberately

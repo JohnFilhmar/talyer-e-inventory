@@ -195,8 +195,15 @@ list is generated from the route files now (`scripts/gen_endpoints.py`), which
 is what stops item 1 from recurring: the hand-written list had 75 entries and
 the real count is 87.
 
-Remaining open: 7 of the 62 gaps now listed, and all seven are Wave 8: GAP-028,
-GAP-029, GAP-035, GAP-046, GAP-049, GAP-050 and GAP-051. None
+**GAP-051 was closed on 2026-09-10**, in two halves on the owner's
+instruction. Reading the deployment host showed its Open questions were wrong
+about the blocker: Prometheus and Grafana were already running there with a
+documented onboarding path that needs no change to the monitoring stack, so
+the metrics half was never waiting on anything. Loki, which the logs were
+meant to go to, is not installed on that box at all.
+
+Remaining open: 6 of the 62 gaps now listed, and all six are Wave 8: GAP-028,
+GAP-029, GAP-035, GAP-046, GAP-049 and GAP-050. None
 of them should be started from its checklist alone. Four change product or
 financial behaviour, three need infrastructure access or an owner decision, and
 the decision briefs are in section 9 and in each entry's Open questions. Two new entries were raised on
@@ -630,10 +637,11 @@ GAP-028, GAP-029, GAP-035, GAP-039, GAP-046, GAP-049, GAP-050, GAP-051, GAP-052.
 leaving seven.** GAP-039 was the one member with no open question at all.
 GAP-052 had exactly one, whether to correct or retire
 `frontend/docs/Frontend-Guidelines.md`, which the owner answered: retire it.
-The owner also answered GAP-046 (single-node replica set), GAP-029 (discount
-before VAT) and GAP-051 (logging half first, logs to Loki); those three are
-unblocked but not yet done, and each entry carries the decision. Do not start
-any of the remaining seven from a checklist alone. GAP-029, GAP-046, GAP-049 and
+**GAP-051 closed on 2026-09-10 too, leaving six**, in two halves: structured
+logging, then metrics. The owner also answered GAP-046 (single-node replica set)
+and GAP-029 (discount before VAT); both are unblocked but not yet done, and each
+entry carries the decision. Do not start any of the remaining six from a
+checklist alone. GAP-029, GAP-046, GAP-049 and
 GAP-050 change product or financial behaviour; GAP-028, GAP-035 and GAP-051
 require infrastructure access or an owner decision. Their decision briefs are in
 section 9 and in each entry's Open questions field.
@@ -6828,8 +6836,58 @@ the financial records.
 
 ### GAP-051 [OPS] No observability: no metrics, structured logs, tracing, or alerting
 
-> **Logging half shipped 2026-09-10. The metrics half is still open, which is
-> why this entry is not closed.**
+> **FIXED 2026-09-10, Wave 8.** Shipped in two halves on the owner's
+> instruction: logging first, then metrics.
+>
+> **Metrics.** `backend/src/utils/metrics.js` exposes a `prom-client` registry
+> with the default process metrics plus an `http_request_duration_seconds`
+> histogram, whose `_count` series is also the request counter. Buckets are
+> sized for this application rather than left at the library default, which
+> tops out at 10 seconds and would put every real request in the first two.
+>
+> **`/metrics` is on its own port, not the application port.** `METRICS_PORT`
+> defaults to 9464 and is published to nothing. The production overlay binds
+> 5000 to `127.0.0.1` and nginx proxies it, so anything mounted there is one
+> `location` block away from being public, and metrics enumerate every route
+> with its request and error rates. A second listener reachable only from the
+> Docker network Prometheus is attached to has no configuration mistake that
+> exposes it.
+>
+> **Two details are load-bearing.** The `route` label is the matched pattern,
+> never the URL: labelling by URL creates a series per product id, and a
+> scanner probing random paths becomes unbounded cardinality Prometheus cannot
+> defend against, so anything unmatched is bucketed as `unmatched`. And the
+> registry sets **no** default labels, because the hub attaches `project` and
+> `service` from the container labels; a `service` label set here would be
+> silently renamed to `exported_service` and every alert rule written against
+> `service` would match nothing and never fire.
+>
+> Verified by booting the real `server.js` against a throwaway mongod: the
+> route label came back as `/api/products/:id` rather than the id, two
+> different unmatched paths collapsed into one `unmatched` series, the metrics
+> port served nothing but `/metrics`, and the application port answered 404 for
+> `/metrics`. The five alert rules were checked with `promtool check rules`
+> against the same Prometheus version the host runs: SUCCESS, 5 rules found.
+>
+> **Onboarding needed no change to the monitoring stack**, which is what the
+> Open questions below got wrong. See the note there.
+>
+> The deploy installs the rules through a throwaway container with a bind
+> mount, because the runner user is `runner`, it has **no sudo**, and
+> `/opt/monitoring/rules` is root-owned. `runner` is in the `docker` group, so
+> a bind mount writes as root, which grants nothing the docker group did not
+> already imply.
+>
+> The deploy also creates the shared `metrics` network before `compose up`.
+> Both overlays declare it `external`, so a fresh box would otherwise fail the
+> deploy outright rather than merely miss its metrics.
+>
+> **Dashboards are not shipped.** Grafana reads
+> `/opt/monitoring/dashboards/<project>/*.json` and every panel must reference
+> datasource uid `prometheus`. Nothing blocks it; the metrics to build one
+> against now exist.
+>
+> **Logging half, shipped earlier the same day.**
 >
 > `backend/src/utils/logger.js` is a `pino` instance and is now the only
 > logger. Every `console.*` call in `backend/src` is gone except in the four
@@ -6984,6 +7042,16 @@ monitoring stack in the repository and adding one to the same VPS competes for t
 resources GAP-027 is trying to bound. That is an infrastructure decision for the
 owner, which is why this is AGENT-ASSISTED: the logging half can proceed
 immediately, and the metrics and alerting half needs a destination.
+
+**Answered 2026-09-10, and the premise was wrong.** "There is no monitoring
+stack" was true of the repository and false of the box. The deployment host
+already runs a `vps-monitoring` compose project: Grafana 12.2.0, Prometheus
+3.5.0, and node, cadvisor, process and smartctl exporters. Its README
+documents an onboarding path requiring no change to that stack, so nothing
+here competed with GAP-027's resource budget and no destination had to be
+invented. The lesson is narrow and worth keeping: an infrastructure question
+answered from the repository alone can be answered wrongly, and the box was
+one `ssh` away the whole time.
 
 ---
 

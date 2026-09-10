@@ -16,7 +16,31 @@ services:
   backend:
     ports:
       - "127.0.0.1:5000:5000"
+    # Prometheus onboarding. The monitoring hub at /opt/vps-monitoring discovers
+    # targets through the Docker socket and scrapes only containers that opt in
+    # with these labels, so this is the whole of it: no scrape config to edit and
+    # nothing to reload. See its README, "Onboarding a project".
+    #
+    # metrics.port is 9464, the backend's own metrics listener, not 5000. That
+    # port is published to nothing, so /metrics is reachable from this network
+    # and from nowhere else; see backend/src/utils/metrics.js.
+    networks:
+      - default
+      - metrics
+    labels:
+      metrics.scrape: "true"
+      metrics.project: "talyer-production"
+      metrics.port: "9464"
+      metrics.name: "backend"
 
   frontend:
     ports:
       - "127.0.0.1:3000:3000"
+
+# Created once on the host with `docker network create metrics`. External so
+# that this stack joins the shared network rather than creating a second one
+# Prometheus cannot see.
+networks:
+  metrics:
+    external: true
+

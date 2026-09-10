@@ -254,9 +254,42 @@ user-controlled values that reach a log field, even though pino's JSON encoding 
 newlines on its own. It is cheap, and it is the shape CodeQL recognises as a log-injection
 barrier (GAP-059); removing it reopens those alerts.
 
-**Metrics are not done.** GAP-051's other half is still open: `prom-client` and a `/metrics`
-endpoint. The deployment host already runs Prometheus and Grafana with a documented onboarding
-convention, so that half needs no new infrastructure either. See GAP-051.
+### Metrics
+
+[utils/metrics.js](backend/src/utils/metrics.js) exposes a Prometheus registry with
+`prom-client`'s default process metrics plus an `http_request_duration_seconds` histogram,
+whose `_count` series doubles as the request counter.
+
+**`/metrics` is served on its own port, not the application port.** `METRICS_PORT` defaults
+to 9464 and is published to nothing. The production overlay binds 5000 to `127.0.0.1` and
+nginx proxies it, so anything on that port is one `location` block away from being public,
+and metrics enumerate every route along with request rates and error counts. A second
+listener reachable only from the Docker network Prometheus is attached to has no
+configuration mistake that exposes it. That listener serves `GET /metrics` and nothing
+else: no router, no body parser, no application middleware.
+
+Two things are load-bearing:
+
+- **The `route` label is the matched pattern, never the URL.** `routeLabel()` reads
+  `req.route`, which the router sets to the pattern (`/:id`), and buckets anything that
+  matched no route as `unmatched`. Labelling by URL would create a series per product id,
+  and a scanner probing random paths would be unbounded cardinality that Prometheus has no
+  defence against. The middleware is mounted **before** the routers so `req.route` is
+  populated by the time `finish` fires.
+- **The registry sets no default labels.** The monitoring hub attaches `project` and
+  `service` from the container's `metrics.project` and `metrics.name` labels. A `service`
+  label set here would collide, and the collision is silent: Prometheus renames it to
+  `exported_service`, so alert rules written against `service` would match nothing and never
+  fire.
+
+**Onboarding needs no change to the monitoring stack.** The hub at `/opt/vps-monitoring` on
+the deployment host discovers targets through the Docker socket and scrapes only containers
+that opt in, so the compose overlays attach the backend to the external `metrics` network
+and set `metrics.scrape`, `metrics.project`, `metrics.port` and `metrics.name`. Alert rules
+live in [monitoring/rules/talyer.yml](monitoring/rules/talyer.yml) and the deploy workflow
+installs them to `/opt/monitoring/rules/` and reloads Prometheus. That copy goes through a
+container with a bind mount because the runner user has no sudo and that directory is
+root-owned; the runner is in the `docker` group, which is what makes it work.
 
 ### Domain model — branch-scoped inventory
 
@@ -699,7 +732,7 @@ package is `"type": "module"`.
 Variables the backend actually reads: `NODE_ENV`, `PORT`, `MONGODB_URI`, `JWT_SECRET`,
 `JWT_EXPIRE`, `JWT_REFRESH_SECRET`, `JWT_REFRESH_EXPIRE`, `REDIS_URL`, `CLIENT_URL`,
 `CORS_ALLOWED_ORIGINS`, `BACKEND_URL`, `TRUST_PROXY`, `REPORT_TIMEZONE`, `SEED_ADMIN_EMAIL`,
-`SEED_ADMIN_PASSWORD` and `LOG_LEVEL`. **`REPORT_TIMEZONE` was missing from this list while the list itself
+`SEED_ADMIN_PASSWORD`, `LOG_LEVEL`, `METRICS_PORT` and `SHUTDOWN_GRACE_MS`. **`REPORT_TIMEZONE` was missing from this list while the list itself
 claimed to be exhaustive and grep-verified** (GAP-052); it is read in
 [salesController.js](backend/src/controllers/salesController.js) and
 [utils/reportingPeriod.js](backend/src/utils/reportingPeriod.js) and defaults to `Asia/Manila`.

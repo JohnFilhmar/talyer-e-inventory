@@ -1,0 +1,88 @@
+# Prometheus alert rules for the talyer stacks.
+#
+# Installed by the deploy workflow to /opt/monitoring/rules/talyer.yml, which the
+# monitoring hub at /opt/vps-monitoring mounts read-only into Prometheus at
+# /etc/prometheus/rules-projects/. Rule files are read at startup or on reload,
+# so the deploy posts to the lifecycle API afterwards.
+#
+# The `project` label comes from the container's `metrics.project` label and is
+# `talyer-production` or `talyer-staging`, so these rules cover both stacks and
+# every alert says which one it is about. `service` comes from `metrics.name`.
+#
+# Thresholds are deliberately loose. This is a motorcycle parts shop with a
+# handful of concurrent users, so a rule tuned for a busy service would either
+# never fire or fire on a single slow request. Every rule here has a `for`
+# clause long enough that a redeploy does not page anyone.
+groups:
+  - name: talyer-backend
+    rules:
+      - alert: TalyerBackendDown
+        expr: up{project=~"talyer-.*"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.project }} backend is not answering scrapes"
+          description: >-
+            Prometheus has not scraped {{ $labels.project }}/{{ $labels.service }}
+            for 3 minutes. Either the container is down or its metrics listener
+            is not reachable on the shared `metrics` network. Check
+            `docker ps` and `docker logs {{ $labels.project }}-backend-1`.
+
+      - alert: TalyerBackendErrorRate
+        expr: >-
+          sum by (project) (rate(http_request_duration_seconds_count{project=~"talyer-.*",status_code=~"5.."}[5m]))
+          /
+          sum by (project) (rate(http_request_duration_seconds_count{project=~"talyer-.*"}[5m]))
+          > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.project }} is answering more than 5% 5xx"
+          description: >-
+            More than one request in twenty has failed with a server error for
+            ten minutes. The backend logs one JSON line per request with the
+            status and a request id; filter for `"level":50`.
+
+      - alert: TalyerBackendLatency
+        expr: >-
+          histogram_quantile(
+            0.95,
+            sum by (project, le) (rate(http_request_duration_seconds_bucket{project=~"talyer-.*"}[10m]))
+          ) > 2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.project }} 95th percentile latency is above 2s"
+          description: >-
+            Sustained slowness rather than a single slow request. The usual
+            causes here are an unindexed query and Mongo memory pressure; the
+            stock and product lists populate, so they are the ones to look at
+            first.
+
+      - alert: TalyerBackendEventLoopBlocked
+        expr: nodejs_eventloop_lag_p99_seconds{project=~"talyer-.*"} > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.project }} event loop is blocked"
+          description: >-
+            The Node event loop is lagging by more than a second at p99, so the
+            process is doing synchronous work and every request is queued behind
+            it. Image processing is the most likely candidate.
+
+      - alert: TalyerBackendRestarting
+        expr: >-
+          changes(process_start_time_seconds{project=~"talyer-.*"}[30m]) > 2
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.project }} backend has restarted repeatedly"
+          description: >-
+            More than two restarts in half an hour. `restart: unless-stopped`
+            hides a crash loop from the health check, because each new container
+            answers /health until it dies again.
