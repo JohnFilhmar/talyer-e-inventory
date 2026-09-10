@@ -4397,6 +4397,19 @@ answer.
 
 **Open questions**
 
+> **DECIDED 2026-09-10 by the owner: the discount applies BEFORE VAT**, so
+> VAT is computed on the pre-discount subtotal. The code does the opposite
+> today, which means every discounted order already in the database has an
+> understated `tax.amount` and `total`.
+>
+> **One sub-question is still open and blocks the migration half only:**
+> what happens to those existing rows. Recomputing them changes recorded
+> financial totals for orders that may already be printed, reported or
+> reconciled; leaving them leaves two populations computed differently in
+> one collection. The code change for new orders does not depend on that
+> answer and can land first. The discount ceiling is mechanical and
+> independent of both.
+
 `RESOLUTION: HUMAN REQUIRED`. Under the applicable Philippine VAT treatment,
 is a trade discount applied before or after VAT is computed? The code currently
 applies it after, which charges VAT on the discounted amount. If the correct
@@ -6351,6 +6364,22 @@ data and is not detectable from the ledger.
 
 **Open questions**
 
+> **DECIDED 2026-09-10 by the owner: a single-node replica set.** The
+> infrastructure question this entry was waiting on is answered, so
+> multi-document transactions are available and the fix is the simpler,
+> more complete shape rather than conditional updates plus compensating
+> releases. Three consequences follow and none of them is optional:
+> the compose files define a standalone today and have to change, with a
+> keyfile or equivalent and an initiated replica set; `CLAUDE.md` and this
+> document both state "production MongoDB is standalone, no startSession,
+> no withTransaction" in several places and every one of those becomes
+> wrong; and the migration has to be sequenced against a running system,
+> since a standalone converted in place is briefly unavailable.
+>
+> This also covers the stranded reservation recorded above: inside a
+> transaction the losing replay's reservation is rolled back by the abort
+> rather than by a cleanup racing the failure.
+
 `RESOLUTION: HUMAN REQUIRED` on one infrastructure question before work starts.
 Is the production MongoDB a standalone server or a replica set? The compose files
 define a standalone, which means multi-document transactions are unavailable and
@@ -6870,6 +6899,14 @@ Revert the logger and metrics changes. No data effect.
 
 **Open questions**
 
+> **DECIDED 2026-09-10 by the owner: do the logging half now, and target
+> Loki.** Grafana is already running on the box, so logs go to Loki to keep
+> the stack uniform rather than introducing a second system. That answers
+> the destination question for logs. The metrics half still needs to say
+> where `/metrics` is scraped from and where alerts are routed, which is
+> the same Grafana instance's concern and should be read off the box rather
+> than guessed.
+
 Where should metrics be scraped from and where should alerts go? There is no
 monitoring stack in the repository and adding one to the same VPS competes for the
 resources GAP-027 is trying to bound. That is an infrastructure decision for the
@@ -6970,6 +7007,16 @@ match the README. Do not add a `features/` directory to make the guidelines true
 Revert the documentation edits and the three small code corrections.
 
 **Open questions**
+
+> **DECIDED 2026-09-10 by the owner: retire
+> `frontend/docs/Frontend-Guidelines.md`** and fold its still-accurate
+> design constraints into `CLAUDE.md`. Maintaining two overlapping frontend
+> guides is how this drift happened, so correcting the file in place would
+> preserve the mechanism that produced the problem. What moves across is
+> the part that is still true and still enforced: the strict palette, no
+> transitions or animations, mobile-first on every page, the `max-w-7xl`
+> container, and the rule that new UI extends the primitives in
+> `components/ui/` rather than adding base components.
 
 Should `frontend/docs/Frontend-Guidelines.md` be corrected or retired? Much of it
 is superseded by CLAUDE.md, and maintaining two overlapping frontend guides is how
