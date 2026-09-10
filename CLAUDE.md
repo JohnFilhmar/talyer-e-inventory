@@ -10,11 +10,14 @@ Two independent npm packages, no workspace root. Every command must be run from 
 - `backend/` — Express 5 + Mongoose + Redis REST API (ESM, `"type": "module"`)
 - `frontend/` — Next.js 16 App Router + React 19 + TypeScript + Tailwind 4
 - `backend/docs/`, `frontend/docs/` — per-phase implementation plans (`Phase-N.md` = plan,
-  `Phase-N-done.md` = what shipped). Useful history, but stale in places. Read the route file, not
-  the docs, before calling an endpoint: [README.md](README.md) still lists `POST /stock/add`,
-  `POST /stock/transfer`, and `PATCH /stock/transfers/:id/approve`, while
-  [stockRoutes.js](backend/src/routes/stockRoutes.js) actually serves `POST /stock/restock`,
-  `POST /stock/transfers`, and `PUT /stock/transfers/:id`.
+  `Phase-N-done.md` = what shipped). Useful history, but stale in places, and they are a record of
+  what was planned rather than a description of the code. `frontend/docs/Frontend-Guidelines.md` is
+  a retired stub (GAP-052); its design system lives here now.
+- `scripts/gen_endpoints.py` — regenerates README's endpoint list from the route files.
+  `python scripts/gen_endpoints.py --check` exits non-zero when README has drifted. README used to
+  document eight endpoints that did not exist and omit about twenty that did, which is why the list
+  is generated rather than written. **The route file is still the authority** for the roles a route
+  demands, since only the `authorize(...)` call carries those.
 
 ## Commands
 
@@ -362,9 +365,9 @@ Each `hooks/useX.ts` exports a query-key factory named `xKeys` (`all` / `lists()
 inlining string arrays.
 
 Zod schemas live in `utils/validators/`, TypeScript models mirroring the Mongoose schemas live in
-`types/`. Note the layout does **not** match the `features/` structure described in
-[frontend/docs/Frontend-Guidelines.md](frontend/docs/Frontend-Guidelines.md) — the code uses flat
-`components/<domain>/`, `hooks/`, `lib/services/`.
+`types/`. The layout is flat: `components/<domain>/`, `hooks/`, `lib/services/`. A `features/`
+structure was once specified and never built; the guide that specified it is retired (GAP-052),
+so this is the only description of the layout now.
 
 ### Auth
 
@@ -393,15 +396,27 @@ The `withAuthGuard` / `withRoleGuard` HOCs in `middlewares/` are per-page opt-in
 of that layout, for admin-only pages. There is no Next.js `middleware.ts` — all guarding is
 client-side.
 
-### Design constraints (from Frontend-Guidelines.md, enforced across existing UI)
+### Design constraints
 
-- Strict palette: yellow-400 `#FBBF24`, black, white, plus gray-100/200/400/500 for chrome. No
-  other colors. Primary button = yellow bg / black text; secondary = black bg / white text;
-  danger = black bg / red text.
-- No transitions or animations. Loading spinners are the only exception.
-- Mobile-first responsive is required on every page; container is `max-w-7xl`.
-- Reusable primitives already exist in [components/ui/](frontend/src/components/ui/) (Button,
-  Input, PhoneInput, Modal, Alert, Badge, Spinner) — extend those rather than adding new base
+These moved here from `frontend/docs/Frontend-Guidelines.md` when that file was retired
+(GAP-052). They are the part of it that was still true and still enforced across the existing
+UI; the rest described a system that was never built.
+
+- **Strict palette.** yellow-400 `#FBBF24`, black `#000000`, white `#FFFFFF`, plus gray-100
+  `#F3F4F6`, gray-200 `#E5E7EB`, gray-400 `#9CA3AF` and gray-500 `#6B7280` for chrome. No other
+  colours. Primary button = yellow bg / black text; secondary = black bg / white text; danger =
+  black bg / red text. Active and focus states are yellow. **Status is carried by a text label**,
+  not by a colour, because the palette has no red/amber/green to spend on it.
+- **No transitions or animations.** Loading spinners are the only exception.
+- **Typography.** Inter, system-ui, sans-serif. Headings bold and black at `text-2xl`/`text-xl`/
+  `text-lg`; body `text-base`; labels `text-sm` medium; helper text `text-xs` gray-500.
+- **Spacing.** Container `max-w-7xl`. Padding from Tailwind's scale (`p-4`, `p-6`, `p-8`), gaps
+  `gap-4`/`gap-6`, `mb-6`/`mb-8` between major sections.
+- **Mobile-first responsive is required on every page.** Design at 320px, then `md:` 768px, then
+  `lg:` 1024px. Hamburger navigation on mobile; tables scroll horizontally or become cards;
+  forms stack; modals go full-screen on mobile and centre on desktop.
+- **Extend the primitives.** [components/ui/](frontend/src/components/ui/) holds Button, Input,
+  PhoneInput, Modal, Alert, Badge, Spinner and Combobox. Add variants there rather than new base
   components.
 
 ### Uploads and the camera
@@ -532,8 +547,10 @@ frontend services request paths *without* the prefix (`/auth/login`, `/stock/res
 `server.js`'s own root-index response advertises the unprefixed paths. **`NEXT_PUBLIC_API_URL`
 must therefore include the prefix** (e.g. `http://localhost:5000/api`). `.env.example` and
 [docker-compose.yml](docker-compose.yml) both set it correctly with the suffix now; `README.md`
-was corrected too, but `frontend/docs/Frontend-Guidelines.md` still shows it without. Check this
-first when every request 404s.
+was corrected too. The two fallbacks inside
+[apiClient.ts](frontend/src/lib/apiClient.ts) carried the bare origin and now carry the suffix,
+so a missing `NEXT_PUBLIC_API_URL` no longer 404s every request while looking like a dead
+backend. Check this first when every request 404s.
 
 ## Testing
 
@@ -636,13 +653,16 @@ package is `"type": "module"`.
 
 Variables the backend actually reads: `NODE_ENV`, `PORT`, `MONGODB_URI`, `JWT_SECRET`,
 `JWT_EXPIRE`, `JWT_REFRESH_SECRET`, `JWT_REFRESH_EXPIRE`, `REDIS_URL`, `CLIENT_URL`,
-`CORS_ALLOWED_ORIGINS`, `BACKEND_URL`, `TRUST_PROXY`. `README.md` used to also document
-`COOKIE_SECURE`, `COOKIE_DOMAIN`, `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD`, and
-`RESET_PASSWORD_EXPIRE` — verified via grep that `COOKIE_SECURE`, `COOKIE_DOMAIN`,
-`REDIS_PASSWORD`, and `RESET_PASSWORD_EXPIRE` are read nowhere in `backend/src`, and that
-`REDIS_HOST`/`REDIS_PORT` only feed a cosmetic boot-log line in
-[config/redis.js](backend/src/config/redis.js) — the actual connection is built from
-`REDIS_URL` alone. Refresh-cookie `secure`/`sameSite` are derived from
+`CORS_ALLOWED_ORIGINS`, `BACKEND_URL`, `TRUST_PROXY`, `REPORT_TIMEZONE`, `SEED_ADMIN_EMAIL`
+and `SEED_ADMIN_PASSWORD`. **`REPORT_TIMEZONE` was missing from this list while the list itself
+claimed to be exhaustive and grep-verified** (GAP-052); it is read in
+[salesController.js](backend/src/controllers/salesController.js) and
+[utils/reportingPeriod.js](backend/src/utils/reportingPeriod.js) and defaults to `Asia/Manila`.
+`README.md` used to also document `COOKIE_SECURE`, `COOKIE_DOMAIN`,
+`REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD`, and `RESET_PASSWORD_EXPIRE`: none of those is read
+anywhere in `backend/src`. `REDIS_HOST`/`REDIS_PORT` once fed a boot-log line and no longer do,
+since [config/redis.js](backend/src/config/redis.js) logs `REDIS_URL`, which is also the only
+thing the connection is built from. Refresh-cookie `secure`/`sameSite` are derived from
 `NODE_ENV === 'production'` in
 [authController.js](backend/src/controllers/authController.js), and the password-reset token
 expiry is hardcoded to 10 minutes in `getResetPasswordToken()` in

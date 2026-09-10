@@ -172,16 +172,20 @@ app.get('/', (req, res) => {
     success: true,
     message: 'Talyer E-Inventory API',
     version: '1.0.0',
+    // These are the paths as mounted. They carried no `/api` prefix and omitted
+    // services, so the one response whose whole job is to tell a caller where
+    // things are sent them to a 404. `/health` is genuinely unprefixed.
     endpoints: {
-      auth: '/auth',
-      users: '/users',
-      branches: '/branches',
-      categories: '/categories',
-      motorcycleModels: '/motorcycle-models',
-      products: '/products',
-      stock: '/stock',
-      suppliers: '/suppliers',
-      sales: '/sales',
+      auth: '/api/auth',
+      users: '/api/users',
+      branches: '/api/branches',
+      categories: '/api/categories',
+      motorcycleModels: '/api/motorcycle-models',
+      products: '/api/products',
+      stock: '/api/stock',
+      suppliers: '/api/suppliers',
+      sales: '/api/sales',
+      services: '/api/services',
       health: '/health',
     },
   });

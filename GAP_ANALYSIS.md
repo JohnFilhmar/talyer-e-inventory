@@ -189,8 +189,14 @@ CodeQL queries, so two high-severity alerts had been open on `master`
 throughout without appearing in any entry. It ships fixed, so the open count
 does not move.
 
-Remaining open: 8 of the 62 gaps now listed, and all eight are Wave 8: GAP-028,
-GAP-029, GAP-035, GAP-046, GAP-049, GAP-050, GAP-051 and GAP-052. None
+**GAP-052 was closed on 2026-09-10** once the owner chose to retire
+`frontend/docs/Frontend-Guidelines.md` rather than correct it. README's endpoint
+list is generated from the route files now (`scripts/gen_endpoints.py`), which
+is what stops item 1 from recurring: the hand-written list had 75 entries and
+the real count is 87.
+
+Remaining open: 7 of the 62 gaps now listed, and all seven are Wave 8: GAP-028,
+GAP-029, GAP-035, GAP-046, GAP-049, GAP-050 and GAP-051. None
 of them should be started from its checklist alone. Four change product or
 financial behaviour, three need infrastructure access or an owner decision, and
 the decision briefs are in section 9 and in each entry's Open questions. Two new entries were raised on
@@ -620,10 +626,14 @@ not because it is optional.
 ### Wave 8: requires a human decision first
 
 GAP-028, GAP-029, GAP-035, GAP-039, GAP-046, GAP-049, GAP-050, GAP-051, GAP-052.
-**GAP-039 closed on 2026-09-10, leaving eight.** It was the one member with no
-open question at all: a documentation correction to match the code, which
-CONTRA-1 had already adjudicated. Do not start any of the other eight from a
-checklist alone. GAP-029, GAP-046, GAP-049 and
+**GAP-039 closed on 2026-09-10, leaving eight, and GAP-052 closed the same day,
+leaving seven.** GAP-039 was the one member with no open question at all.
+GAP-052 had exactly one, whether to correct or retire
+`frontend/docs/Frontend-Guidelines.md`, which the owner answered: retire it.
+The owner also answered GAP-046 (single-node replica set), GAP-029 (discount
+before VAT) and GAP-051 (logging half first, logs to Loki); those three are
+unblocked but not yet done, and each entry carries the decision. Do not start
+any of the remaining seven from a checklist alone. GAP-029, GAP-046, GAP-049 and
 GAP-050 change product or financial behaviour; GAP-028, GAP-035 and GAP-051
 require infrastructure access or an owner decision. Their decision briefs are in
 section 9 and in each entry's Open questions field.
@@ -713,6 +723,15 @@ editing documentation only.
 **Decision required: none.** An agent may fix all eight by editing documentation.
 Item 7 additionally requires a one-line code change to the two `apiClient.ts`
 fallbacks, which is unambiguous.
+
+**Resolved 2026-09-10.** All eight in favour of Position B. Item 1 is closed
+with `scripts/gen_endpoints.py` rather than a corrected list, since 87 routes
+maintained by hand will drift again. Items 5, 6 and 7 are closed by retiring
+`frontend/docs/Frontend-Guidelines.md` to a stub, on the owner's decision, so
+the second frontend guide that produced the drift no longer exists. The two
+code-side corrections landed with it: the `apiClient.ts` fallbacks carry
+`/api`, and `server.js`'s root index advertises prefixed paths and `services`.
+See GAP-052.
 
 ## 10. Gap Detail Entries
 
@@ -4397,6 +4416,19 @@ answer.
 
 **Open questions**
 
+> **DECIDED 2026-09-10 by the owner: the discount applies BEFORE VAT**, so
+> VAT is computed on the pre-discount subtotal. The code does the opposite
+> today, which means every discounted order already in the database has an
+> understated `tax.amount` and `total`.
+>
+> **One sub-question is still open and blocks the migration half only:**
+> what happens to those existing rows. Recomputing them changes recorded
+> financial totals for orders that may already be printed, reported or
+> reconciled; leaving them leaves two populations computed differently in
+> one collection. The code change for new orders does not depend on that
+> answer and can land first. The discount ceiling is mechanical and
+> independent of both.
+
 `RESOLUTION: HUMAN REQUIRED`. Under the applicable Philippine VAT treatment,
 is a trade discount applied before or after VAT is computed? The code currently
 applies it after, which charges VAT on the discounted amount. If the correct
@@ -6351,6 +6383,22 @@ data and is not detectable from the ledger.
 
 **Open questions**
 
+> **DECIDED 2026-09-10 by the owner: a single-node replica set.** The
+> infrastructure question this entry was waiting on is answered, so
+> multi-document transactions are available and the fix is the simpler,
+> more complete shape rather than conditional updates plus compensating
+> releases. Three consequences follow and none of them is optional:
+> the compose files define a standalone today and have to change, with a
+> keyfile or equivalent and an initiated replica set; `CLAUDE.md` and this
+> document both state "production MongoDB is standalone, no startSession,
+> no withTransaction" in several places and every one of those becomes
+> wrong; and the migration has to be sequenced against a running system,
+> since a standalone converted in place is briefly unavailable.
+>
+> This also covers the stranded reservation recorded above: inside a
+> transaction the losing replay's reservation is rolled back by the abort
+> rather than by a cleanup racing the failure.
+
 `RESOLUTION: HUMAN REQUIRED` on one infrastructure question before work starts.
 Is the production MongoDB a standalone server or a replica set? The compose files
 define a standalone, which means multi-document transactions are unavailable and
@@ -6870,6 +6918,14 @@ Revert the logger and metrics changes. No data effect.
 
 **Open questions**
 
+> **DECIDED 2026-09-10 by the owner: do the logging half now, and target
+> Loki.** Grafana is already running on the box, so logs go to Loki to keep
+> the stack uniform rather than introducing a second system. That answers
+> the destination question for logs. The metrics half still needs to say
+> where `/metrics` is scraped from and where alerts are routed, which is
+> the same Grafana instance's concern and should be read off the box rather
+> than guessed.
+
 Where should metrics be scraped from and where should alerts go? There is no
 monitoring stack in the repository and adding one to the same VPS competes for the
 resources GAP-027 is trying to bound. That is an infrastructure decision for the
@@ -6879,6 +6935,37 @@ immediately, and the metrics and alerting half needs a destination.
 ---
 
 ### GAP-052 [CONTRA] Documentation contradicts the code at eight independent points
+
+> **FIXED 2026-09-10, Wave 8.** All eight points resolved in favour of the
+> code, plus the two code-side corrections the entry called unambiguous.
+>
+> **The endpoint list is generated now, not written.** `scripts/gen_endpoints.py`
+> reads the ten route files and the mount prefixes out of `server.js`, and
+> `--check` exits non-zero when README has drifted. The hand-written list had
+> 75 entries; the real count is **87**. A list of 87 routes maintained by hand
+> will drift again, which is why item 1 is closed with a generator rather than
+> with a corrected list. The generator reads both route styles: most files call
+> `router.get('/x', ...)`, but the catalogue routers chain
+> `router.route('/x').get(...).post(...)`, so a grep for `router.get(` reports
+> zero routes for three of them and would have undercounted by 26.
+>
+> **`frontend/docs/Frontend-Guidelines.md` is retired**, per the owner's
+> decision, and left as a stub rather than deleted: eight per-phase plans in
+> that directory link to it and those are a historical record. The stub says
+> what happened, where the design system went, and how to read the original
+> out of git. That closes items 5, 6 and 7 at the source instead of correcting
+> a file nobody maintains.
+>
+> Item 6 was already stale in this entry's own favour: it said the frontend has
+> no test runner, but GAP-044 added Vitest. The retirement covers it either
+> way.
+>
+> Item 8 is the one worth remembering. `CLAUDE.md` carried an environment list
+> that described itself as exhaustive and grep-verified, and it omitted
+> `REPORT_TIMEZONE`. Its claim that `REDIS_HOST`/`REDIS_PORT` feed a boot-log
+> line had also gone stale, since `config/redis.js` logs `REDIS_URL`. A list
+> that asserts its own completeness is worse than one that does not, because
+> it stops the next reader from checking.
 
 Severity S3 Moderate | Complexity M | Difficulty D1 Mechanical | Risk R1 |
 Confidence C1 Verified | Priority score 0.5 | Agent suitability AGENT-ASSISTED |
@@ -6970,6 +7057,16 @@ match the README. Do not add a `features/` directory to make the guidelines true
 Revert the documentation edits and the three small code corrections.
 
 **Open questions**
+
+> **DECIDED 2026-09-10 by the owner: retire
+> `frontend/docs/Frontend-Guidelines.md`** and fold its still-accurate
+> design constraints into `CLAUDE.md`. Maintaining two overlapping frontend
+> guides is how this drift happened, so correcting the file in place would
+> preserve the mechanism that produced the problem. What moves across is
+> the part that is still true and still enforced: the strict palette, no
+> transitions or animations, mobile-first on every page, the `max-w-7xl`
+> container, and the rule that new UI extends the primitives in
+> `components/ui/` rather than adding base components.
 
 Should `frontend/docs/Frontend-Guidelines.md` be corrected or retired? Much of it
 is superseded by CLAUDE.md, and maintaining two overlapping frontend guides is how
