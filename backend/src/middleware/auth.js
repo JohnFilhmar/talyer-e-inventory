@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import logger from '../utils/logger.js';
 import User from '../models/User.js';
 import { passwordGeneration } from '../utils/jwt.js';
 
@@ -51,7 +52,12 @@ const protect = async (req, res, next) => {
 
       next();
     } catch (error) {
-      console.error('Auth middleware error:', error);
+      // Name and message only. A JsonWebTokenError's message is safe, but the
+      // object can carry the token that failed to verify.
+      logger.warn(
+        { reqId: req.id, err: { name: error.name, message: error.message } },
+        'token rejected'
+      );
       return res.status(401).json({
         success: false,
         message: 'Not authorized, token failed',

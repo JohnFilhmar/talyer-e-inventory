@@ -1,12 +1,10 @@
 import { isDebugEnvironment } from '../utils/environment.js';
+import logger from '../utils/logger.js';
 
 const errorHandler = (err, req, res, next) => {
   let error = { ...err };
   error.message = err.message;
   error.statusCode = err.statusCode;
-
-  // Log error for dev
-  console.error('Error:', err);
 
   // Mongoose bad ObjectId
   if (err.name === 'CastError') {
@@ -54,6 +52,28 @@ const errorHandler = (err, req, res, next) => {
   }
 
   const statusCode = error.statusCode || 500;
+
+  // Log after the status is resolved, not before.
+  //
+  // This used to be `console.error('Error:', err)` at the top of the handler,
+  // which meant every ordinary 400 and 404 was written at error level with the
+  // whole error object attached. An alert on error-level lines would have fired
+  // on a customer mistyping an email. A 4xx is the caller's problem and a 5xx is
+  // ours, so the level follows the status the client actually receives.
+  //
+  // Only `name`, `message` and the request id go to the log. The whole object
+  // carries driver internals and, on a Mongo error, the failing document, which
+  // is how a password hash or a customer's details end up in a log line. The
+  // stack is attached for 5xx only, where it is the thing you actually need.
+  logger[statusCode >= 500 ? 'error' : 'warn'](
+    {
+      reqId: req.id,
+      statusCode,
+      err: { name: err.name, message: err.message },
+      ...(statusCode >= 500 && { stack: err.stack }),
+    },
+    'request failed'
+  );
 
   // Affirmative test, not `!== 'production'`. Gating disclosure on production
   // fails open: NODE_ENV unset, or spelled `PRODUCTION`, `prod` or `staging`,

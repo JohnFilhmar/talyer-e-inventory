@@ -6828,6 +6828,59 @@ the financial records.
 
 ### GAP-051 [OPS] No observability: no metrics, structured logs, tracing, or alerting
 
+> **Logging half shipped 2026-09-10. The metrics half is still open, which is
+> why this entry is not closed.**
+>
+> `backend/src/utils/logger.js` is a `pino` instance and is now the only
+> logger. Every `console.*` call in `backend/src` is gone except in the four
+> operator scripts (`seedBranches.js`, `migrateCounters.js`,
+> `migrateProductModel.js`, `reconcileReservations.js`), which a human runs by
+> hand and reads on a terminal, where JSON is worse. `pino-http` replaced the
+> request logger and its ANSI escapes, and every request carries an id echoed
+> as `X-Request-Id`, reusing one supplied by a proxy so an id survives hops.
+>
+> **`errorHandler` logs after the status is resolved, not before.** It ran
+> `console.error('Error:', err)` at the top of the handler, so every ordinary
+> 400 and 404 was written at error level with the whole error object attached.
+> An alert on error-level lines would have fired on a customer mistyping an
+> email, which makes the alert useless rather than noisy. The level now follows
+> the status the client receives, and only `err.name` and `err.message` are
+> logged: a Mongoose `ValidationError` echoes the document that failed, which is
+> how a password hash reaches a log.
+>
+> **stdout is the destination and that is deliberate.** The owner asked for
+> Loki, then chose to defer it. Nothing in the logging half depends on that
+> decision: Docker's `json-file` driver already captures stdout and
+> `docker-compose.yml` bounds it, and a shipper pointed at the same stream
+> forwards it later with no change here. A logger that wrote to a file or
+> opened its own connection would have to be undone first.
+>
+> **`forLog()` is still applied** to user-controlled values reaching a log
+> field, even though pino's JSON encoding escapes newlines by itself. It is the
+> shape CodeQL recognises as a log-injection barrier, and dropping it reopens
+> GAP-059's alerts.
+>
+> **The metrics half is no longer blocked, and this entry's Open questions were
+> wrong about why.** Read off the deployment host on 2026-09-10 over SSH,
+> read-only: it already runs Grafana 12.2.0 and Prometheus 3.5.0 with
+> node, cadvisor, process and smartctl exporters, as a compose project at
+> `/opt/vps-monitoring`. Its README documents an onboarding path that needs **no
+> change to the monitoring stack**: attach the container to the external
+> `metrics` network with `metrics.scrape=true` plus `metrics.project`,
+> `metrics.port` and `metrics.name` labels, and Prometheus discovers it through
+> the Docker socket within 30 seconds. Alert rules go to
+> `/opt/monitoring/rules/<project>.yml` and dashboards to
+> `/opt/monitoring/dashboards/<project>/*.json` against datasource uid
+> `prometheus`. So "an operator-supplied monitoring destination" already exists
+> and is documented; what remains is `prom-client`, a `/metrics` endpoint, the
+> compose labels, and a rules and dashboard file.
+>
+> **Loki is not installed on that box.** The request was for logs to go to Loki
+> "since Grafana is already there", but there is no log aggregation on the host
+> at all. Adding it means putting Loki and a shipper into a shared stack that
+> five other projects use, which is a different decision from adopting
+> structured logging and is deferred.
+
 Severity S2 Major | Complexity L | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 0.71 | Agent suitability AGENT-ASSISTED |
 Depends on GAP-023 | Blocks none | Est. agent turns 8-16

@@ -1,4 +1,5 @@
 import multer from 'multer';
+import logger from '../utils/logger.js';
 import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
@@ -28,7 +29,7 @@ try {
   }
 } catch (error) {
   // Ignore on serverless/read-only filesystems
-  console.warn('Could not create uploads directory (read-only filesystem):', error.message);
+  logger.warn({ err: { message: error.message } }, 'could not create uploads directory');
 }
 
 // Configure multer storage (memory storage for processing with sharp)
@@ -122,7 +123,7 @@ const processImage = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error('Image processing error:', error);
+    logger.error({ err: { name: error.name, message: error.message } }, 'image processing failed');
     // Forwarded rather than answered here. Writing the 500 directly bypassed
     // errorHandler, so `error.message` reached the client verbatim in every
     // environment: a sharp or filesystem failure returns the container's
@@ -147,7 +148,7 @@ const deleteImageFile = (filename) => {
     }
     return false;
   } catch (error) {
-    console.error('Error deleting image file:', error);
+    logger.warn({ err: { name: error.name, message: error.message } }, 'could not delete image file');
     return false;
   }
 };

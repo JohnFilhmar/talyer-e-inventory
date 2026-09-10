@@ -1,4 +1,5 @@
 import Product from '../models/Product.js';
+import logger from '../utils/logger.js';
 import Category from '../models/Category.js';
 import MotorcycleModel from '../models/MotorcycleModel.js';
 import asyncHandler from '../utils/asyncHandler.js';
@@ -690,9 +691,9 @@ export const deleteProductImage = asyncHandler(async (req, res) => {
     if (filename) {
       const deleted = deleteImageFile(filename);
       if (deleted) {
-        console.log(`Successfully deleted image file: ${filename}`);
+        logger.info({ filename }, 'deleted image file');
       } else {
-        console.warn(`Could not delete image file: ${filename}`);
+        logger.warn({ filename }, 'could not delete image file');
       }
     }
   }

@@ -288,8 +288,61 @@ reclaim images those still need.
 
 Container logs are capped separately. Every service in `docker-compose.yml` sets the `json-file`
 driver to `max-size: 10m` and `max-file: 3`, so the eight containers across both stacks are bounded
-at roughly 240 MB of logs in total rather than growing without limit. The backend writes two log
-lines per request, so this matters more than it looks.
+at roughly 240 MB of logs in total rather than growing without limit. The backend writes one log
+line per completed request, so this matters more than it looks.
+
+### The backend's log format
+
+The backend logs **one JSON object per line on stdout** and nothing else, through `pino`
+(`backend/src/utils/logger.js`). There is no log file and no network transport: Docker's
+`json-file` driver captures stdout, which is what the cap above applies to, and a shipper
+pointed at the same stream can forward it later without any change to the application.
+
+A completed request looks like this, reformatted here for reading; on disk it is one line:
+
+```json
+{
+  "level": 30,
+  "time": "2026-09-10T02:41:07.913Z",
+  "req": { "id": "7b0f...", "method": "GET", "url": "/api/stock?page=2" },
+  "res": { "statusCode": 200 },
+  "responseTime": 34,
+  "msg": "request completed"
+}
+```
+
+Levels are pino's numbers: 20 debug, 30 info, 40 warn, 50 error. **The level of a request line
+follows the status the client received**, so `warn` means a 4xx and `error` means a 5xx or a
+thrown error. That is what makes "alert on error-level lines" a usable rule: before this, every
+handled 400 was logged at error level.
+
+`LOG_LEVEL` sets the threshold and defaults to `info`. Set it to `debug` to see cache hits and
+misses. It is a plain environment variable on the backend service, not a secret.
+
+**Every line carries a request id**, also returned as the `X-Request-Id` response header. An id
+arriving in that header from nginx is reused rather than replaced, so a request keeps one id
+across hops. To chase a report of a failure, ask for that header's value and filter on it:
+
+```bash
+docker logs talyer-production-backend-1 2>&1 | grep '"id":"<the id>"'
+```
+
+**Credentials are redacted at the logger**, not at each call site: the `Authorization` header,
+the `Cookie` header, `Set-Cookie`, and any `password` or `refreshToken` field are replaced with
+`[redacted]`. Error lines carry `err.name` and `err.message` only, never the error object, since
+a Mongoose `ValidationError` echoes the document that failed.
+
+The four operator scripts (`seedBranches.js`, `migrateCounters.js`, `migrateProductModel.js`,
+`reconcileReservations.js`) still write plain text to the console. They are run by hand and read
+on a terminal, where JSON would be worse.
+
+**Metrics are not implemented yet.** GAP-051's other half adds `prom-client` and a `/metrics`
+endpoint. This box already runs Prometheus and Grafana under `/opt/vps-monitoring`, and its
+README documents an onboarding path that needs no change to the monitoring stack: attach the
+container to the external `metrics` network with `metrics.scrape=true` plus `metrics.project`,
+`metrics.port` and `metrics.name` labels, and Prometheus discovers it through the Docker socket
+within 30 seconds. Alert rules go to `/opt/monitoring/rules/<project>.yml` and dashboards to
+`/opt/monitoring/dashboards/<project>/*.json` against datasource uid `prometheus`.
 
 **Memory limits.** Each service carries a `deploy.resources.limits.memory`, sized from this VPS
 (6 cores, 12 GB RAM, 200 GB disk) and the fact that it is shared with other systems:

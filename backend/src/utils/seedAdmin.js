@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import logger from './logger.js';
 import { USER_ROLES } from '../config/constants.js';
 
 const DEFAULT_ADMIN_NAME = 'Administrator';
@@ -47,15 +48,14 @@ const seedAdminUser = async () => {
   }
 
   if (!EMAIL_REGEX.test(email)) {
-    console.error(
-      'seedAdminUser: SEED_ADMIN_EMAIL is not a valid email address. Skipping admin seed.'
-    );
+    logger.error('seedAdminUser: SEED_ADMIN_EMAIL is not a valid email address, skipping');
     return { status: 'skipped', reason: 'invalid-email' };
   }
 
   if (password.length < MIN_PASSWORD_LENGTH) {
-    console.error(
-      `seedAdminUser: SEED_ADMIN_PASSWORD must be at least ${MIN_PASSWORD_LENGTH} characters. Skipping admin seed.`
+    logger.error(
+      { minimum: MIN_PASSWORD_LENGTH },
+      'seedAdminUser: SEED_ADMIN_PASSWORD is too short, skipping'
     );
     return { status: 'skipped', reason: 'weak-password' };
   }
@@ -90,10 +90,11 @@ const seedAdminUser = async () => {
         return { status: 'skipped', reason: 'admin-exists' };
       }
 
-      console.error(
-        `seedAdminUser: SEED_ADMIN_EMAIL (${email}) is already registered to a non-admin ` +
-          'account, so no admin was created. Free up that email, or set SEED_ADMIN_EMAIL to a ' +
-          'different address and redeploy.'
+      logger.error(
+        { email },
+        'seedAdminUser: SEED_ADMIN_EMAIL is already registered to a non-admin account, so no ' +
+          'admin was created. Free up that email, or set SEED_ADMIN_EMAIL to a different ' +
+          'address and redeploy.'
       );
       return { status: 'skipped', reason: 'email-taken' };
     }
@@ -101,9 +102,9 @@ const seedAdminUser = async () => {
     // Log only the message, never the full error object — a Mongoose
     // ValidationError can echo back the offending field's raw value, and we
     // must never risk the plaintext password reaching the logs.
-    console.error(
-      'seedAdminUser: unexpected error while seeding admin user:',
-      error instanceof Error ? error.message : error
+    logger.error(
+      { err: { message: error instanceof Error ? error.message : String(error) } },
+      'seedAdminUser: unexpected error while seeding admin user'
     );
     return { status: 'skipped', reason: 'error' };
   }

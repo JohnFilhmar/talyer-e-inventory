@@ -1,4 +1,5 @@
 import redis from 'redis';
+import logger from '../utils/logger.js';
 
 let redisClient = null;
 
@@ -22,8 +23,9 @@ const connectRedis = async () => {
       connectTimeout: CONNECT_TIMEOUT_MS,
       reconnectStrategy: (retries) => {
         if (retries >= MAX_RECONNECT_ATTEMPTS) {
-          console.error(
-            `Redis: giving up after ${retries} failed connection attempts; continuing without cache.`
+          logger.error(
+            { retries },
+            'redis: giving up on reconnect, continuing without cache'
           );
           return new Error('Redis reconnect attempts exhausted');
         }
@@ -35,19 +37,19 @@ const connectRedis = async () => {
   // Handle Redis errors. A listener must be attached before connect() is
   // called, or an unhandled 'error' event would crash the process.
   client.on('error', (err) => {
-    console.error('Redis Client Error:', err);
+    logger.error({ err: { name: err.name, message: err.message } }, 'redis client error');
   });
 
   client.on('connect', () => {
-    console.log('Redis connecting...');
+    logger.info('redis connecting');
   });
 
   client.on('ready', () => {
-    console.log('Redis client ready');
+    logger.info('redis ready');
   });
 
   client.on('end', () => {
-    console.log('Redis client disconnected');
+    logger.warn('redis disconnected');
     // Only clear the shared reference if this is still the active client —
     // guards against a superseded client's late 'end' event clobbering a
     // newer connection's reference.
@@ -59,11 +61,11 @@ const connectRedis = async () => {
   try {
     await client.connect();
     redisClient = client;
-    console.log(`Redis Connected: ${process.env.REDIS_URL || 'redis://localhost:6379'}`);
+    logger.info({ url: process.env.REDIS_URL || 'redis://localhost:6379' }, 'redis connected');
     return redisClient;
   } catch (error) {
-    console.error(`Error connecting to Redis: ${error.message}`);
-    console.log('Continuing without Redis (cache disabled).');
+    logger.error({ err: { name: error.name, message: error.message } }, 'redis connection failed');
+    logger.warn('continuing without redis, cache disabled');
     // A failed connect() must leave the shared reference falsy — CacheUtil's
     // `if (!client) return null/false` guards are dead otherwise, and every
     // cache call would instead fail per-operation against a broken client.
@@ -88,9 +90,9 @@ const disconnectRedis = async () => {
   if (!redisClient) return;
   try {
     await redisClient.quit();
-    console.log('Redis connection closed');
+    logger.info('redis connection closed');
   } catch (error) {
-    console.error('Error closing Redis connection:', error.message);
+    logger.error({ err: { message: error.message } }, 'redis close failed');
   }
 };
 

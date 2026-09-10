@@ -213,6 +213,51 @@ controller on the document id. **Any mutation must invalidate**
 with `CacheUtil.delPattern('cache:<domain>:*')` — and cross-domain too where relevant
 (sales/service completion invalidates both `cache:sales:*` and `cache:stock:*`).
 
+### Logging
+
+[utils/logger.js](backend/src/utils/logger.js) exports a `pino` instance and it is the only
+logger. `backend/src` has no `console.*` calls left except in the four operator scripts
+(`seedBranches.js`, `migrateCounters.js`, `migrateProductModel.js`,
+`reconcileReservations.js`), which a human runs by hand and reads on a terminal; JSON would
+make those worse, not better.
+
+**One JSON object per line on stdout, and nothing else.** Docker's `json-file` driver already
+captures it and [docker-compose.yml](docker-compose.yml) bounds it at 10 MB across three files,
+so this needs no new infrastructure. A shipper pointed at the same stream can forward it later
+with no change here. Do not add a file destination or a network transport to the logger: that
+would have to be undone before anything can collect it.
+
+`LOG_LEVEL` sets the level and defaults to `info`. **Under `NODE_ENV=test` the logger is
+`silent`**, because 29 suites making thousands of requests otherwise bury the failure you are
+looking for in JSON.
+
+Four things are load-bearing:
+
+- **`redact` covers `req.headers.authorization` and `req.headers.cookie`.** `pino-http` logs the
+  request, so without it every authenticated request writes a usable bearer token to the log,
+  which is worse than the console line it replaced. `set-cookie`, `password` and `refreshToken`
+  are redacted for the same reason.
+- **Every request carries an id**, echoed as the `X-Request-Id` response header. An id supplied
+  by a proxy is honoured so one request keeps a single id across hops. That id is what ties an
+  error line to the request that produced it, which is why `errorHandler` logs `req.id`.
+- **`errorHandler` logs after the status is resolved, not before.** It used to run
+  `console.error('Error:', err)` at the top, so every ordinary 400 and 404 was written at error
+  level with the whole error object attached: an alert on error-level lines would have fired on
+  a customer mistyping an email. The level now follows the status the client receives, `warn`
+  for 4xx and `error` for 5xx.
+- **Only `name` and `message` reach the log, never the error object.** A Mongoose
+  `ValidationError` echoes the offending document, which is how a password hash or a customer's
+  details end up in a log line. The stack is attached for 5xx only.
+
+`forLog()` from [utils/logSafe.js](backend/src/utils/logSafe.js) is still applied to
+user-controlled values that reach a log field, even though pino's JSON encoding escapes
+newlines on its own. It is cheap, and it is the shape CodeQL recognises as a log-injection
+barrier (GAP-059); removing it reopens those alerts.
+
+**Metrics are not done.** GAP-051's other half is still open: `prom-client` and a `/metrics`
+endpoint. The deployment host already runs Prometheus and Grafana with a documented onboarding
+convention, so that half needs no new infrastructure either. See GAP-051.
+
 ### Domain model — branch-scoped inventory
 
 This is the core design decision. `Product` holds catalog data only. `Stock` is the
@@ -653,8 +698,8 @@ package is `"type": "module"`.
 
 Variables the backend actually reads: `NODE_ENV`, `PORT`, `MONGODB_URI`, `JWT_SECRET`,
 `JWT_EXPIRE`, `JWT_REFRESH_SECRET`, `JWT_REFRESH_EXPIRE`, `REDIS_URL`, `CLIENT_URL`,
-`CORS_ALLOWED_ORIGINS`, `BACKEND_URL`, `TRUST_PROXY`, `REPORT_TIMEZONE`, `SEED_ADMIN_EMAIL`
-and `SEED_ADMIN_PASSWORD`. **`REPORT_TIMEZONE` was missing from this list while the list itself
+`CORS_ALLOWED_ORIGINS`, `BACKEND_URL`, `TRUST_PROXY`, `REPORT_TIMEZONE`, `SEED_ADMIN_EMAIL`,
+`SEED_ADMIN_PASSWORD` and `LOG_LEVEL`. **`REPORT_TIMEZONE` was missing from this list while the list itself
 claimed to be exhaustive and grep-verified** (GAP-052); it is read in
 [salesController.js](backend/src/controllers/salesController.js) and
 [utils/reportingPeriod.js](backend/src/utils/reportingPeriod.js) and defaults to `Asia/Manila`.
