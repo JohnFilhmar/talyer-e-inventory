@@ -614,6 +614,15 @@ ported to the mount-the-router + `dbHandler` pattern above, minting tokens direc
 `testHelpers` instead of logging in over HTTP, so it needs no carve-out and CI runs a plain
 `npm test` — see the `backend-test` job in [ci.yml](.github/workflows/ci.yml).
 
+**Nothing in the Jest suite imports `server.js`, so nothing in it is covered.** That is the
+deliberate consequence of the pattern above, and it has a cost worth knowing: a green `npm test`
+says nothing about the global middleware chain, the CORS block, the request logger, or the route
+mounting. The only thing in the pipeline that runs `server.js` is the **backend smoke test inside
+`docker-build`**, which boots the image and polls `/health`. GAP-059 shipped a `server.js` that
+threw `ReferenceError` on every request, and 825 green tests plus `node --check` plus a clean
+typecheck all missed it; the smoke test caught it. When you touch `server.js`, that job is the
+check that matters.
+
 `tests/setup/dbHandler.js` runs `mongodb-memory-server` (`connect` in `beforeAll`,
 `clearDatabase` in `afterEach`, `closeDatabase` in `afterAll`).
 `tests/setup/testEnv.js` is a `setupFiles` entry that injects the JWT secrets — no `.env` is read
@@ -694,16 +703,33 @@ the Security tab.
 so it will point at files the PR never touched. Routing user-supplied text into an existing helper
 is enough to light up that helper.
 
-- **`utils/cache.js` — log injection + externally-controlled format string.** Cache keys embed
-  caller text (a product search term, a motorcycle filter value), and every `CacheUtil` method logs
-  its key when Redis errors. `forLog()` sanitises at the sink, so every current and future caller
-  is covered. Two details are load-bearing and easy to undo:
-  - The key is passed to `console.error` as a **`%s` argument against a literal format string**,
-    never interpolated into the template. Interpolating it makes the message itself externally
-    controlled, so a key containing `%s` or `%d` reshuffles everything after it.
+- **Log injection + externally-controlled format string.** `forLog()` lives in
+  [utils/logSafe.js](backend/src/utils/logSafe.js) and sanitises at the sink. It started private
+  inside `utils/cache.js`, written for cache keys: those embed caller text (a product search term,
+  a motorcycle filter value) and every `CacheUtil` method logs its key when Redis errors. That was
+  never the whole set. `server.js`'s request logger writes `req.url`, and `middleware/cache.js`
+  writes a key built from `req.originalUrl`, so a private copy in one module left the other two
+  reported and unfixed (GAP-059). Keep it shared: the next caller that logs request text should
+  import it rather than grow a third copy. Two details are load-bearing and easy to undo:
+  - The value is passed to `console.error`/`console.log` as a **`%s` argument against a literal
+    format string**, never interpolated into the template. Interpolating it makes the message
+    itself externally controlled, so a value containing `%s` or `%d` reshuffles everything after
+    it.
   - CR and LF are removed **one constant pattern at a time, replaced with `''`**. A combined
     `[\r\n]` class, or replacing with `' '`, is equally safe at runtime but is not the shape
     CodeQL recognises as a log-injection barrier, and the alerts stay open.
+
+- **A request value used as a property *name* is its own alert.** `js/remote-property-injection`
+  fired on `sort[sortBy] = ...` in `productController.js`, where `sortBy` came from `req.query`.
+  The route already carried an allow-list, which is exactly the arrangement that does not count:
+  narrow with `asEnum` at the sink, against a list the controller owns and the route imports, the
+  way `STOCK_SORT_FIELDS` and now `PRODUCT_SORT_FIELDS` are arranged.
+
+- **`js/user-controlled-bypass` on `middleware/auth.js` is a standing false positive.** It flags
+  `req.headers.authorization.startsWith('Bearer')` as a user-controlled guard. That branch only
+  decides whether to attempt verification; what guards the sensitive action is `jwt.verify` one
+  line later, and skipping the branch yields a 401. There is no rewrite that satisfies the query
+  without pretending the Authorization header is not user-supplied. See GAP-059.
 
 - **Missing CSRF middleware — fixed, not dismissed.** The alert fires on handlers that are
   preceded by cookie middleware, touch `req.user`/`req.cookies`/`req.session`, and answer an

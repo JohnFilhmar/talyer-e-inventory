@@ -15,6 +15,7 @@ import { CORS } from './config/constants.js';
 import { resolveTrustProxy } from './utils/trustProxy.js';
 import { seedAdminUser } from './utils/seedAdmin.js';
 import { UPLOADS_ROOT } from './utils/uploadsPath.js';
+import { forLog } from './utils/logSafe.js';
 
 // Initialize express app
 const app = express();
@@ -60,7 +61,7 @@ app.use((req, res, next) => {
   const start = Date.now();
   
   // Log request
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  console.log('[%s] %s %s', new Date().toISOString(), forLog(req.method), forLog(req.url));
   
   // Capture response
   res.on('finish', () => {
@@ -71,7 +72,14 @@ app.use((req, res, next) => {
     const resetColor = '\x1b[0m';
     
     console.log(
-      `[${new Date().toISOString()}] ${req.method} ${req.url} ${statusColor}${res.statusCode}${resetColor} - ${duration}ms`
+      '[%s] %s %s %s%s%s - %sms',
+      new Date().toISOString(),
+      forLog(req.method),
+      forLog(req.url),
+      statusColor,
+      res.statusCode,
+      resetColor,
+      duration
     );
   });
   

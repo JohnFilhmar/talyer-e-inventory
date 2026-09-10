@@ -89,7 +89,10 @@ export const useAuth = () => {
         rejected: rows.filter((entry) => entry.status === 'rejected').length,
       };
     } catch {
-      queued = { unsent: 0, rejected: 0 };
+      // Keep the zeroed default. Signing out is the security-relevant
+      // action and has to win, so a failure to read the queue is not an
+      // error here. Reassigning the same value it already holds is what
+      // made the initialiser read as dead code.
     }
 
     const total = queued.unsent + queued.rejected;

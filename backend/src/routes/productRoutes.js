@@ -11,7 +11,8 @@ import {
   restoreProduct,
   addProductImage,
   addProductImageUrl,
-  deleteProductImage
+  deleteProductImage,
+  PRODUCT_SORT_FIELDS
 } from '../controllers/productController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import validate from '../middleware/validate.js';
@@ -287,11 +288,6 @@ const searchValidation = [
     .trim()
 ];
 
-// The sort fields GET /api/products accepts. `sortBy` is used as an object key
-// (`sort[sortBy] = ...` in getProducts), so an allow-list is what keeps an
-// arbitrary string out of that position. Matches ProductListParams in
-// frontend/src/types/product.ts.
-const PRODUCT_SORT_FIELDS = ['name', 'sellingPrice', 'costPrice', 'createdAt', 'updatedAt'];
 
 // Query validation for GET /api/products (GAP-015d): no chain existed, so
 // `category`, `brand` and the price bounds reached a Mongo filter
