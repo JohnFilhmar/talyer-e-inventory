@@ -336,13 +336,52 @@ The four operator scripts (`seedBranches.js`, `migrateCounters.js`, `migrateProd
 `reconcileReservations.js`) still write plain text to the console. They are run by hand and read
 on a terminal, where JSON would be worse.
 
-**Metrics are not implemented yet.** GAP-051's other half adds `prom-client` and a `/metrics`
-endpoint. This box already runs Prometheus and Grafana under `/opt/vps-monitoring`, and its
-README documents an onboarding path that needs no change to the monitoring stack: attach the
-container to the external `metrics` network with `metrics.scrape=true` plus `metrics.project`,
-`metrics.port` and `metrics.name` labels, and Prometheus discovers it through the Docker socket
-within 30 seconds. Alert rules go to `/opt/monitoring/rules/<project>.yml` and dashboards to
-`/opt/monitoring/dashboards/<project>/*.json` against datasource uid `prometheus`.
+### Metrics and alerting
+
+The backend serves Prometheus metrics on **its own port**, `METRICS_PORT`, default 9464,
+published to nothing. `/metrics` is deliberately not on port 5000: nginx proxies that port, so
+anything mounted there is one `location` block away from being public, and metrics enumerate
+every route with its request and error rates.
+
+Both overlays attach the backend to the shared external `metrics` network and label it:
+
+```yaml
+labels:
+  metrics.scrape: "true"
+  metrics.project: "talyer-production"   # or talyer-staging
+  metrics.port: "9464"
+  metrics.name: "backend"
+```
+
+Prometheus at `/opt/vps-monitoring` discovers the container through the Docker socket and
+starts scraping within its 30 second refresh. **There is no scrape config to edit**, and
+stopping the container removes the target again.
+
+The `metrics` network is created once per box. The deploy workflow does it if missing, before
+`compose up`, because both overlays declare the network `external` and Compose refuses to
+start without it.
+
+Five alert rules ship in `monitoring/rules/talyer.yml`: backend down, 5xx rate above 5%,
+p95 latency above 2s, event loop blocked, and repeated restarts. The deploy installs them to
+`/opt/monitoring/rules/talyer.yml` and posts to Prometheus's reload API. That copy runs
+through a throwaway container with a bind mount, because the runner user has no sudo and
+`/opt/monitoring/rules` is root-owned; the runner is in the `docker` group, which is what
+makes the bind mount write as root. If you would rather it be a plain `cp`, `chown` that
+directory to `runner` and simplify the step.
+
+Verify a deploy landed:
+
+```bash
+# The target should be listed and UP.
+curl -s http://localhost:9091/api/v1/targets | grep -o 'talyer-production[^"]*' | head
+
+# The rules should be loaded.
+curl -s http://localhost:9091/api/v1/rules | grep -o 'TalyerBackend[A-Za-z]*'
+```
+
+**Dashboards are not shipped yet.** Grafana picks up `/opt/monitoring/dashboards/<project>/*.json`
+within its 30 second provisioning poll, and every panel must reference the datasource by uid
+`prometheus`. The metrics above are enough to build one against; nothing is blocking it.
 
 **Memory limits.** Each service carries a `deploy.resources.limits.memory`, sized from this VPS
 (6 cores, 12 GB RAM, 200 GB disk) and the fact that it is shared with other systems:
