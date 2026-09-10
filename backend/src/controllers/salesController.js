@@ -1,4 +1,5 @@
 import SalesOrder from '../models/SalesOrder.js';
+import logger from '../utils/logger.js';
 import Stock from '../models/Stock.js';
 import Product from '../models/Product.js';
 import asyncHandler from '../utils/asyncHandler.js';
@@ -359,10 +360,14 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
         // A failed release is worse than the original error, because it is the
         // leak this block exists to prevent. Log it with enough to reconcile by
         // hand and keep releasing the rest.
-        console.error(
-          'Failed to release reserved stock after order-creation failure:',
-          { stockId: String(stock._id), quantity },
-          releaseError
+        logger.error(
+          {
+            reqId: req.id,
+            stockId: String(stock._id),
+            quantity,
+            err: { name: releaseError.name, message: releaseError.message },
+          },
+          'failed to release reserved stock after order-creation failure'
         );
       }
     }

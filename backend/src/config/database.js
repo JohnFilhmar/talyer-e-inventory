@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import logger from '../utils/logger.js';
 
 const connectDB = async () => {
   try {
@@ -7,15 +8,15 @@ const connectDB = async () => {
       // Most options are now deprecated and handled automatically
     });
 
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    logger.info({ host: conn.connection.host }, 'mongo connected');
 
     // Handle connection events
     mongoose.connection.on('error', (err) => {
-      console.error(`MongoDB connection error: ${err}`);
+      logger.error({ err: { name: err.name, message: err.message } }, 'mongo connection error');
     });
 
     mongoose.connection.on('disconnected', () => {
-      console.log('MongoDB disconnected');
+      logger.warn('mongo disconnected');
     });
 
     // Shutdown is owned by server.js, which closes the HTTP server first so
@@ -25,7 +26,7 @@ const connectDB = async () => {
 
     return conn;
   } catch (error) {
-    console.error(`Error connecting to MongoDB: ${error.message}`);
+    logger.error({ err: { name: error.name, message: error.message } }, 'mongo connection failed');
     process.exit(1);
   }
 };

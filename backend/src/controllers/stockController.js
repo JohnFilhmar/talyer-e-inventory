@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import logger from '../utils/logger.js';
 import Stock from '../models/Stock.js';
 import Product from '../models/Product.js';
 import Branch from '../models/Branch.js';
@@ -946,10 +947,14 @@ export const createStockTransfer = asyncHandler(async (req, res) => {
     try {
       await sourceStock.releaseReservedStock(quantity);
     } catch (releaseError) {
-      console.error(
-        'Failed to release reserved stock after transfer-creation failure:',
-        { stockId: String(sourceStock._id), quantity },
-        releaseError
+      logger.error(
+        {
+          reqId: req.id,
+          stockId: String(sourceStock._id),
+          quantity,
+          err: { name: releaseError.name, message: releaseError.message },
+        },
+        'failed to release reserved stock after transfer-creation failure'
       );
     }
     throw error;

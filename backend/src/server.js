@@ -1,5 +1,7 @@
 import 'dotenv/config';
+import { randomUUID } from 'node:crypto';
 import express from 'express';
+import pinoHttp from 'pino-http';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import connectDB from './config/database.js';
@@ -15,7 +17,7 @@ import { CORS } from './config/constants.js';
 import { resolveTrustProxy } from './utils/trustProxy.js';
 import { seedAdminUser } from './utils/seedAdmin.js';
 import { UPLOADS_ROOT } from './utils/uploadsPath.js';
-import { forLog } from './utils/logSafe.js';
+import logger from './utils/logger.js';
 
 // Initialize express app
 const app = express();
@@ -56,35 +58,44 @@ app.use('/api/auth', cookieParser());
 // always the written one regardless of where the process was launched from.
 app.use('/uploads', express.static(UPLOADS_ROOT));
 
-// Request logger middleware
-app.use((req, res, next) => {
-  const start = Date.now();
-  
-  // Log request
-  console.log('[%s] %s %s', new Date().toISOString(), forLog(req.method), forLog(req.url));
-  
-  // Capture response
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    const statusColor = res.statusCode >= 500 ? '\x1b[31m' : 
-                       res.statusCode >= 400 ? '\x1b[33m' : 
-                       res.statusCode >= 300 ? '\x1b[36m' : '\x1b[32m';
-    const resetColor = '\x1b[0m';
-    
-    console.log(
-      '[%s] %s %s %s%s%s - %sms',
-      new Date().toISOString(),
-      forLog(req.method),
-      forLog(req.url),
-      statusColor,
-      res.statusCode,
-      resetColor,
-      duration
-    );
-  });
-  
-  next();
-});
+// Request logging.
+//
+// One JSON object per request on stdout, replacing a hand-rolled console line
+// that embedded ANSI colour escapes mid-message. Those made the line unreadable
+// in any aggregator and unparseable by anything, and the fields were positional
+// rather than named.
+//
+// Every log line carries a request id, and so does the response, as
+// `X-Request-Id`. An id supplied by a proxy in front of the app is honoured so
+// one request keeps a single id across hops; otherwise one is generated. That
+// id is what lets an error in the log be tied to the request that produced it,
+// which is the whole reason `errorHandler` logs `req.id`.
+//
+// The serialisers are deliberately narrow. `pino-http` will happily log the
+// whole request and response, including every header; naming the four fields
+// worth keeping bounds the line and keeps credentials out by construction, on
+// top of the redaction configured in utils/logger.js.
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req, res) => {
+      const existing = req.headers['x-request-id'];
+      const id = typeof existing === 'string' && existing.length <= 200 ? existing : randomUUID();
+      res.setHeader('X-Request-Id', id);
+      return id;
+    },
+    // 5xx is ours to fix, 4xx is the caller's, everything else is routine.
+    customLogLevel: (req, res, err) => {
+      if (err || res.statusCode >= 500) return 'error';
+      if (res.statusCode >= 400) return 'warn';
+      return 'info';
+    },
+    serializers: {
+      req: (req) => ({ id: req.id, method: req.method, url: req.url }),
+      res: (res) => ({ statusCode: res.statusCode }),
+    },
+  })
+);
 
 // CORS middleware using constants configuration
 app.use((req, res, next) => {
@@ -218,9 +229,9 @@ const startServer = async () => {
     // logs before traffic can arrive.
     const seedResult = await seedAdminUser();
     if (seedResult.status === 'created') {
-      console.log('Seeded initial admin user from SEED_ADMIN_EMAIL.');
+      logger.info('seeded initial admin user from SEED_ADMIN_EMAIL');
     } else {
-      console.log(`Skipped admin seeding (reason: ${seedResult.reason}).`);
+      logger.info({ reason: seedResult.reason }, 'skipped admin seeding');
     }
 
     // Connect to Redis (optional). This is intentionally NOT awaited:
@@ -232,32 +243,32 @@ const startServer = async () => {
     connectRedis()
       .then((client) => {
         if (!client) {
-          console.log('Starting without Redis cache (cache disabled).');
+          logger.warn('starting without redis cache');
         }
       })
       .catch((error) => {
         // connectRedis() already catches its own connection errors and
         // resolves to null, so this only guards against a truly unexpected
         // failure (e.g. a bug in connectRedis itself).
-        console.error('Unexpected error initializing Redis:', error);
+        logger.error({ err: { name: error.name, message: error.message } }, 'redis init failed');
       });
 
     // Start server
     const server = app.listen(PORT, () => {
-      console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+      logger.info({ env: process.env.NODE_ENV, port: PORT }, 'server listening');
     });
 
     // Without this an EADDRINUSE surfaces as an unhandled 'error' event rather
     // than reaching the failure path below, so the process dies with no useful
     // log line.
     server.on('error', (error) => {
-      console.error('HTTP server error:', error);
+      logger.error({ err: { name: error.name, message: error.message } }, 'http server error');
       process.exit(1);
     });
 
     registerShutdownHandlers(server);
   } catch (error) {
-    console.error('Failed to start server:', error);
+    logger.error({ err: { name: error.name, message: error.message } }, 'failed to start server');
     process.exit(1);
   }
 };
@@ -286,26 +297,26 @@ const registerShutdownHandlers = (server) => {
     if (shuttingDown) return;
     shuttingDown = true;
 
-    console.log(`${signal} received, shutting down.`);
+    logger.info({ signal }, 'shutting down');
 
     const forceExit = setTimeout(() => {
-      console.error(`Did not drain within ${SHUTDOWN_GRACE_MS}ms, exiting anyway.`);
+      logger.error({ graceMs: SHUTDOWN_GRACE_MS }, 'did not drain in time, exiting anyway');
       process.exit(1);
     }, SHUTDOWN_GRACE_MS);
     forceExit.unref();
 
     try {
       await new Promise((resolve) => server.close(resolve));
-      console.log('HTTP server closed, no longer accepting connections.');
+      logger.info('http server closed');
 
       await disconnectRedis();
       await mongoose.connection.close();
-      console.log('Database connection closed.');
+      logger.info('database connection closed');
 
       clearTimeout(forceExit);
       process.exit(0);
     } catch (error) {
-      console.error('Error during shutdown:', error);
+      logger.error({ err: { name: error.name, message: error.message } }, 'error during shutdown');
       process.exit(1);
     }
   };

@@ -10,6 +10,8 @@
  * The returned values are real UTC `Date` instants suitable for a Mongo
  * `$gte`; only the *boundary* is computed in the target timezone.
  */
+import logger from './logger.js';
+
 
 /**
  * Reads the calendar parts of `instant` as they appear in `timeZone`.
@@ -73,7 +75,7 @@ export const getReportingPeriodBounds = (timeZone, now = new Date()) => {
     // failing, which is not obviously a configuration problem.
     new Intl.DateTimeFormat('en-CA', { timeZone: zone });
   } catch {
-    console.warn(`Unknown REPORT_TIMEZONE "${timeZone}"; falling back to UTC.`);
+    logger.warn({ timeZone }, 'unknown REPORT_TIMEZONE, falling back to UTC');
     zone = 'UTC';
   }
 

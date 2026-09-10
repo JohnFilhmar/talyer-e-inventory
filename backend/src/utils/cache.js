@@ -1,4 +1,5 @@
 import { getRedisClient } from '../config/redis.js';
+import logger from './logger.js';
 import { CACHE_TTL } from '../config/constants.js';
 import { forLog } from './logSafe.js';
 
@@ -16,7 +17,7 @@ class CacheUtil {
       const data = await client.get(key);
       return data ? JSON.parse(data) : null;
     } catch (error) {
-      console.error('Cache get error for key %s:', forLog(key), error);
+      logger.warn({ key: forLog(key), err: { message: error.message } }, 'cache get failed');
       return null;
     }
   }
@@ -36,7 +37,7 @@ class CacheUtil {
       await client.setEx(key, ttl, JSON.stringify(value));
       return true;
     } catch (error) {
-      console.error('Cache set error for key %s:', forLog(key), error);
+      logger.warn({ key: forLog(key), err: { message: error.message } }, 'cache set failed');
       return false;
     }
   }
@@ -54,7 +55,7 @@ class CacheUtil {
       await client.del(key);
       return true;
     } catch (error) {
-      console.error('Cache delete error for key %s:', forLog(key), error);
+      logger.warn({ key: forLog(key), err: { message: error.message } }, 'cache delete failed');
       return false;
     }
   }
@@ -102,7 +103,7 @@ class CacheUtil {
 
       return true;
     } catch (error) {
-      console.error('Cache delete pattern error for %s:', forLog(pattern), error);
+      logger.warn({ pattern: forLog(pattern), err: { message: error.message } }, 'cache delete pattern failed');
       return false;
     }
   }
@@ -120,7 +121,7 @@ class CacheUtil {
       const exists = await client.exists(key);
       return exists === 1;
     } catch (error) {
-      console.error('Cache exists error for key %s:', forLog(key), error);
+      logger.warn({ key: forLog(key), err: { message: error.message } }, 'cache exists failed');
       return false;
     }
   }

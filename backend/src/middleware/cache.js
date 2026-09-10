@@ -1,4 +1,5 @@
 import CacheUtil from '../utils/cache.js';
+import logger from '../utils/logger.js';
 import { forLog } from '../utils/logSafe.js';
 import { CACHE_TTL } from '../config/constants.js';
 
@@ -38,11 +39,11 @@ const cacheMiddleware = (keyPrefix, ttl = CACHE_TTL.MEDIUM) => {
       const cachedData = await CacheUtil.get(cacheKey);
 
       if (cachedData) {
-        console.log('Cache HIT: %s', forLog(cacheKey));
+        logger.debug({ key: forLog(cacheKey) }, 'cache hit');
         return res.json(cachedData);
       }
 
-      console.log('Cache MISS: %s', forLog(cacheKey));
+      logger.debug({ key: forLog(cacheKey) }, 'cache miss');
 
       // Store original res.json
       const originalJson = res.json.bind(res);
@@ -52,7 +53,7 @@ const cacheMiddleware = (keyPrefix, ttl = CACHE_TTL.MEDIUM) => {
         // Only cache successful responses
         if (res.statusCode >= 200 && res.statusCode < 300) {
           CacheUtil.set(cacheKey, data, ttl).catch(err => {
-            console.error('Cache set error:', err);
+            logger.warn({ err: { name: err.name, message: err.message } }, 'cache set failed');
           });
         }
         return originalJson(data);
@@ -60,7 +61,7 @@ const cacheMiddleware = (keyPrefix, ttl = CACHE_TTL.MEDIUM) => {
 
       next();
     } catch (error) {
-      console.error('Cache middleware error:', error);
+      logger.warn({ err: { name: error.name, message: error.message } }, 'cache middleware failed');
       next();
     }
   };
