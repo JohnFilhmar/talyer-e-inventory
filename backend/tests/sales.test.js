@@ -1849,3 +1849,98 @@ describe('money rounding', () => {
     expect(transaction.amount).toBe(created.body.data.total);
   });
 });
+
+describe('VAT base and discount ceilings (GAP-029)', () => {
+  const sale = (admin, branch, product, body) =>
+    request(app)
+      .post('/api/sales')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .send({
+        branch: branch._id.toString(),
+        customer: { name: 'Walk-in', phone: '09171234567' },
+        paymentMethod: 'cash',
+        ...body,
+        items: body.items.map((item) => ({ product: product._id.toString(), ...item })),
+      });
+
+  it('charges VAT on the amount after the order discount', async () => {
+    const admin = await createTestAdmin();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(await createTestCategory());
+    await createTestStock(product, branch, { quantity: 10, sellingPrice: 1000 });
+
+    // The worked example the owner confirmed: PHP 1,000 less PHP 100 at 12% is
+    // PHP 108 of VAT and a PHP 1,008 total, not PHP 120 and PHP 1,020.
+    const res = await sale(admin, branch, product, {
+      items: [{ quantity: 1 }],
+      taxRate: 12,
+      discount: 100,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.taxBasis).toBe('net');
+    expect(res.body.data.subtotal).toBe(1000);
+    expect(res.body.data.tax.amount).toBe(108);
+    expect(res.body.data.total).toBe(1008);
+  });
+
+  it('rejects an order discount above the subtotal and reserves nothing', async () => {
+    const admin = await createTestAdmin();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(await createTestCategory());
+    const stock = await createTestStock(product, branch, { quantity: 10, sellingPrice: 100 });
+
+    const res = await sale(admin, branch, product, {
+      items: [{ quantity: 1 }],
+      discount: 100.01,
+    });
+
+    expect(res.status).toBe(400);
+    expect((await Stock.findById(stock._id)).reservedQuantity).toBe(0);
+    expect(await SalesOrder.countDocuments()).toBe(0);
+  });
+
+  it('rejects a line discount above its line value and reserves nothing', async () => {
+    const admin = await createTestAdmin();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(await createTestCategory());
+    const stock = await createTestStock(product, branch, { quantity: 10, sellingPrice: 100 });
+
+    const res = await sale(admin, branch, product, {
+      items: [{ quantity: 2, discount: 200.01 }],
+    });
+
+    expect(res.status).toBe(400);
+    expect((await Stock.findById(stock._id)).reservedQuantity).toBe(0);
+  });
+
+  it('leaves an order written before the change on the gross basis when re-saved', async () => {
+    const admin = await createTestAdmin();
+    const branch = await createTestBranch();
+    const product = await createTestProduct(await createTestCategory());
+    const order = await createTestSalesOrder(branch, product, admin.user, {
+      items: [{
+        product: product._id, sku: product.sku, name: product.name,
+        quantity: 1, unitPrice: 1000, discount: 0, total: 1000,
+      }],
+      taxRate: 12,
+      discount: 100,
+    });
+
+    // Simulate a pre-GAP-029 document: no taxBasis, gross totals on disk.
+    await SalesOrder.collection.updateOne(
+      { _id: order._id },
+      { $unset: { taxBasis: '' }, $set: { 'tax.amount': 120, total: 1020 } }
+    );
+
+    const old = await SalesOrder.findById(order._id);
+    expect(old.taxBasis).toBeUndefined();
+    old.notes = 'status touched later';
+    await old.save();
+
+    const after = await SalesOrder.findById(order._id).lean();
+    expect(after.taxBasis).toBeUndefined();
+    expect(after.tax.amount).toBe(120);
+    expect(after.total).toBe(1020);
+  });
+});

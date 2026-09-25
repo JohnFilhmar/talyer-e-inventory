@@ -11,6 +11,7 @@ import { getReportingPeriodBounds } from '../utils/reportingPeriod.js';
 import { canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
 import { asDate, asObjectId } from '../utils/narrowing.js';
+import { roundCurrency, sumCurrency } from '../utils/currency.js';
 // The fields a list may be ordered by. `sortBy` is used as an object key, so an
 // allow-list is what keeps an arbitrary string out of that position; anything
 // outside it is rejected by the route rather than silently ignored.
@@ -287,6 +288,32 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
     });
 
     resolvedStocks.push({ stock, quantity: item.quantity });
+  }
+
+  // Discount ceilings, checked here because the price comes from the branch's
+  // Stock and is not known to the route. Before any reservation, so a
+  // rejection has nothing to put back. A line discount larger than its line
+  // made the line negative and quietly discounted the rest of the order; an
+  // order discount larger than the subtotal produced a negative total.
+  for (const item of preparedItems) {
+    const lineValue = roundCurrency(item.quantity * item.unitPrice);
+    if (roundCurrency(item.discount) > lineValue) {
+      return ApiResponse.error(
+        res,
+        400,
+        `Discount on ${item.name} cannot exceed the line value of ${lineValue}`
+      );
+    }
+  }
+  const subtotalBeforeOrderDiscount = sumCurrency(
+    preparedItems.map((item) => item.quantity * item.unitPrice - item.discount)
+  );
+  if (roundCurrency(Number(discount) || 0) > subtotalBeforeOrderDiscount) {
+    return ApiResponse.error(
+      res,
+      400,
+      `Order discount cannot exceed the subtotal of ${subtotalBeforeOrderDiscount}`
+    );
   }
 
   // Two items in one order can name the same product, and the per-item

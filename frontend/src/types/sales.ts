@@ -405,7 +405,9 @@ export function calculateItemTotal(quantity: number, unitPrice: number, discount
 }
 
 /**
- * Calculate order totals
+ * Calculate order totals the way the server does for new orders: VAT is
+ * computed on the subtotal after the order discount (GAP-029), so the screen
+ * shows the total the receipt will carry.
  */
 export function calculateOrderTotals(
   items: Array<{ quantity: number; unitPrice: number; discount?: number }>,
@@ -416,7 +418,7 @@ export function calculateOrderTotals(
     (sum, item) => sum + calculateItemTotal(item.quantity, item.unitPrice, item.discount ?? 0),
     0
   );
-  const taxAmount = subtotal * (taxRate / 100);
-  const total = subtotal + taxAmount - orderDiscount;
-  return { subtotal, taxAmount, total: Math.max(0, total) };
+  const taxBase = Math.max(subtotal - orderDiscount, 0);
+  const taxAmount = taxBase * (taxRate / 100);
+  return { subtotal, taxAmount, total: taxBase + taxAmount };
 }

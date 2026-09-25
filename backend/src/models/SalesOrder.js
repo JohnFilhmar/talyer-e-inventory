@@ -102,6 +102,20 @@ const salesOrderSchema = new mongoose.Schema(
       default: 0,
       min: [0, 'Discount cannot be negative']
     },
+    // Which amount VAT was computed on. `net` means after the order-level
+    // discount, which is how a discount shown on the invoice is treated.
+    // Orders written before GAP-029 have no value and are read as `gross`
+    // (VAT on the subtotal before the order discount), so re-saving one to
+    // change its status cannot rewrite a total a customer already holds.
+    //
+    // Deliberately no schema default: Mongoose applies defaults to
+    // documents loaded without the path, so a default of `net` would
+    // silently flip every old order the moment it was read. It is set on
+    // insert in the totals hook instead.
+    taxBasis: {
+      type: String,
+      enum: ['gross', 'net']
+    },
     total: {
       type: Number,
       required: true,
@@ -195,9 +209,20 @@ salesOrderSchema.pre('save', function () {
   // long receipt.
   this.subtotal = sumCurrency(this.items.map(item => item.total));
   
+  if (this.isNew && !this.taxBasis) {
+    this.taxBasis = 'net';
+  }
+
+  // VAT base. A `net` order takes the order discount off before VAT, so VAT
+  // is never charged on money the discount already gave away. The total
+  // formula below is the same for both bases; only the tax differs.
+  const taxBase = this.taxBasis === 'net'
+    ? Math.max(this.subtotal - (this.discount || 0), 0)
+    : this.subtotal;
+
   // Calculate tax
   if (this.tax && this.tax.rate) {
-    this.tax.amount = roundCurrency(this.subtotal * (this.tax.rate / 100));
+    this.tax.amount = roundCurrency(taxBase * (this.tax.rate / 100));
   } else {
     this.tax = { rate: 0, amount: 0 };
   }

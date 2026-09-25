@@ -209,8 +209,11 @@ and the owner chose to leave old rows alone. GAP-028 and GAP-050 now carry
 the owner's decisions. GAP-029's recorded decision is suspect and is being
 reconfirmed; see its entry.
 
-Remaining open: 4 of the 62 gaps now listed, and all four are Wave 8: GAP-028,
-GAP-029, GAP-046 and GAP-050. None
+**GAP-029 was closed on 2026-09-25** after the owner reconfirmed the VAT base
+against a worked example.
+
+Remaining open: 3 of the 62 gaps now listed, and all three are Wave 8: GAP-028,
+GAP-046 and GAP-050. None
 of them should be started from its checklist alone. Four change product or
 financial behaviour, three need infrastructure access or an owner decision, and
 the decision briefs are in section 9 and in each entry's Open questions. Two new entries were raised on
@@ -4347,6 +4350,36 @@ about the owner's risk tolerance.
 ---
 
 ### GAP-029 [CODE] Tax is charged on the pre-discount subtotal and the discount has no ceiling
+
+> **FIXED 2026-09-25, Wave 8.** Reconfirmed with a worked example, the owner
+> chose B: VAT on the amount after the order discount. A PHP 1,000 sale with a
+> PHP 100 order discount at 12% now charges PHP 108 of VAT for a PHP 1,008
+> total, where it used to charge PHP 120 for PHP 1,020. Line discounts
+> already reduced the VAT base; only the order discount did not.
+>
+> **Existing orders are left alone, and that needed code, not just a
+> decision.** `SalesOrder`'s totals hook runs on every save, including a later
+> status or payment update, so changing the formula alone would have rewritten
+> an old order's total the first time anyone touched it. New orders carry
+> `taxBasis: 'net'`, set on insert; an order without the field is read as
+> `gross` and keeps its formula forever. It is deliberately not a schema
+> default, because Mongoose applies defaults to documents loaded without the
+> path and would flip every old order the moment it was read. A test re-saves a
+> pre-change order and asserts its PHP 1,020 survives.
+>
+> **Discount ceilings** are enforced in `createSalesOrder`, before any stock is
+> reserved: a line discount above its line value, or an order discount above
+> the subtotal, is a 400. They live in the controller because the price comes
+> from the branch's `Stock` and is not known to the route.
+>
+> **The frontend had two formulas that disagreed with each other.** The New Sale
+> screen (`types/sales.ts`) used gross, like the old server, while the offline
+> optimistic record (`hooks/useSales.ts`) already used net, so an offline sale
+> showed one total on screen and another on its pending-sync record. Both now
+> match the server, with a Vitest check on the worked example.
+>
+> `ServiceOrder` has no tax and no discount, so this entry's listing of it was
+> moot.
 
 Severity S2 Major | Complexity S | Difficulty D4 Judgment | Risk R3 |
 Confidence C2 Strong | Priority score 2.0 | Agent suitability HUMAN-FIRST |
