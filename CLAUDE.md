@@ -32,6 +32,10 @@ npm run test:coverage
 node src/utils/seedBranches.js --confirm   # DESTRUCTIVE: deletes ALL existing branches, then seeds 3 Philippine branches into MONGODB_URI. Without --confirm it prints the target database and exits 1; under NODE_ENV=production it also needs --force-production. Importing the module does nothing.
 npm run migrate:product-model     # one-off: renames Product.model → Product.productModel; idempotent
 
+# Backups (on the VPS, repo root). Nightly at midnight Manila via the runner's crontab.
+FORCE=1 scripts/backup.sh production              # back up now to /var/backups/talyer/production
+scripts/restore.sh production <stamp> --confirm   # DESTRUCTIVE: drops and replaces DB and uploads
+
 # Frontend (cd frontend)
 npm run dev                       # next dev, port 3000
 npm run build && npm start
