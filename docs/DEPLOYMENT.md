@@ -469,6 +469,60 @@ are a real hostname the browser and the frontend container can both reach — a 
 front of both services. Do not set `dangerouslyAllowLocalIP` on anything reachable from an
 untrusted network; the flag exists because it turns the optimizer into an SSRF primitive.
 
+## Mongo replica set (GAP-046)
+
+Production and staging run Mongo as a **single-node replica set** named `rs0`,
+so the backend can use multi-document transactions. Same server, same data
+volume, same `MONGODB_URI`: nothing about day-to-day operation changes. Local
+development stays standalone; only the two overlays add the flags.
+
+The deploy workflow does the whole conversion and is safe to re-run:
+
+1. **Ensure the mongo keyfile exists.** A replica set with auth needs one. It is
+   generated once per environment into the external volume
+   `talyer-<env>-mongo-keyfile`, owned by uid 999, mode 400, and never
+   regenerated: replacing the keyfile on a running set locks the member out of
+   itself. It never enters the repository.
+2. **Deploy stack.** Mongo restarts with `--replSet rs0 --keyFile ...` on its
+   existing data.
+3. **Initiate the replica set if needed.** Runs `rs.initiate` only if the set
+   has never been initiated, then waits for the member to become primary. The
+   member host is `mongo:27017`, the service name the backend already uses.
+
+**Once this is merged, the next production deploy performs the conversion.**
+Deploy production only in the planned window.
+
+### The conversion, step by step
+
+Rehearsed on 2026-09-25 against throwaway containers on the VPS: a standalone
+with data, converted in place, then connected with the real backend image using
+production's current URI shape. Existing data survived, a transaction committed
+and an aborted one left nothing behind, and a second run of both deploy steps
+was a no-op.
+
+1. **Deploy staging first, any time before the window.** It is the same
+   conversion on disposable data, and the best rehearsal available.
+2. **At the window**, on the VPS as the runner user, take a fresh backup:
+   `FORCE=1 ~/talyer-backup.sh production`.
+3. Run **Actions, Deploy, Run workflow** for production.
+4. In the job log, expect `keyfile created`, then `ok: 1` from `rs.initiate`,
+   then `mongo is primary`, then the usual health check pass.
+5. Confirm by hand:
+
+   ```bash
+   docker exec talyer-production-mongo-1 sh -c 'mongosh --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.hello().setName + \" primary=\" + db.hello().isWritablePrimary"'
+   # rs0 primary=true
+   ```
+
+Writes are unavailable only while mongo restarts and initiates, about a minute.
+
+### Rollback
+
+Redeploy the previous master. Without the overlay flags mongod starts as a
+standalone on the same data volume, and the app, which does not require
+transactions yet, keeps working. If data itself is damaged, restore the backup
+from step 2 with `scripts/restore.sh production <stamp> --confirm`.
+
 ## Backups and restore
 
 Production is backed up every night at **midnight Manila time** to

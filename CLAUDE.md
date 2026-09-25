@@ -407,8 +407,15 @@ hooks, so they must be replicated by hand in any new completion path.
 Human-readable IDs are allocated from a `Counter` collection, one document per sequence, by
 [utils/sequence.js](backend/src/utils/sequence.js): `PROD-000001`, `SO-YYYY-000001`,
 `JOB-YYYY-000001`, `TR-YYYY-000001`, `SM-YYYY-000001`, `TXN-YYYYMM-000001`. A single
-`findOneAndUpdate` with `$inc` and `upsert` is atomic on one document, which is why this works on
-the standalone production server with no transaction.
+`findOneAndUpdate` with `$inc` and `upsert` is atomic on one document, which is why this needs no
+transaction.
+
+**Mongo topology.** Production and staging run a single-node replica set (`rs0`, GAP-046's
+infrastructure half, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)), so transactions are
+available there. Local development and the Jest suite (`mongodb-memory-server`) are still
+standalone, so **no code may require a transaction until GAP-046's code half** moves the tests to
+a replica set too. A `startSession` that works in production and throws in every test is the
+failure this rule prevents.
 
 Three things here are load-bearing:
 
