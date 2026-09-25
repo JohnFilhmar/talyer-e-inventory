@@ -45,6 +45,7 @@ const stockMovementSchema = new mongoose.Schema(
         'adjustment_remove', // Manual decrease (damaged, lost, expired)
         'sale',              // Sold to customer
         'sale_cancel',       // Order cancelled, stock returned
+        'sale_return',       // Refunded item returned to stock as sellable
         'service_use',       // Used as parts in service
         'transfer_out',      // Sent to another branch
         'transfer_in',       // Received from another branch

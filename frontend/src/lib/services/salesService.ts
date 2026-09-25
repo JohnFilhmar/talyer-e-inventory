@@ -7,6 +7,8 @@ import type {
   UpdateOrderStatusPayload,
   UpdatePaymentPayload,
   SalesOrderListParams,
+  OrderRefund,
+  RefundOrderPayload,
 } from '@/types/sales';
 
 /**
@@ -122,6 +124,26 @@ export const salesService = {
 
     if (!data.success || !data.data) {
       throw new Error(data.message ?? 'Failed to update payment');
+    }
+
+    return data.data;
+  },
+
+  /**
+   * Refund some or all of a completed, paid order. The server computes the
+   * amount and returns the updated order with the recorded refund.
+   */
+  async refund(
+    id: string,
+    payload: RefundOrderPayload
+  ): Promise<{ order: SalesOrder; refund: OrderRefund }> {
+    const { data } = await apiClient.post<ApiResponse<{ order: SalesOrder; refund: OrderRefund }>>(
+      `/sales/${id}/refunds`,
+      payload
+    );
+
+    if (!data.success || !data.data) {
+      throw new Error(data.message ?? 'Failed to record refund');
     }
 
     return data.data;

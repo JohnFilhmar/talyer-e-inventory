@@ -402,6 +402,19 @@ controller action (see [salesController.js](backend/src/controllers/salesControl
 logging, transaction creation, and cache invalidation all happen together — none of them are
 hooks, so they must be replicated by hand in any new completion path.
 
+**Refunds** (`POST /api/sales/:id/refunds`, [utils/salesRefund.js](backend/src/utils/salesRefund.js))
+follow the same rule in reverse: sellable items go back to `Stock` with a `sale_return` movement,
+discarded ones touch no stock, and every refund writes a `refund` `Transaction` against the
+branch that made the sale. Refunds are embedded in the `SalesOrder` (`refunds`, `refundedAmount`,
+`refundStatus`) so they report with the sale, and `getSalesStatistics` revenue is net of them.
+The server computes every amount; a request never carries one. Two details are load-bearing:
+
+- **A fully refunded order is terminal in the totals hook.** Without the `refundStatus === 'full'`
+  branch, the payment recompute turns it back into `paid` on the very save that records it.
+- **The order is saved first with `order.increment()`** so two refunds racing on one order fail
+  with a `VersionError` (answered 409) before either returns stock or writes money. Mongoose does
+  not bump the version for a `$push`, so without the explicit increment both would succeed.
+
 ### Identifiers
 
 Human-readable IDs are allocated from a `Counter` collection, one document per sequence, by

@@ -71,7 +71,7 @@ Beyond the MVP feature set documented further down:
 
 **Total Backend Tests:** 825 passing across 29 suites, 1 pending  
 **Total Features Implemented:** 7 major modules  
-**API Endpoints:** 87  
+**API Endpoints:** 88  
 **Database Models:** 11 models  
 **Frontend Pages:** 25+ pages  
 **React Components:** 100+ components
@@ -562,7 +562,7 @@ endpoints that do not exist and omitted about twenty that do, including every
 python scripts/gen_endpoints.py
 ```
 
-87 routes across ten routers. Paths are relative to the mount prefix in each heading. Every
+88 routes across ten routers. Paths are relative to the mount prefix in each heading. Every
 route requires a Bearer token except the five credential endpoints and the root index; the
 role each one demands is in the `authorize(...)` call in its route file, which is the only
 place that cannot drift.
@@ -660,6 +660,7 @@ place that cannot drift.
 - `POST /`
 - `PUT /:id/status`
 - `PUT /:id/payment`
+- `POST /:id/refunds`
 - `DELETE /:id`
 
 ### Service Management (`/api/services`)

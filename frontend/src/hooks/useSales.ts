@@ -11,6 +11,7 @@ import type {
   UpdateOrderStatusPayload,
   UpdatePaymentPayload,
   SalesOrderListParams,
+  RefundOrderPayload,
   OrderBranch,
 } from '@/types/sales';
 import type { Stock } from '@/types/stock';
@@ -369,6 +370,26 @@ export function useUpdatePayment() {
 /**
  * Hook to cancel an order
  */
+/**
+ * Record a refund. Refunds return stock and change revenue, so the stock
+ * and statistics queries are invalidated along with the order.
+ */
+export function useRefundOrder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ orderId, payload }: { orderId: string; payload: RefundOrderPayload }) =>
+      salesService.refund(orderId, payload),
+    onSuccess: ({ order }) => {
+      queryClient.setQueryData(salesKeys.detail(order._id), order);
+      queryClient.invalidateQueries({ queryKey: salesKeys.detail(order._id) });
+      queryClient.invalidateQueries({ queryKey: salesKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: salesKeys.stats() });
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+    },
+  });
+}
+
 export function useCancelOrder() {
   const queryClient = useQueryClient();
 

@@ -157,6 +157,30 @@ const salesOrderSchema = new mongoose.Schema(
       index: true
     },
     completedAt: Date,
+    // Refunds (GAP-050). Embedded so a refund is reported in the same
+    // sales data as the sale it reverses. Written only by
+    // utils/salesRefund.js, which computes every amount.
+    refunds: [{
+      items: [{
+        item: { type: mongoose.Schema.Types.ObjectId, required: true },
+        product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+        name: String,
+        quantity: { type: Number, required: true, min: [1, 'Refund quantity must be at least 1'] },
+        amount: { type: Number, required: true, min: 0 },
+        disposition: { type: String, enum: ['sellable', 'discarded'], required: true }
+      }],
+      amount: { type: Number, required: true, min: 0 },
+      reason: { type: String, maxlength: [500, 'Reason cannot exceed 500 characters'] },
+      processedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+      createdAt: { type: Date, default: Date.now }
+    }],
+    refundedAmount: { type: Number, default: 0, min: 0 },
+    refundStatus: {
+      type: String,
+      enum: ['none', 'partial', 'full'],
+      default: 'none',
+      index: true
+    },
     notes: {
       type: String,
       maxlength: [1000, 'Notes cannot exceed 1000 characters']
@@ -240,8 +264,12 @@ salesOrderSchema.pre('save', function () {
     this.payment.change = 0;
   }
   
-  // Update payment status based on amount paid
-  if (this.payment.amountPaid === 0) {
+  // Update payment status based on amount paid. A fully refunded order is
+  // terminal: without this the recompute below turns it back into `paid` on
+  // the very save that records the refund.
+  if (this.refundStatus === 'full') {
+    this.payment.status = 'refunded';
+  } else if (this.payment.amountPaid === 0) {
     this.payment.status = 'pending';
   } else if (this.payment.amountPaid < this.total) {
     this.payment.status = 'partial';
