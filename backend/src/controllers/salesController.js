@@ -10,8 +10,9 @@ import { createMovementWithOldQuantity, MOVEMENT_TYPES } from '../utils/stockMov
 import { getReportingPeriodBounds } from '../utils/reportingPeriod.js';
 import { canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
-import { asDate, asObjectId } from '../utils/narrowing.js';
+import { asDate, asEnum, asObjectId } from '../utils/narrowing.js';
 import { roundCurrency, sumCurrency } from '../utils/currency.js';
+import { refundSalesOrder, REFUND_DISPOSITIONS } from '../utils/salesRefund.js';
 // The fields a list may be ordered by. `sortBy` is used as an object key, so an
 // allow-list is what keeps an arbitrary string out of that position; anything
 // outside it is rejected by the route rather than silently ignored.
@@ -752,10 +753,13 @@ export const getSalesStatistics = asyncHandler(async (req, res) => {
     process.env.REPORT_TIMEZONE || 'Asia/Manila'
   );
 
+  // Revenue is net of refunds (GAP-050): a refund is reported in the same
+  // sales data as the sale, against the period the sale was made in.
+  const netTotal = { $subtract: ['$total', { $ifNull: ['$refundedAmount', 0] }] };
   const revenueSince = (since) =>
     SalesOrder.aggregate([
       { $match: { ...query, status: 'completed', createdAt: { $gte: since } } },
-      { $group: { _id: null, total: { $sum: '$total' } } }
+      { $group: { _id: null, total: { $sum: netTotal } } }
     ]);
 
   const [
@@ -774,7 +778,7 @@ export const getSalesStatistics = asyncHandler(async (req, res) => {
     SalesOrder.countDocuments({ ...query, status: 'pending' }),
     SalesOrder.aggregate([
       { $match: { ...query, status: 'completed' } },
-      { $group: { _id: null, total: { $sum: '$total' } } }
+      { $group: { _id: null, total: { $sum: netTotal }, refunded: { $sum: { $ifNull: ['$refundedAmount', 0] } }, refundedOrders: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$refundedAmount', 0] }, 0] }, 1, 0] } } } }
     ]),
     SalesOrder.countDocuments({ ...query, 'payment.status': 'paid' }),
     revenueSince(startOfToday),
@@ -800,8 +804,67 @@ export const getSalesStatistics = asyncHandler(async (req, res) => {
     payment: {
       paidOrders,
       pendingPayment: totalOrders - paidOrders
+    },
+    refunds: {
+      orders: totalRevenue.length > 0 ? totalRevenue[0].refundedOrders : 0,
+      amount: totalRevenue.length > 0 ? totalRevenue[0].refunded : 0
     }
   };
 
   return ApiResponse.success(res, 200, 'Sales statistics retrieved successfully', statistics);
+});
+
+/**
+ * @desc    Refund some or all of a completed, paid sales order (GAP-050)
+ * @route   POST /api/sales/:id/refunds
+ * @access  Private (Admin, Salesperson)
+ */
+export const createSalesOrderRefund = asyncHandler(async (req, res) => {
+  const orderId = asObjectId(req.params.id);
+  if (!orderId) {
+    return ApiResponse.error(res, 400, 'Valid order ID is required');
+  }
+
+  // Narrowed here as well as in the route chain; see utils/narrowing.js.
+  const rawItems = Array.isArray(req.body.items) ? req.body.items : [];
+  const items = rawItems.map((item) => ({
+    itemId: asObjectId(item?.itemId),
+    quantity: Number.isInteger(item?.quantity) ? item.quantity : NaN,
+    disposition: asEnum(item?.disposition, REFUND_DISPOSITIONS),
+  }));
+  if (items.length === 0 || items.some((i) => !i.itemId || !(i.quantity > 0) || !i.disposition)) {
+    return ApiResponse.error(res, 400, 'Each refunded item needs an item id, a quantity and a disposition');
+  }
+  const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : undefined;
+
+  const order = await SalesOrder.findById(orderId);
+  if (!order) {
+    return ApiResponse.error(res, 404, 'Sales order not found');
+  }
+  if (!canAccessBranch(req.user, order.branch)) {
+    return ApiResponse.error(res, 403, 'Access denied to this order');
+  }
+
+  let refund;
+  try {
+    refund = await refundSalesOrder(order, { items, reason }, req.user);
+  } catch (error) {
+    if (error.statusCode === 400) {
+      return ApiResponse.error(res, 400, error.message);
+    }
+    if (error.name === 'VersionError') {
+      return ApiResponse.error(res, 409, 'This order changed while the refund was being recorded; reload and try again');
+    }
+    throw error;
+  }
+
+  await CacheUtil.delPattern('cache:sales:*');
+  await CacheUtil.delPattern('cache:stock:*');
+
+  const updated = await SalesOrder.findById(order._id)
+    .populate('branch', 'name code')
+    .populate('processedBy', 'name')
+    .populate('items.product', 'sku name brand');
+
+  return ApiResponse.success(res, 201, 'Refund recorded', { order: updated, refund });
 });

@@ -113,6 +113,7 @@ const MOVEMENT_TYPES = {
   ADJUSTMENT_REMOVE: 'adjustment_remove',
   SALE: 'sale',
   SALE_CANCEL: 'sale_cancel',
+  SALE_RETURN: 'sale_return',
   SERVICE_USE: 'service_use',
   TRANSFER_OUT: 'transfer_out',
   TRANSFER_IN: 'transfer_in',

@@ -16,13 +16,14 @@ import {
   Calendar,
   Hash,
   Building,
+  RotateCcw,
 } from 'lucide-react';
 import { useSalesOrder } from '@/hooks/useSales';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
-import { UpdateStatusModal, UpdatePaymentModal } from '@/components/sales';
+import { UpdateStatusModal, UpdatePaymentModal, RefundOrderModal } from '@/components/sales';
 import {
   type OrderStatus,
   type PaymentStatus,
@@ -120,6 +121,7 @@ export default function OrderDetailPage() {
   // Modal states
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showRefundModal, setShowRefundModal] = useState(false);
 
   // Fetch order data
   const { data: order, isLoading, error, refetch } = useSalesOrder(orderId);
@@ -128,6 +130,12 @@ export default function OrderDetailPage() {
   const canUpdateStatus = useMemo(() => {
     if (!order) return false;
     return getValidNextStatuses(order.status).length > 0;
+  }, [order]);
+
+  // Refundable: completed, paid, and not already fully refunded (GAP-050).
+  const canRefund = useMemo(() => {
+    if (!order) return false;
+    return order.status === 'completed' && order.payment.status === 'paid' && order.refundStatus !== 'full';
   }, [order]);
 
   // Check if payment can be updated
@@ -207,6 +215,12 @@ export default function OrderDetailPage() {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
+          {canRefund && (
+            <Button variant="secondary" onClick={() => setShowRefundModal(true)}>
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Refund
+            </Button>
+          )}
           <Link href={`/sales/${orderId}/invoice`}>
             <Button variant="secondary">
               <FileText className="w-4 h-4 mr-2" />
@@ -436,6 +450,43 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
+          {/* Refunds (GAP-050) */}
+          {(order.refunds?.length ?? 0) > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-black">Refunds</h3>
+                <span className="text-sm font-medium text-black">
+                  {order.refundStatus === 'full' ? 'Fully refunded' : 'Partially refunded'}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {order.refunds?.map((refund) => (
+                  <div key={refund._id} className="border-t border-gray-200 pt-3 first:border-t-0 first:pt-0">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500">{formatDate(refund.createdAt)}</span>
+                      <span className="font-medium text-black">{formatCurrency(refund.amount)}</span>
+                    </div>
+                    <ul className="mt-1 space-y-1 text-sm text-black">
+                      {refund.items.map((line) => (
+                        <li key={line.item} className="flex justify-between gap-2">
+                          <span>{line.quantity} x {line.name}</span>
+                          <span className="text-gray-500">
+                            {line.disposition === 'sellable' ? 'Returned to stock' : 'Discarded'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {refund.reason && <p className="mt-1 text-xs text-gray-500">{refund.reason}</p>}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-3 text-sm">
+                <span className="text-gray-500">Total refunded</span>
+                <span className="font-bold text-black">{formatCurrency(order.refundedAmount ?? 0)}</span>
+              </div>
+            </div>
+          )}
+
           {/* Order Meta */}
           <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -495,6 +546,12 @@ export default function OrderDetailPage() {
       <UpdatePaymentModal
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
+        order={order}
+      />
+
+      <RefundOrderModal
+        isOpen={showRefundModal}
+        onClose={() => setShowRefundModal(false)}
         order={order}
       />
     </div>

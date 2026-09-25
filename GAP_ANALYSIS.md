@@ -215,8 +215,11 @@ against a worked example.
 **GAP-028 was closed on 2026-09-25** with nightly backups and a restore that
 was actually tested.
 
-Remaining open: 2 of the 62 gaps now listed, and both are Wave 8: GAP-046
-and GAP-050. None
+**GAP-050 was closed on 2026-09-25** with refunds built to the owner's
+answers.
+
+Remaining open: 1 of the 62 gaps now listed, GAP-046, whose infrastructure
+half is built and whose code half waits on the conversion. None
 of them should be started from its checklist alone. Four change product or
 financial behaviour, three need infrastructure access or an owner decision, and
 the decision briefs are in section 9 and in each entry's Open questions. Two new entries were raised on
@@ -6860,6 +6863,36 @@ reversible once printed records exist, which is why an agent must not choose.
 ---
 
 ### GAP-050 [FEAT] There is no refund, void, or reversal path anywhere in the system
+
+> **FIXED 2026-09-25, Wave 8.** Built to the owner's answers: partial or whole
+> refunds, no time window, each returned item marked sellable (restocked with a
+> new `sale_return` movement) or discarded (recorded, no stock change), every
+> refund recorded as a `refund` transaction credited against the branch that
+> made the sale, and reported in the same sales data. Refunds are embedded in
+> `SalesOrder` with `refundedAmount` and `refundStatus`, and sales revenue is
+> now net of them. No store credit and no customer balance.
+>
+> **The amount is computed by the server, never sent by the client.** Each line
+> refunds its share of what was paid: unit price after its line discount,
+> scaled by the order's total over its subtotal, so VAT and the order discount
+> come back in proportion on whichever basis the order was written. The refund
+> that returns the last units takes the exact remainder, so rounding never
+> strands a centavo; a test refunds a PHP 201.60 order in two halves and lands
+> on PHP 201.60.
+>
+> **Two things this entry predicted, both confirmed:** the totals hook
+> recomputed `payment.status` on every save and would have turned a refunded
+> order back into `paid` on the same save, and GAP-016's on-account orders
+> cannot be refunded, since only money actually received is returned. A third
+> it did not: Mongoose does not bump a document's version for `$push`, so two
+> refunds racing on one order would both have succeeded. The order is saved
+> first with `order.increment()`, and the loser gets a 409 before touching
+> stock or money.
+>
+> Roles are admin and salesperson, the same as payment; the owner did not
+> restrict it. The sales detail page gained a Refund action and a refund
+> history. Stock and ledger writes after the order save are not yet atomic
+> with it; GAP-046's code half moves this into a transaction.
 
 Severity S2 Major | Complexity L | Difficulty D4 Judgment | Risk R3 |
 Confidence C1 Verified | Priority score 0.71 | Agent suitability HUMAN-FIRST |

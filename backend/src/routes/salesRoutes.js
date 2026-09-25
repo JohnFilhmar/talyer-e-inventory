@@ -9,7 +9,8 @@ import {
   updateSalesOrderPayment,
   deleteSalesOrder,
   getSalesOrderInvoice,
-  getSalesStatistics
+  getSalesStatistics,
+  createSalesOrderRefund
 } from '../controllers/salesController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import { checkBranchAccess } from '../middleware/branchAccess.js';
@@ -66,6 +67,18 @@ const updatePaymentValidation = [
     .optional()
     .isIn(['cash', 'card', 'gcash', 'paymaya', 'bank-transfer'])
     .withMessage('Invalid payment method'),
+  validate
+];
+
+const refundValidation = [
+  param('id').isMongoId().withMessage('Valid order ID is required'),
+  body('items').isArray({ min: 1 }).withMessage('At least one item must be refunded'),
+  body('items.*.itemId').isMongoId().withMessage('Each item needs a valid item ID'),
+  body('items.*.quantity').isInt({ min: 1 }).withMessage('Refund quantity must be at least 1'),
+  body('items.*.disposition')
+    .isIn(['sellable', 'discarded'])
+    .withMessage('Disposition must be sellable or discarded'),
+  body('reason').optional().isString().isLength({ max: 500 }).withMessage('Reason cannot exceed 500 characters'),
   validate
 ];
 
@@ -176,6 +189,15 @@ router.put(
   authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
   updatePaymentValidation,
   updateSalesOrderPayment
+);
+
+// POST /api/sales/:id/refunds - Refund some or all of a paid order (GAP-050)
+router.post(
+  '/:id/refunds',
+  protect,
+  authorize(USER_ROLES.ADMIN, USER_ROLES.SALESPERSON),
+  refundValidation,
+  createSalesOrderRefund
 );
 
 // DELETE /api/sales/:id - Cancel sales order

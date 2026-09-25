@@ -186,8 +186,58 @@ export interface SalesOrder {
   processedBy: OrderUser | string;
   completedAt?: string;
   notes?: string;
+  /** Refunds against this order, oldest first (GAP-050). */
+  refunds?: OrderRefund[];
+  refundedAmount?: number;
+  refundStatus?: RefundStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Whether a returned item went back on the shelf or was written off. */
+export type RefundDisposition = 'sellable' | 'discarded';
+
+export type RefundStatus = 'none' | 'partial' | 'full';
+
+/** One line of a recorded refund. `item` is the order item's `_id`. */
+export interface OrderRefundItem {
+  item: string;
+  product: string;
+  name: string;
+  quantity: number;
+  amount: number;
+  disposition: RefundDisposition;
+}
+
+/** A refund recorded on a sales order. The server computes every amount. */
+export interface OrderRefund {
+  _id: string;
+  items: OrderRefundItem[];
+  amount: number;
+  reason?: string;
+  processedBy: string;
+  createdAt: string;
+}
+
+/** Body of POST /sales/:id/refunds. */
+export interface RefundOrderPayload {
+  items: Array<{ itemId: string; quantity: number; disposition: RefundDisposition }>;
+  reason?: string;
+}
+
+/**
+ * Units of each order item that can still be refunded, keyed by item `_id`.
+ */
+export function refundableQuantities(order: SalesOrder): Record<string, number> {
+  const returned: Record<string, number> = {};
+  for (const refund of order.refunds ?? []) {
+    for (const line of refund.items) {
+      returned[line.item] = (returned[line.item] ?? 0) + line.quantity;
+    }
+  }
+  return Object.fromEntries(
+    order.items.map((item) => [item._id, item.quantity - (returned[item._id] ?? 0)])
+  );
 }
 
 // ============ Request Payloads ============
@@ -294,6 +344,11 @@ export interface SalesStats {
   payment: {
     paid: number;
     pendingPayment: number;
+  };
+  /** Revenue above is already net of these. */
+  refunds?: {
+    orders: number;
+    amount: number;
   };
 }
 
