@@ -212,8 +212,11 @@ reconfirmed; see its entry.
 **GAP-029 was closed on 2026-09-25** after the owner reconfirmed the VAT base
 against a worked example.
 
-Remaining open: 3 of the 62 gaps now listed, and all three are Wave 8: GAP-028,
-GAP-046 and GAP-050. None
+**GAP-028 was closed on 2026-09-25** with nightly backups and a restore that
+was actually tested.
+
+Remaining open: 2 of the 62 gaps now listed, and both are Wave 8: GAP-046
+and GAP-050. None
 of them should be started from its checklist alone. Four change product or
 financial behaviour, three need infrastructure access or an owner decision, and
 the decision briefs are in section 9 and in each entry's Open questions. Two new entries were raised on
@@ -4240,6 +4243,27 @@ box should revisit them there.
 ---
 
 ### GAP-028 [OPS] No backup or restore path for the MongoDB data or the uploads volume
+
+> **FIXED 2026-09-25, Wave 8.** Built as the owner decided: nightly, to a file
+> on the box under `/var`, at midnight when there is no traffic.
+> `scripts/backup.sh` writes a gzipped `mongodump` of the whole database and a
+> tarball of the uploads volume to `/var/backups/talyer/production/`, keeping
+> 14 days; `scripts/restore.sh` puts one back, dry-run unless `--confirm`.
+> The production deploy installs it as the runner's crontab.
+>
+> **Midnight needed code.** The host keeps Europe/Berlin time with daylight
+> saving and the shop keeps Asia/Manila without it, so `0 0 * * *` would have
+> run at 06:00 Manila. Cron fires hourly and the script proceeds only when the
+> Manila hour is 00.
+>
+> **Restored, not just written.** The first real backup was restored into a
+> throwaway Mongo container: all 13 collections came back and every document
+> count matched live production. The uploads archive held 594 entries against
+> 593 live files plus the archive root.
+>
+> The owner was told the ceiling: a same-disk backup does not survive losing
+> the disk or the VPS. An off-box copy of `/var/backups/talyer` is the
+> upgrade and needs no change to the scripts.
 
 Severity S1 Critical | Complexity M | Difficulty D2 Standard | Risk R1 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability HUMAN-FIRST |

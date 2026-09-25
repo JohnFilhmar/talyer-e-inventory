@@ -254,6 +254,24 @@ jobs:
       # Reloading is a POST to the lifecycle API, which the monitoring stack
       # enables with --web.enable-lifecycle. A rules file with a syntax error is
       # rejected by the reload and the previous rules stay loaded.
+      # Nightly backups (GAP-028). The script is copied into the runner's home
+      # rather than run from the checkout, because staging deploys reuse the same
+      # working directory and would otherwise swap the file under the cron job.
+      # The cron line fires hourly; backup.sh itself only proceeds at midnight
+      # Manila, since this host keeps Europe/Berlin time with daylight saving.
+      # Production only: staging data is disposable. Idempotent: the old line is
+      # removed before the new one is added.
+      - name: Install nightly backup job
+        if: inputs.environment == 'production'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          install -m 0755 scripts/backup.sh "$HOME/talyer-backup.sh"
+          ( crontab -l 2>/dev/null | grep -v 'talyer-backup.sh' || true
+            echo "0 * * * * $HOME/talyer-backup.sh production >> $HOME/talyer-backup.log 2>&1"
+          ) | crontab -
+          crontab -l | grep talyer-backup.sh
+
       - name: Install Prometheus alert rules
         # Monitoring is diagnostics. A healthy deploy must not be reported as
         # failed because a rules file could not be copied.

@@ -469,6 +469,46 @@ are a real hostname the browser and the frontend container can both reach — a 
 front of both services. Do not set `dangerouslyAllowLocalIP` on anything reachable from an
 untrusted network; the flag exists because it turns the optimizer into an SSRF primitive.
 
+## Backups and restore
+
+Production is backed up every night at **midnight Manila time** to
+`/var/backups/talyer/production/` on the VPS: a gzipped `mongodump` archive of
+the whole database and a tarball of the uploads volume, kept for 14 days. The
+production deploy installs it as the runner user's crontab
+(`scripts/backup.sh`, copied to `~runner/talyer-backup.sh`, logging to
+`~runner/talyer-backup.log`).
+
+Three details are deliberate:
+
+- **Cron fires hourly and the script checks the Manila hour.** The host keeps
+  Europe/Berlin time, which shifts for daylight saving; the shop does not. A fixed
+  cron hour would put the backup at 06:00 Manila, when the shop may be opening.
+- **Writes go through a throwaway container.** The runner has no sudo and
+  `/var/backups` is root-owned; the docker group is what lets a bind mount write
+  there. Files are written as `*.part` and renamed, so an interrupted run never
+  leaves something that looks complete.
+- **The Mongo credentials never leave the mongo container.** `mongodump` reads
+  them from the container's own environment.
+
+**Same-disk backups do not survive losing the disk or the VPS.** They cover a
+mistyped `down -v`, a bad migration and corrupted data. Copying
+`/var/backups/talyer` off the box is the upgrade.
+
+Take one now, or list and restore:
+
+```bash
+# On the VPS, as the runner user
+FORCE=1 ~/talyer-backup.sh production
+ls /var/backups/talyer/production/
+
+# Restore. Dry run without --confirm; with it, every collection in the archive is
+# dropped and replaced and the uploads volume is emptied and refilled.
+scripts/restore.sh production 20260925-1007 --confirm
+```
+
+The first backup was restored into a throwaway Mongo container on 2026-09-25:
+all 13 collections came back and every document count matched production.
+
 ## Rollback
 
 Deploys build from a branch, so rolling back means deploying an earlier commit:
