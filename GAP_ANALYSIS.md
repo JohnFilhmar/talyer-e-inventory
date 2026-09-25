@@ -202,8 +202,15 @@ documented onboarding path that needs no change to the monitoring stack, so
 the metrics half was never waiting on anything. Loki, which the logs were
 meant to go to, is not installed on that box at all.
 
-Remaining open: 6 of the 62 gaps now listed, and all six are Wave 8: GAP-028,
-GAP-029, GAP-035, GAP-046, GAP-049 and GAP-050. None
+**GAP-035 and GAP-049 were closed on 2026-09-25.** GAP-035's branch deletions
+turned out to lose nothing, since every branch had already reached master.
+GAP-049 closed by decision: GAP-040 had already fixed new transaction numbers,
+and the owner chose to leave old rows alone. GAP-028 and GAP-050 now carry
+the owner's decisions. GAP-029's recorded decision is suspect and is being
+reconfirmed; see its entry.
+
+Remaining open: 4 of the 62 gaps now listed, and all four are Wave 8: GAP-028,
+GAP-029, GAP-046 and GAP-050. None
 of them should be started from its checklist alone. Four change product or
 financial behaviour, three need infrastructure access or an owner decision, and
 the decision briefs are in section 9 and in each entry's Open questions. Two new entries were raised on
@@ -4322,6 +4329,12 @@ nothing to revert in the running services.
 
 **Open questions**
 
+> **DECIDED 2026-09-25 by the owner:** a daily cron job at midnight, when
+> there is no traffic, backing up all data to a file on the box under
+> `/var`. Recorded with one caveat the owner has been told: a backup on the
+> same disk survives a mistyped `down -v` and a corrupted database, but not
+> a disk failure or the loss of the VPS. Off-box copies remain the upgrade.
+
 `RESOLUTION: HUMAN REQUIRED` for three inputs an agent cannot invent. Where should
 backups be stored off-site, and with what credential? What retention window and
 what recovery point objective does the owner accept, given the shop's tolerance
@@ -4423,6 +4436,23 @@ internally inconsistent; that is the main reason the ordering is gated on a huma
 answer.
 
 **Open questions**
+
+> **The recorded decision is suspect, and nothing has been built on it.** The
+> question put to the owner on 2026-09-10 was framed from this entry's own
+> Open questions, which say the code applies the discount after VAT. The
+> code does not quite do that. `SalesOrder.js` takes line discounts off
+> before the subtotal, then computes `tax = subtotal * rate` and only then
+> subtracts the order-level discount, so VAT is charged on money the order
+> discount has already given away. On a PHP 1,000 sale with a PHP 100 order
+> discount at 12%, that is PHP 120 of VAT and a PHP 1,020 total, where a
+> net base gives PHP 108 and PHP 1,008. The option the owner picked was
+> labelled "VAT on the pre-discount subtotal", which is today's behaviour,
+> while their own words were "discount applies before VAT", which is the
+> opposite. Confirm with the worked example before any code.
+>
+> **Settled independently: existing rows are left alone** (the owner's option
+> (b)). Whatever the ordering, it applies from a cutover date forward, and
+> receipts customers already hold stay true to the database.
 
 > **DECIDED 2026-09-10 by the owner: the discount applies BEFORE VAT**, so
 > VAT is computed on the pre-discount subtotal. The code does the opposite
@@ -4935,6 +4965,22 @@ None.
 ---
 
 ### GAP-035 [PROJ] Branch and workspace hygiene: staging is 94 commits behind master
+
+> **FIXED 2026-09-25, Wave 8.** The owner said to proceed. The decision the
+> entry was waiting on turned out to be moot: by the time it was answered,
+> `git branch --no-merged origin/master` returned nothing, so every one of the
+> seven "unmerged" branches was already contained in master and deleting them
+> lost no work. 28 merged local branches were deleted, including the two
+> `worktree-agent-*` leftovers. Five of them refused `git branch -d` only
+> because their remote copies carried extra commits; both copies were
+> confirmed contained in `origin/master` before `-D`.
+>
+> `staging` was fast-forwarded to master (`69a8c75..54a0d0b`, 167 commits, no
+> force push). Deploys are manual, so nothing was deployed by it.
+>
+> Left alone on purpose: `fix/mongoose-async-hooks` and
+> `worktree-feat+mobile-app`, each checked out in another session's worktree,
+> and the merged branches on `origin`, which this entry never scoped.
 
 Severity S3 Moderate | Complexity XS | Difficulty D1 Mechanical | Risk R2 |
 Confidence C1 Verified | Priority score 2.0 | Agent suitability HUMAN-FIRST |
@@ -6631,6 +6677,14 @@ None.
 
 ### GAP-049 [CONTRA] Transaction numbers never take the documented TXN-YYYYMM shape
 
+> **FIXED 2026-09-25, Wave 8, by decision.** The owner chose to leave existing
+> rows alone. No code was needed: GAP-040 had already moved allocation into
+> `Transaction.js`'s `pre('validate')` hook through `nextIdentifier`, and no
+> caller supplies the number any more, so every transaction created since
+> then is `TXN-YYYYMM-NNNNNN`. Rows written before GAP-040 keep
+> `TXN-NNNNNN-tttttt`. Two formats in one collection is the accepted cost; a
+> bookkeeper who sees both should read the older one as pre-2026-09-09.
+
 Severity S3 Moderate | Complexity S | Difficulty D2 Standard | Risk R3 |
 Confidence C1 Verified | Priority score 1.0 | Agent suitability AGENT-ASSISTED |
 Depends on GAP-040 | Blocks none | Est. agent turns 4-8
@@ -6809,6 +6863,23 @@ trail.
 Not applicable until a design exists.
 
 **Open questions**
+
+> **DECIDED 2026-09-25 by the owner:**
+>
+> - Refunds may be partial or cover the whole order.
+> - A refund is reversible at any time. No window, no supervisor step.
+> - Each returned product is marked either sellable, going back to stock, or
+>   discarded, since the fault may be the manufacturer's.
+> - Every refund is always recorded.
+> - Refunds are credited to the branch.
+> - Reversals appear in the same sales data, not a separate report, with a
+>   field marking the record refunded and notes on whether returned items
+>   are still sellable.
+>
+> One phrase needs confirming before the data model is fixed: "always branch
+> credits". Read as the refund amount being booked against the branch that
+> made the sale, it fits everything else here. Read as store credit held for
+> the customer, it needs a customer balance, which does not exist.
 
 `RESOLUTION: HUMAN REQUIRED`. The decision brief:
 
