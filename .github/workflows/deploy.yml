@@ -201,6 +201,19 @@ jobs:
           docker network inspect metrics >/dev/null 2>&1 \
             || docker network create metrics
 
+      # The overlays run mongo as a single-node replica set with a keyfile
+      # (GAP-046). The keyfile lives in an external volume created here, once
+      # per environment, and is never regenerated: replacing it on a running
+      # set would lock the member out of itself. Owned by the mongodb user
+      # (999) with mode 400, which mongod insists on.
+      - name: Ensure the mongo keyfile exists
+        run: |
+          set -euo pipefail
+          vol="talyer-${{ inputs.environment }}-mongo-keyfile"
+          docker volume inspect "$vol" >/dev/null 2>&1 || docker volume create "$vol" >/dev/null
+          docker run --rm -v "$vol:/key" alpine:3 sh -c \
+            'test -s /key/keyfile || { head -c 756 /dev/urandom | base64 | tr -d "\n" > /key/keyfile; chown 999:999 /key/keyfile; chmod 400 /key/keyfile; echo "keyfile created"; }'
+
       - name: Deploy stack
         run: |
           set -euo pipefail
@@ -209,6 +222,24 @@ jobs:
             -f docker-compose.yml \
             -f "docker-compose.${{ inputs.environment }}.yml" \
             up -d --build --remove-orphans
+
+      # Idempotent: initiates only a set that has never been initiated, so every
+      # later deploy is a no-op. It runs before the health check because an
+      # uninitiated set has no primary and the backend cannot write until it
+      # does. Credentials come from the mongo container's own environment.
+      - name: Initiate the mongo replica set if needed
+        run: |
+          set -euo pipefail
+          c="talyer-${{ inputs.environment }}-mongo-1"
+          m() { docker exec "$c" sh -c 'mongosh --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "$0"' "$1"; }
+          for i in $(seq 1 60); do m 1 >/dev/null 2>&1 && break; sleep 2; done
+          m 'try { rs.status(); print("replica set already initiated") } catch (e) { printjson(rs.initiate({_id: "rs0", members: [{_id: 0, host: "mongo:27017"}]})) }'
+          for i in $(seq 1 30); do
+            if m 'db.hello().isWritablePrimary' | grep -q true; then echo "mongo is primary"; exit 0; fi
+            sleep 2
+          done
+          echo "::error::mongo did not become primary"
+          exit 1
 
       - name: Wait for backend health check
         run: |

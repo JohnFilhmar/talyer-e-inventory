@@ -13,6 +13,18 @@
 # Container/volume isolation from staging comes from the Compose project name
 # (-p), supplied by the deploy workflow — not from anything in this file.
 services:
+  # Single-node replica set (GAP-046), so the backend can use transactions.
+  # Same data volume as the standalone it replaces. A replica set with auth
+  # needs a keyfile; it is generated on the box by the deploy workflow into
+  # an external volume and never enters the repository. The member host is
+  # `mongo:27017`, the service name the backend already connects to, so the
+  # existing MONGODB_URI keeps working unchanged (rehearsed on 2026-09-25).
+  # Local development stays standalone: only this overlay adds the flags.
+  mongo:
+    command: ["--replSet", "rs0", "--keyFile", "/etc/mongo-keyfile/keyfile", "--bind_ip_all"]
+    volumes:
+      - mongo-keyfile:/etc/mongo-keyfile:ro
+
   backend:
     ports:
       - "127.0.0.1:5000:5000"
@@ -44,3 +56,7 @@ networks:
   metrics:
     external: true
 
+volumes:
+  mongo-keyfile:
+    external: true
+    name: talyer-production-mongo-keyfile

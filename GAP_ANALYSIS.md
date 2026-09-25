@@ -6350,6 +6350,28 @@ None.
 
 ### GAP-046 [CODE] No atomicity on stock quantity writes: lost updates and oversell
 
+> **Infrastructure half built 2026-09-25; the code half is still open.** The
+> owner approved a single-node replica set with a Sunday 02:00 window. Only
+> the conversion ships for that window: the overlays run mongo with
+> `--replSet rs0` and a keyfile, and the deploy creates the keyfile once and
+> initiates the set idempotently. The app needs no change to run on it, which
+> keeps the window small and the rollback trivial.
+>
+> **Rehearsed on the VPS against throwaway containers:** a standalone with
+> data converted in place, connected with the real backend image. Data
+> survived; a transaction committed and an aborted one left nothing; the
+> exact deploy steps, extracted from the workflow file, ran clean and were
+> no-ops on a second run. **Production's existing `MONGODB_URI`, with no
+> `replicaSet=` parameter, connects and runs transactions**, so no secret
+> changes.
+>
+> **Still open, the code half:** move the Jest suite to
+> `MongoMemoryReplSet`, wrap order creation and completion in
+> `withTransaction` in place of the compensating releases, un-skip the
+> oversell specification in `concurrency.test.js`, and fix the stranded
+> reservation recorded below. Local development moves to a replica set in
+> the same change. Until then no code may require a transaction.
+
 > **Still open. Two things were added to its scope on 2026-09-10 by GAP-044's
 > new concurrency suite, which is the first thing in this project ever to fire
 > two requests at one document.**
