@@ -101,10 +101,12 @@ updates:
         update-types: [version-update:semver-major, version-update:semver-minor]
       - dependency-name: "@react-native-async-storage/async-storage"
         update-types: [version-update:semver-major, version-update:semver-minor]
+      # Every react update, patches too: React Native requires `react` to equal
+      # the version of the renderer it bundles and throws "Incompatible React
+      # versions" at startup otherwise. mobile-check never starts the app, so
+      # CI stays green on a bump that crashes on launch.
       - dependency-name: react
-        update-types: [version-update:semver-major, version-update:semver-minor]
       - dependency-name: react-dom
-        update-types: [version-update:semver-major, version-update:semver-minor]
       - dependency-name: "@types/react"
         update-types: [version-update:semver-major, version-update:semver-minor]
       - dependency-name: babel-preset-expo
@@ -120,6 +122,14 @@ updates:
       - dependency-name: "@babel/core"
         update-types: [version-update:semver-major]
       - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      # nativewind 4 runs on react-native-css-interop, which peers on
+      # tailwindcss ~3.
+      - dependency-name: tailwindcss
+        update-types: [version-update:semver-major]
+      # TypeScript 7 left the tree still needing 5.9.3 and npm ci failed
+      # ("Missing: typescript@5.9.3 from lock file"). Held with the frontend's.
+      - dependency-name: typescript
         update-types: [version-update:semver-major]
 
   # Docker base images.

@@ -928,9 +928,12 @@ typecheck and `jest --passWithNoTests`, so a green run there says the app compil
 more. Add it once mobile-app has tests worth gating on.
 
 The `/mobile-app` npm entry holds every SDK-owned package below a minor: `expo`, `react-native`,
-`expo-*`, `react-native-*`, `@react-native/*`, `react`, `react-dom`, `@types/react`, async-storage
-and the three presets (`babel-preset-expo`, `jest-expo`, `eslint-config-expo`). `jest`,
-`@types/jest`, `@babel/core` and `eslint` are held below a major, because those presets pin them.
+`expo-*`, `react-native-*`, `@react-native/*`, `@types/react`, async-storage and the three
+presets (`babel-preset-expo`, `jest-expo`, `eslint-config-expo`). `react` and `react-dom` are held
+entirely, patches included: React Native requires `react` to equal its bundled renderer's version
+and throws "Incompatible React versions" at launch, which `mobile-check` never exercises. `jest`,
+`@types/jest`, `@babel/core` and `eslint` are held below a major, because those presets pin them,
+and so are `tailwindcss` (nativewind 4 peers on `~3`) and `typescript`.
 `expo install --fix` sets that whole set to what the installed SDK expects, so an individual bump
 past the `~` range leaves the app off-SDK. Holding only majors was not enough: a minor
 `react-native-reanimated` needed a newer `react-native` and broke `npm ci`. An Expo SDK upgrade is
