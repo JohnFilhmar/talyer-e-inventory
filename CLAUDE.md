@@ -929,9 +929,11 @@ more. Add it once mobile-app has tests worth gating on.
 
 The `/mobile-app` npm entry holds every SDK-owned package below a minor: `expo`, `react-native`,
 `expo-*`, `react-native-*`, `@react-native/*`, `@types/react`, async-storage and the three
-presets (`babel-preset-expo`, `jest-expo`, `eslint-config-expo`). `react` and `react-dom` are held
-entirely, patches included: React Native requires `react` to equal its bundled renderer's version
-and throws "Incompatible React versions" at launch, which `mobile-check` never exercises. `jest`,
+presets (`babel-preset-expo`, `jest-expo`, `eslint-config-expo`). `react`, `react-dom` and
+`react-native` are held entirely, patches included: React Native requires `react` to equal its
+bundled renderer's version and throws "Incompatible React versions" at launch, which
+`mobile-check` never exercises, and a `react-native` patch can peer on a newer `react` than the SDK
+pins. `jest`,
 `@types/jest`, `@babel/core` and `eslint` are held below a major, because those presets pin them,
 and so are `tailwindcss` (nativewind 4 peers on `~3`) and `typescript`.
 `expo install --fix` sets that whole set to what the installed SDK expects, so an individual bump
