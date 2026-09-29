@@ -23,6 +23,14 @@ updates:
         update-types: [minor, patch]
       backend-major:
         update-types: [major]
+    ignore:
+      # mongoose 9.10 requires mongodb driver ~7.6, whose handshake fails under
+      # Jest ("Missing required sub-document 'driver' in the client metadata
+      # document"), so every DB-backed suite times out. Plain node is fine.
+      # Upstream fix: NODE-7832 (mongodb/node-mongodb-native#5059). Drop this
+      # once a mongoose release depends on a driver that contains it.
+      - dependency-name: mongoose
+        versions: [">=9.10.0"]
 
   - package-ecosystem: npm
     directory: /frontend
@@ -34,6 +42,19 @@ updates:
         update-types: [minor, patch]
       frontend-major:
         update-types: [major]
+    ignore:
+      # typescript-eslint, which eslint-config-next pulls in, supports
+      # TypeScript below 6.1 and aborts lint on 7.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # eslint-plugin-react, -import and -jsx-a11y inside eslint-config-next
+      # stop their eslint peer range at ^9.
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      # Tracks the node:22 runtime in the Dockerfile, which moves LTS lines
+      # deliberately (see the docker entries below), not to the newest types.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
 
   # Expo mobile app.
   #
@@ -41,12 +62,15 @@ updates:
   # `expo-*` and `react-native-*` package as one set: `expo install --fix` puts
   # each of them at the version the installed SDK expects, which is why they are
   # written with `~` ranges. Bumping any one of them past that range on its own
-  # leaves the app off-SDK, and nothing in CI would notice. So the SDK-controlled
-  # packages are held below a major here, and `expo` and `react-native` below a
-  # minor as well, since an SDK bump is a migration someone runs deliberately
-  # through `expo install --fix`, not a pull request to review. Everything the
-  # SDK does not own, axios and the react-query packages for example, updates
-  # normally.
+  # leaves the app off-SDK. So every SDK-controlled package is held below a
+  # minor here, since an SDK bump is a migration someone runs deliberately
+  # through `expo install --fix`, not a pull request to review. Holding them
+  # below a major only was not enough: a minor react-native-reanimated needed a
+  # newer react-native and broke `npm ci`. The SDK also owns packages outside
+  # the `expo-*`/`react-native-*` patterns (the presets, async-storage), and
+  # pins jest, babel and eslint to the majors those presets support. Everything
+  # the SDK does not own, axios and the react-query packages for example,
+  # updates normally.
   #
   # These pull requests are deliberately NOT auto-merged; see the group
   # allow-list in dependabot-auto-merge.yml for why.
@@ -70,12 +94,32 @@ updates:
           - version-update:semver-major
           - version-update:semver-minor
       - dependency-name: expo-*
-        update-types: [version-update:semver-major]
+        update-types: [version-update:semver-major, version-update:semver-minor]
       - dependency-name: react-native-*
-        update-types: [version-update:semver-major]
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: "@react-native/*"
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: "@react-native-async-storage/async-storage"
+        update-types: [version-update:semver-major, version-update:semver-minor]
       - dependency-name: react
-        update-types: [version-update:semver-major]
+        update-types: [version-update:semver-major, version-update:semver-minor]
       - dependency-name: react-dom
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: "@types/react"
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: babel-preset-expo
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: jest-expo
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: eslint-config-expo
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: jest
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/jest"
+        update-types: [version-update:semver-major]
+      - dependency-name: "@babel/core"
+        update-types: [version-update:semver-major]
+      - dependency-name: eslint
         update-types: [version-update:semver-major]
 
   # Docker base images.
