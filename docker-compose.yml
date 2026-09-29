@@ -145,6 +145,12 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5000/api}
         NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:5000}
         NEXT_PUBLIC_IMAGE_HOST: ${NEXT_PUBLIC_IMAGE_HOST:-http://localhost:5000}
+    environment:
+      # Server-side catalog reads (React server components). Inside the compose
+      # network `localhost` is this container, so name the backend service. The
+      # same in every environment, so no deploy variable. Read at runtime, which
+      # is why it is not a NEXT_PUBLIC_* build arg.
+      API_INTERNAL_URL: http://backend:5000/api
     restart: unless-stopped
     depends_on:
       - backend

@@ -37,12 +37,13 @@ SECTION_TITLES = {
     "supplierRoutes.js": "Supplier Management",
     "salesRoutes.js": "Sales Management",
     "serviceRoutes.js": "Service Management",
+    "publicRoutes.js": "Public Catalog",
 }
 
 ORDER = [
     "authRoutes.js", "userRoutes.js", "branchRoutes.js", "categoryRoutes.js",
     "motorcycleModelRoutes.js", "productRoutes.js", "stockRoutes.js",
-    "supplierRoutes.js", "salesRoutes.js", "serviceRoutes.js",
+    "supplierRoutes.js", "salesRoutes.js", "serviceRoutes.js", "publicRoutes.js",
 ]
 
 VERBS = "get|post|put|patch|delete"
@@ -53,7 +54,7 @@ def mount_prefixes():
     server = io.open(SERVER, encoding="utf-8").read()
     var_to_path = dict(
         (m.group(2), m.group(1))
-        for m in re.finditer(r"app\.use\('(/api/[^']+)',\s*apiLimiter,\s*(\w+)\)", server)
+        for m in re.finditer(r"app\.use\('(/api/[^']+)',\s*(?:apiLimiter,\s*)?(\w+)\)", server)
     )
     file_to_var = dict(
         (m.group(2), m.group(1))

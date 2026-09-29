@@ -86,3 +86,18 @@ groups:
             More than two restarts in half an hour. `restart: unless-stopped`
             hides a crash loop from the health check, because each new container
             answers /health until it dies again.
+
+      - alert: TalyerPublicCatalogRateLimited
+        expr: >-
+          sum by (project) (rate(http_request_duration_seconds_count{project=~"talyer-.*", route=~"/api/public/.*", status_code="429"}[5m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.project }} public catalog is being rate limited"
+          description: >-
+            Server-rendered catalog pages share one rate-limit bucket, the
+            frontend container's address, so sustained 429s mean the public site
+            is showing its "catalog is unavailable" page to everyone. The fix is
+            forwarding the visitor's address; see the ponytail note in
+            backend/src/routes/publicRoutes.js.

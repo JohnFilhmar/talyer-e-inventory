@@ -513,6 +513,34 @@ The `withAuthGuard` / `withRoleGuard` HOCs in `middlewares/` are per-page opt-in
 of that layout, for admin-only pages. There is no Next.js `middleware.ts` — all guarding is
 client-side.
 
+### Public catalog
+
+The storefront is `/` (the newest 8 products) and `/catalog`, `/catalog/[product_id]` under
+`app/(public)/`. They are **server components**, unlike the rest of the app, so they are indexable
+and render without JavaScript. They read through [lib/public/catalogApi.ts](frontend/src/lib/public/catalogApi.ts),
+which validates every response with the Zod schemas in `utils/validators/publicCatalog.ts`, and
+never through `apiClient`. The backend side is the unauthenticated `/api/public` router
+([publicCatalogController.js](backend/src/controllers/publicCatalogController.js)). Four things are
+load-bearing:
+
+- **Every public read goes through `toPublicProduct`** in
+  [utils/publicProduct.js](backend/src/utils/publicProduct.js) over `.lean()` documents. It builds a
+  new object from an allow-list, so cost, margin and quantities cannot reach a visitor, and a field
+  added to `Product` stays private until someone adds it there. `Product` serializes virtuals, so a
+  hydrated document would also leak `profitMargin`.
+- **Stock labels read available stock** (`quantity - reservedQuantity`), not the model's
+  `stockStatus` virtual, which ignores reservations.
+- **The staff product reads are staff-only** (`authorize` admin, salesperson, mechanic). They used
+  to require only `protect`, so any self-registered customer could read cost prices.
+- **The whole public site shares one rate-limit bucket**, because every server-rendered request
+  reaches the backend from the frontend container's address. Normal traffic stays far below it
+  thanks to the 60 second caching on both sides. `TalyerPublicCatalogRateLimited` fires if it is
+  exhausted; the fix is forwarding the visitor's address, noted in
+  [publicRoutes.js](backend/src/routes/publicRoutes.js).
+
+Public data is up to about two minutes stale by design (Redis 60 s, Next revalidate 60 s); no
+mutation path invalidates it.
+
 ### Design constraints
 
 These moved here from `frontend/docs/Frontend-Guidelines.md` when that file was retired
@@ -803,6 +831,12 @@ only the built-in local/`backend`-hostname patterns are allowed). Both are `NEXT
 values, which Next.js inlines at build time — in Docker they are build args to
 [frontend/Dockerfile](frontend/Dockerfile), not runtime environment variables, and
 [docker-compose.yml](docker-compose.yml) passes them under `frontend.build.args`.
+
+`API_INTERNAL_URL` is the one runtime frontend variable. Server components use it for the public
+catalog reads, because inside the compose network `localhost` is the frontend container itself.
+[docker-compose.yml](docker-compose.yml) sets it to `http://backend:5000/api` in every
+environment, so it needs no deploy variable; outside Docker it falls back to
+`NEXT_PUBLIC_API_URL`.
 
 CORS is hand-rolled in `server.js` against `CORS.ALLOWED_ORIGINS` with `credentials: true`.
 `CORS_ALLOWED_ORIGINS` is comma-separated and falls back to `CLIENT_URL`; a new frontend origin

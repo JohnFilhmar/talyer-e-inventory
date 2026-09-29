@@ -562,8 +562,9 @@ endpoints that do not exist and omitted about twenty that do, including every
 python scripts/gen_endpoints.py
 ```
 
-88 routes across ten routers. Paths are relative to the mount prefix in each heading. Every
-route requires a Bearer token except the five credential endpoints and the root index; the
+92 routes across eleven routers. Paths are relative to the mount prefix in each heading. Every
+route requires a Bearer token except the five credential endpoints, the root index and the four
+read-only `/api/public` catalog routes, which serialize an allow-list of product fields; the
 role each one demands is in the `authorize(...)` call in its route file, which is the only
 place that cannot drift.
 
@@ -674,6 +675,12 @@ place that cannot drift.
 - `PUT /:id/parts`
 - `PUT /:id/payment`
 - `DELETE /:id`
+
+### Public Catalog (`/api/public`)
+- `GET /products`
+- `GET /products/:id`
+- `GET /categories`
+- `GET /motorcycle-models`
 
 ## 🔒 Authentication & Authorization
 
