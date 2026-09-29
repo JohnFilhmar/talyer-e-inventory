@@ -22,11 +22,12 @@ const refusal = (message) => Object.assign(new Error(message), { statusCode: 400
  * discarded ones are recorded on the refund and touch no stock. Every refund
  * writes a `refund` transaction against the branch that made the sale.
  *
- * The order is saved first, with a forced version check, so two refunds racing
- * on one order cannot both claim the same units: the loser fails with a
- * VersionError before it has returned any stock or written any money.
- * ponytail: the stock and ledger writes after that save are not atomic with it;
- * GAP-046's code half moves this into a transaction.
+ * The refund route runs this inside a transaction (GAP-046), so the order, the
+ * stock and the ledger commit together and a racing refund is re-run against
+ * the committed order. The forced version check on the order save is kept for
+ * callers outside a transaction: two refunds loaded from one version cannot
+ * both claim the same units, and the loser fails with a VersionError before it
+ * has returned any stock or written any money.
  *
  * @param {import('mongoose').Document} order a hydrated SalesOrder
  * @param {{ items: Array<{ itemId: string, quantity: number, disposition: string }>, reason?: string }} request

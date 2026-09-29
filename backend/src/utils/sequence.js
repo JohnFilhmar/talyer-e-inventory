@@ -10,8 +10,8 @@ import Counter from '../models/Counter.js';
 // Counting also made a hard delete hand the retired number to the next create.
 //
 // `findOneAndUpdate` with `$inc` and `upsert` is atomic on a single document,
-// including on a standalone server, so it needs no transaction. That matters
-// here: production MongoDB is standalone and has no multi-document transactions.
+// so it needs no transaction of its own. Inside a transactional handler it joins
+// that transaction, and a number is spent only if the handler commits.
 
 const DUPLICATE_KEY = 11000;
 

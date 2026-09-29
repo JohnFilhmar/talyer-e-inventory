@@ -474,7 +474,12 @@ untrusted network; the flag exists because it turns the optimizer into an SSRF p
 Production and staging run Mongo as a **single-node replica set** named `rs0`,
 so the backend can use multi-document transactions. Same server, same data
 volume, same `MONGODB_URI`: nothing about day-to-day operation changes. Local
-development stays standalone; only the two overlays add the flags.
+compose runs one too, through `docker-compose.override.yml`, with a keyfile
+generated on each start.
+
+**The backend requires the replica set** since GAP-046's code half: every
+handler that writes stock, orders or money runs in a transaction, and a
+standalone rejects every one of them.
 
 The deploy workflow does the whole conversion and is safe to re-run:
 
@@ -518,10 +523,13 @@ Writes are unavailable only while mongo restarts and initiates, about a minute.
 
 ### Rollback
 
-Redeploy the previous master. Without the overlay flags mongod starts as a
-standalone on the same data volume, and the app, which does not require
-transactions yet, keeps working. If data itself is damaged, restore the backup
-from step 2 with `scripts/restore.sh production <stamp> --confirm`.
+**Do not roll mongo back to a standalone.** Since GAP-046's code half the
+backend runs its writes in transactions: against a standalone every sale,
+service completion and stock change fails. To undo an application release,
+redeploy the previous master; the overlay keeps mongo a replica set. Going back
+to a standalone is only safe together with a backend from before the code half
+(`0376b85` or earlier), and gains nothing. If data itself is damaged, restore
+the backup with `scripts/restore.sh production <stamp> --confirm`.
 
 ## Backups and restore
 

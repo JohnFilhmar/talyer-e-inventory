@@ -2,6 +2,7 @@ import { getRedisClient } from '../config/redis.js';
 import logger from './logger.js';
 import { CACHE_TTL } from '../config/constants.js';
 import { forLog } from './logSafe.js';
+import { afterCommit } from './transaction.js';
 
 class CacheUtil {
   /**
@@ -48,6 +49,7 @@ class CacheUtil {
    * @returns {Promise<Boolean>}
    */
   static async del(key) {
+    if (afterCommit(() => CacheUtil.del(key))) return true;
     try {
       const client = getRedisClient();
       if (!client) return false;
@@ -66,6 +68,8 @@ class CacheUtil {
    * @returns {Promise<Boolean>}
    */
   static async delPattern(pattern) {
+    // Inside a transactional handler this runs after the commit instead.
+    if (afterCommit(() => CacheUtil.delPattern(pattern))) return true;
     try {
       const client = getRedisClient();
       if (!client) return false;

@@ -13,6 +13,7 @@ import { escapeRegex } from '../utils/regex.js';
 import { asDate, asEnum, asObjectId } from '../utils/narrowing.js';
 import { roundCurrency, sumCurrency } from '../utils/currency.js';
 import { refundSalesOrder, REFUND_DISPOSITIONS } from '../utils/salesRefund.js';
+import { transactional } from '../utils/transaction.js';
 // The fields a list may be ordered by. `sortBy` is used as an object key, so an
 // allow-list is what keeps an arbitrary string out of that position; anything
 // outside it is rejected by the route rather than silently ignored.
@@ -191,7 +192,7 @@ export const getSalesOrdersByBranch = asyncHandler(async (req, res) => {
  * @route   POST /api/sales
  * @access  Private (Admin, Salesperson)
  */
-export const createSalesOrder = asyncHandler(async (req, res) => {
+export const createSalesOrder = transactional(async (req, res) => {
   const {
     clientRequestId,
     branch,
@@ -341,66 +342,39 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
     }
   }
 
-  // Pass two: reserve, then create. Anything that throws from here on must put
-  // back exactly what it took. This is a compensating action, not a
-  // transaction: production Mongo is standalone, so sessions are unavailable.
-  // GAP-046 owns the real atomicity fix.
-  const reserved = [];
-  let order;
-  try {
-    for (const { stock, quantity } of resolvedStocks) {
-      await stock.reserveStock(quantity);
-      reserved.push({ stock, quantity });
-    }
-
-    // The order number is allocated by SalesOrder's validate hook, atomically.
-    // This used to build it here from a document count, which two cashiers
-    // ringing up in the same second would compute identically; the second lost
-    // on the unique index, and offline that discarded a real sale.
-    order = await SalesOrder.create({
-      clientRequestId,
-      branch,
-      customer,
-      items: preparedItems,
-      tax: {
-        rate: taxRate,
-        amount: 0 // Will be calculated in pre-save hook
-      },
-      discount,
-      subtotal: 0, // Will be calculated in pre-save hook
-      total: 0, // Will be calculated in pre-save hook
-      payment: {
-        method: paymentMethod,
-        amountPaid,
-        change: 0, // Will be calculated in pre-save hook
-        status: 'pending' // Will be calculated in pre-save hook
-      },
-      status: 'pending',
-      processedBy: req.user._id,
-      notes
-    });
-  } catch (error) {
-    // Release in reverse so a partially-applied release is still consistent.
-    for (const { stock, quantity } of reserved.reverse()) {
-      try {
-        await stock.releaseReservedStock(quantity);
-      } catch (releaseError) {
-        // A failed release is worse than the original error, because it is the
-        // leak this block exists to prevent. Log it with enough to reconcile by
-        // hand and keep releasing the rest.
-        logger.error(
-          {
-            reqId: req.id,
-            stockId: String(stock._id),
-            quantity,
-            err: { name: releaseError.name, message: releaseError.message },
-          },
-          'failed to release reserved stock after order-creation failure'
-        );
-      }
-    }
-    throw error;
+  // Pass two: reserve, then create. The handler is one transaction, so a
+  // failure from here on rolls the reservations back with everything else
+  // rather than through a cleanup racing the failure it undoes (GAP-046).
+  for (const { stock, quantity } of resolvedStocks) {
+    await stock.reserveStock(quantity);
   }
+
+  // The order number is allocated by SalesOrder's validate hook, atomically.
+  // This used to build it here from a document count, which two cashiers
+  // ringing up in the same second would compute identically; the second lost
+  // on the unique index, and offline that discarded a real sale.
+  const order = await SalesOrder.create({
+    clientRequestId,
+    branch,
+    customer,
+    items: preparedItems,
+    tax: {
+      rate: taxRate,
+      amount: 0 // Will be calculated in pre-save hook
+    },
+    discount,
+    subtotal: 0, // Will be calculated in pre-save hook
+    total: 0, // Will be calculated in pre-save hook
+    payment: {
+      method: paymentMethod,
+      amountPaid,
+      change: 0, // Will be calculated in pre-save hook
+      status: 'pending' // Will be calculated in pre-save hook
+    },
+    status: 'pending',
+    processedBy: req.user._id,
+    notes
+  });
 
   // A counter sale paid in full is finished the moment it is rung up: the cash
   // is in the drawer and the goods have left with the customer. Leaving it
@@ -439,7 +413,7 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
  * @route   PUT /api/sales/:id/status
  * @access  Private (Admin, Salesperson)
  */
-export const updateSalesOrderStatus = asyncHandler(async (req, res) => {
+export const updateSalesOrderStatus = transactional(async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -546,7 +520,7 @@ export const updateSalesOrderStatus = asyncHandler(async (req, res) => {
  * @route   PUT /api/sales/:id/payment
  * @access  Private (Admin, Salesperson)
  */
-export const updateSalesOrderPayment = asyncHandler(async (req, res) => {
+export const updateSalesOrderPayment = transactional(async (req, res) => {
   const { id } = req.params;
   const { amountPaid, paymentMethod } = req.body;
 
@@ -620,7 +594,7 @@ export const updateSalesOrderPayment = asyncHandler(async (req, res) => {
  * @route   DELETE /api/sales/:id
  * @access  Private (Admin only)
  */
-export const deleteSalesOrder = asyncHandler(async (req, res) => {
+export const deleteSalesOrder = transactional(async (req, res) => {
   const { id } = req.params;
 
   const order = await SalesOrder.findById(id);
@@ -819,7 +793,7 @@ export const getSalesStatistics = asyncHandler(async (req, res) => {
  * @route   POST /api/sales/:id/refunds
  * @access  Private (Admin, Salesperson)
  */
-export const createSalesOrderRefund = asyncHandler(async (req, res) => {
+export const createSalesOrderRefund = transactional(async (req, res) => {
   const orderId = asObjectId(req.params.id);
   if (!orderId) {
     return ApiResponse.error(res, 400, 'Valid order ID is required');

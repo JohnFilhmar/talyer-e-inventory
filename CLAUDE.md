@@ -25,7 +25,7 @@ Two independent npm packages, no workspace root. Every command must be run from 
 # Backend (cd backend)
 npm run dev                       # nodemon on src/server.js, port 5000
 npm start                         # node src/server.js
-npm test                          # jest --runInBand (NODE_ENV=test) — green: 29 suites, 825 tests, 1 pending
+npm test                          # jest --runInBand (NODE_ENV=test), green: 30 suites, 841 tests
 npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
@@ -423,12 +423,27 @@ Human-readable IDs are allocated from a `Counter` collection, one document per s
 `findOneAndUpdate` with `$inc` and `upsert` is atomic on one document, which is why this needs no
 transaction.
 
-**Mongo topology.** Production and staging run a single-node replica set (`rs0`, GAP-046's
-infrastructure half, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)), so transactions are
-available there. Local development and the Jest suite (`mongodb-memory-server`) are still
-standalone, so **no code may require a transaction until GAP-046's code half** moves the tests to
-a replica set too. A `startSession` that works in production and throws in every test is the
-failure this rule prevents.
+**Mongo topology.** Every environment runs a single-node replica set (`rs0`, GAP-046):
+production and staging through their overlays (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)),
+local compose through [docker-compose.override.yml](docker-compose.override.yml), and the Jest
+suite through `MongoMemoryReplSet` in `tests/setup/dbHandler.js`. **The app now requires it**: a
+standalone rejects the transactions below, so every sale and stock write fails. Running the
+backend outside compose needs a `mongod --replSet rs0` that has been `rs.initiate()`d.
+
+**Transactions.** Every handler that writes stock, orders or money is wrapped in `transactional`
+([utils/transaction.js](backend/src/utils/transaction.js)) instead of `asyncHandler`: sales
+create/status/payment/delete/refund, service create/status/parts/payment/cancel, and stock
+restock/adjust/transfer. The handler runs as one transaction, and mongoose's
+`transactionAsyncLocalStorage` puts every query inside it on the session, so nothing threads one
+by hand. A write conflict re-runs the loser against what the winner committed, which is what
+closes the lost update and the oversell. Four rules follow:
+
+- **The handler can run more than once.** A side effect other than a database write must be
+  idempotent or go through `afterCommit`. `CacheUtil.del`/`delPattern` already defer themselves.
+- **No parallel database calls inside one** (`Promise.all` over queries); a session rejects them.
+- **A 4xx answer aborts.** Refuse before writing, or the refusal rolls the writes back with it.
+- **No compensating cleanup.** The reserve-then-release-on-failure blocks GAP-014 added are gone;
+  a failure rolls back with the transaction. Do not add them back.
 
 Three things here are load-bearing:
 
@@ -657,7 +672,7 @@ backend. Check this first when every request 404s.
 ## Testing
 
 ```bash
-cd backend  && npm test        # jest --runInBand, 29 suites / 825 tests + 1 pending
+cd backend  && npm test        # jest --runInBand, 30 suites / 841 tests
 cd frontend && npm test        # vitest run
 ```
 
@@ -668,9 +683,10 @@ It covers the offline outbox's classification table, which `sync.ts` itself desc
 data-loss bug if it is wrong in either direction. `environment: 'node'`, since these are module
 tests; a component suite would opt into jsdom per file. CI runs it as `frontend-test`.
 
-**One backend test is deliberately pending.** `concurrency.test.js` holds the oversell case as a
-specification for GAP-046, marked `.skip` with a comment naming it. It is written to fail against
-today's code: remove the skip before starting that gap.
+**`concurrency.test.js` is the only suite that fires requests at one document at once.** It
+holds the oversell, lost-update and racing-replay cases GAP-046 fixed. The oversell and replay
+cases failed before the transactions landed (the lost-update case depends on interleaving and
+passed there by timing); if one goes red, a write path has escaped `transactional`.
 
 Each suite builds its own bare Express app and mounts just the router under test, so global
 middleware and CORS are absent from tests:
@@ -681,7 +697,7 @@ app.use(express.json());
 app.use('/api/stock', stockRoutes);
 ```
 
-`npm test` is green — 29 suites / 825 tests, verified by CI's `backend-test` job:
+`npm test` is green: 30 suites / 841 tests, verified by CI's `backend-test` job:
 
 ```bash
 npm test

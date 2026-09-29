@@ -1,7 +1,7 @@
 # Talyer E-Inventory System
 
 > **Status:** Deployed — production runs from `master`, staging from `staging`  
-> **Tests:** backend 825 passing across 29 suites (1 pending) · frontend 9 passing (Vitest)  
+> **Tests:** backend 841 passing across 30 suites · frontend 11 passing (Vitest)  
 > **Clients:** Web (Next.js, offline-capable PWA) · Mobile (Expo, in development)
 
 A multi-branch inventory and business management system for motorparts and
@@ -69,7 +69,7 @@ Beyond the MVP feature set documented further down:
 | 6 | Service Orders | ✅ | ✅ | 38/38 | Complete |
 | - | User Management | ✅ | ✅ | -/- | Complete |
 
-**Total Backend Tests:** 825 passing across 29 suites, 1 pending  
+**Total Backend Tests:** 841 passing across 30 suites  
 **Total Features Implemented:** 7 major modules  
 **API Endpoints:** 88  
 **Database Models:** 11 models  
@@ -535,9 +535,9 @@ npm test -- --coverage     # Run with coverage report
 ```
 
 **Current Test Results:**
-- Backend: 826 total, 825 passing, 1 pending (`concurrency.test.js`
-  holds the GAP-046 oversell case as a specification)
-- Frontend: 9 passing (Vitest, the offline outbox classification table)
+- Backend: 841 passing (`concurrency.test.js` holds the GAP-046
+  oversell, lost-update and racing-replay cases)
+- Frontend: 11 passing (Vitest, the offline outbox classification table)
 - Coverage: Comprehensive coverage of all MVP features
 
 ### Initial Setup
@@ -935,7 +935,7 @@ Create Order → Validate Stock → Reserve Stock
 ├─────────────────────────────────────────────────────┤
 │             Integration Tests                       │
 │              (API Endpoints)                        │
-│  • 825 tests, 1 pending                             │
+│  • 841 tests                                        │
 │  • Jest + Supertest                                 │
 │  • MongoDB Memory Server                            │
 ├─────────────────────────────────────────────────────┤

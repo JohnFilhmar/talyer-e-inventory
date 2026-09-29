@@ -1,16 +1,22 @@
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 
 let mongoServer;
 
 /**
- * Connect to the in-memory database
+ * Connect to an in-memory single-node replica set.
+ *
+ * A replica set rather than a standalone because production runs one (GAP-046)
+ * and the stock-mutating controllers run inside transactions, which a
+ * standalone rejects. wiredTiger is the engine that supports them.
  */
 const connect = async () => {
   // Close any existing connections
   await mongoose.disconnect();
 
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryReplSet.create({
+    replSet: { count: 1, storageEngine: 'wiredTiger' },
+  });
   const uri = mongoServer.getUri();
 
   await mongoose.connect(uri);

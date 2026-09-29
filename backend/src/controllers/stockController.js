@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import logger from '../utils/logger.js';
 import Stock from '../models/Stock.js';
 import Product from '../models/Product.js';
 import Branch from '../models/Branch.js';
@@ -13,6 +12,7 @@ import { USER_ROLES, PAGINATION, STOCK_TRANSFER_STATUS } from '../config/constan
 import { resolveBranchScope, canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
 import { asObjectId, asDate, asEnum } from '../utils/narrowing.js';
+import { transactional } from '../utils/transaction.js';
 
 /**
  * Resolve a free-text search to the product ids it matches.
@@ -535,7 +535,7 @@ export const getLowStock = asyncHandler(async (req, res) => {
  * @route   POST /api/stock/restock
  * @access  Private (Admin, Salesperson)
  */
-export const restockProduct = asyncHandler(async (req, res) => {
+export const restockProduct = transactional(async (req, res) => {
   const {
     product,
     branch,
@@ -566,11 +566,10 @@ export const restockProduct = asyncHandler(async (req, res) => {
     return ApiResponse.error(res, 400, 'Invalid product or branch ID');
   }
 
-  // Validate product and branch exist
-  const [productExists, branchExists] = await Promise.all([
-    Product.findById(productId),
-    Branch.findById(branchId)
-  ]);
+  // Validate product and branch exist. Sequential, not Promise.all: this runs
+  // in a transaction, and one session does not take parallel operations.
+  const productExists = await Product.findById(productId);
+  const branchExists = await Branch.findById(branchId);
 
   if (!productExists) {
     return ApiResponse.error(res, 404, 'Product not found');
@@ -658,7 +657,7 @@ export const restockProduct = asyncHandler(async (req, res) => {
  * @route   POST /api/stock/adjust
  * @access  Private (Admin only)
  */
-export const adjustStock = asyncHandler(async (req, res) => {
+export const adjustStock = transactional(async (req, res) => {
   const { product, branch, adjustment, reason } = req.body;
 
   if (!reason) {
@@ -748,7 +747,7 @@ export const adjustStock = asyncHandler(async (req, res) => {
  * @access  Private (Admin, Salesperson)
  * @note    This does NOT change prices - only adds quantity
  */
-export const restockById = asyncHandler(async (req, res) => {
+export const restockById = transactional(async (req, res) => {
   const { id } = req.params;
   const { quantity, supplierId, notes } = req.body;
 
@@ -811,7 +810,7 @@ export const restockById = asyncHandler(async (req, res) => {
  * @route   PUT /api/stock/:id/adjust
  * @access  Private (Admin only)
  */
-export const adjustById = asyncHandler(async (req, res) => {
+export const adjustById = transactional(async (req, res) => {
   const { id } = req.params;
   const { quantity, reason, notes } = req.body;
 
@@ -893,7 +892,7 @@ export const adjustById = asyncHandler(async (req, res) => {
  * @route   POST /api/stock/transfers
  * @access  Private (Admin, Branch Manager)
  */
-export const createStockTransfer = asyncHandler(async (req, res) => {
+export const createStockTransfer = transactional(async (req, res) => {
   const { product, fromBranch, toBranch, quantity, notes } = req.body;
 
   // Validate branches are different
@@ -925,40 +924,18 @@ export const createStockTransfer = asyncHandler(async (req, res) => {
     );
   }
 
-  // Reserve, then create. Same compensating-action shape as createSalesOrder:
-  // the reservation is a database write, and if the create then fails the units
-  // stay reserved forever with nothing to release them. availableQuantity is
-  // `quantity - reservedQuantity`, so a leaked reservation makes real stock
-  // permanently unsellable and unmovable. Not a transaction; production Mongo is
-  // standalone and GAP-046 owns the real fix.
+  // Reserve, then create, in one transaction: a failed create rolls the
+  // reservation back with it, so it cannot leak (GAP-046).
   await sourceStock.reserveStock(quantity);
 
-  let transfer;
-  try {
-    transfer = await StockTransfer.create({
-      product,
-      fromBranch,
-      toBranch,
-      quantity,
-      initiatedBy: req.user._id,
-      notes
-    });
-  } catch (error) {
-    try {
-      await sourceStock.releaseReservedStock(quantity);
-    } catch (releaseError) {
-      logger.error(
-        {
-          reqId: req.id,
-          stockId: String(sourceStock._id),
-          quantity,
-          err: { name: releaseError.name, message: releaseError.message },
-        },
-        'failed to release reserved stock after transfer-creation failure'
-      );
-    }
-    throw error;
-  }
+  const transfer = await StockTransfer.create({
+    product,
+    fromBranch,
+    toBranch,
+    quantity,
+    initiatedBy: req.user._id,
+    notes
+  });
 
   const populatedTransfer = await StockTransfer.findById(transfer._id)
     .populate('product', 'sku name brand')
@@ -984,7 +961,7 @@ export const createStockTransfer = asyncHandler(async (req, res) => {
  * @route   PUT /api/stock/transfers/:id
  * @access  Private (Admin, Branch Manager)
  */
-export const updateStockTransferStatus = asyncHandler(async (req, res) => {
+export const updateStockTransferStatus = transactional(async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 

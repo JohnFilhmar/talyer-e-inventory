@@ -19,7 +19,7 @@ services:
   # an external volume and never enters the repository. The member host is
   # `mongo:27017`, the service name the backend already connects to, so the
   # existing MONGODB_URI keeps working unchanged (rehearsed on 2026-09-25).
-  # Local development stays standalone: only this overlay adds the flags.
+  # Local compose does the same through docker-compose.override.yml.
   mongo:
     command: ["--replSet", "rs0", "--keyFile", "/etc/mongo-keyfile/keyfile", "--bind_ip_all"]
     volumes:
