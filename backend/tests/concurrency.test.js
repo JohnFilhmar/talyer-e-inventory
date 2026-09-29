@@ -17,11 +17,8 @@ import SalesOrder from '../src/models/SalesOrder.js';
  * request in every suite was awaited sequentially, so the lost-update shape
  * GAP-046 describes was entirely unprobed.
  *
- * Two of the tests here pass today. The third is the specification for GAP-046
- * and is marked pending rather than left red, because production MongoDB is
- * standalone and the fix is a compensating read-modify-write, not a
- * transaction. When GAP-046 lands, remove the `.skip` first and watch it fail
- * before fixing it.
+ * GAP-046 made every stock-mutating operation a transaction, so two writers on
+ * one row conflict and the loser retries against what the winner committed.
  */
 const app = express();
 app.use(express.json());
@@ -100,24 +97,15 @@ describe('concurrent order creation', () => {
     expect(new Set(numbers).size).toBe(5);
   });
 
-  it('never creates a second order when two replays race, though the loser 500s', async () => {
+  it('answers the loser of a racing replay with 200 and the same order', async () => {
     // The offline outbox reuses its clientRequestId on every retry, and a
-    // dropped response is exactly the case where two arrive at once. The
-    // dedupe check is a read followed by a write with nothing between them, so
-    // under a true race both requests pass it and the unique index rejects the
-    // second insert.
+    // dropped response is exactly the case where two arrive at once. Both can
+    // pass the dedupe read before either inserts. The loser's transaction
+    // aborts, which rolls its reservation back, and it answers with the
+    // winner's order as a sequential replay would.
     //
-    // What matters holds: exactly one order exists, the stock is committed
-    // once, and the losing request's reservation is rolled back rather than
-    // stranded. What does not hold is the documented contract, which says a
-    // replay answers 200 with the existing order. It answers 500 here.
-    //
-    // That is not data loss. sync.ts treats a 5xx as retryable and leaves the
-    // entry pending, so the retry hits the dedupe path and gets its 200. It is
-    // recorded on GAP-046, which owns atomicity on this path, rather than
-    // fixed here: catching the duplicate key and answering 200 means deciding
-    // what the losing request does about its reservation, which is the same
-    // decision GAP-046 has to make.
+    // The reservation assertion failed intermittently under load before
+    // GAP-046, when the rollback was a cleanup racing the failure it undid.
     const { admin, branch, product, stock } = await setup(100);
     const clientRequestId = '507f1f77bcf86cd799439099';
 
@@ -126,14 +114,12 @@ describe('concurrent order creation', () => {
       orderFor(admin, branch, product, 1, { clientRequestId }),
     ]);
 
-    const created = responses.filter((r) => r.statusCode === 201);
-    expect(created).toHaveLength(1);
-
+    expect(responses.map((r) => r.statusCode).sort()).toEqual([200, 201]);
+    expect(responses[0].body.data._id).toBe(responses[1].body.data._id);
     expect(await SalesOrder.countDocuments({ clientRequestId })).toBe(1);
 
-    // No reservation stranded by the request that lost.
     const after = await Stock.findById(stock._id);
-    expect(after.reservedQuantity).toBe(0);
+    expect(after.reservedQuantity).toBe(1);
     expect(after.quantity).toBe(100);
   });
 
@@ -151,16 +137,9 @@ describe('concurrent order creation', () => {
     expect(replay.body.data._id).toBe(first.body.data._id);
   });
 
-  // eslint-disable-next-line jest/no-disabled-tests
-  it.skip('does not oversell when two orders race for the last unit (GAP-046)', async () => {
-    // The specification, not a regression guard. Reservation is a read, a
-    // modify and a write with no compare-and-set between them, so two requests
-    // can both read availableQuantity 1 and both reserve it.
-    //
-    // Production MongoDB is standalone, so the fix is a conditional update
-    // (`findOneAndUpdate` with the availability in the filter) rather than a
-    // transaction. Un-skip this when GAP-046 is picked up: it should fail
-    // first.
+  it('does not oversell when two orders race for the last unit (GAP-046)', async () => {
+    // Reservation is a read, a modify and a write, so without a transaction
+    // two requests could both read availableQuantity 1 and both reserve it.
     const { admin, branch, product, stock } = await setup(1);
 
     const responses = await Promise.all([
@@ -174,6 +153,26 @@ describe('concurrent order creation', () => {
     const after = await Stock.findById(stock._id);
     expect(after.reservedQuantity).toBeLessThanOrEqual(1);
     expect(after.quantity - after.reservedQuantity).toBeGreaterThanOrEqual(0);
+  });
+
+  it('loses no update when two completed sales deduct from one row at once', async () => {
+    // The lost update GAP-046 describes: both read 10, both write 7. Paid in
+    // full, each order completes on creation and deducts its three units.
+    const { admin, branch, product, stock } = await setup(10);
+
+    const responses = await Promise.all([
+      orderFor(admin, branch, product, 3, { amountPaid: 450 }),
+      orderFor(admin, branch, product, 3, { amountPaid: 450 }),
+    ]);
+
+    expect(responses.map((r) => r.statusCode)).toEqual([201, 201]);
+    const after = await Stock.findById(stock._id);
+    expect(after.quantity).toBe(4);
+    expect(after.reservedQuantity).toBe(0);
+
+    // Each ledger row records the transition that actually persisted.
+    const movements = await StockMovement.find({ stock: stock._id, type: 'sale' }).sort({ quantityBefore: -1 });
+    expect(movements.map((m) => [m.quantityBefore, m.quantityAfter])).toEqual([[10, 7], [7, 4]]);
   });
 });
 

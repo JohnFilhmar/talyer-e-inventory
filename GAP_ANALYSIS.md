@@ -218,8 +218,11 @@ was actually tested.
 **GAP-050 was closed on 2026-09-25** with refunds built to the owner's
 answers.
 
-Remaining open: 1 of the 62 gaps now listed, GAP-046, whose infrastructure
-half is built and whose code half waits on the conversion. None
+**GAP-046 was closed on 2026-09-29** once production was confirmed running as
+replica set `rs0`: every write to stock, orders or money is now a transaction.
+
+Remaining open: 0 of the 62 gaps now listed. The paragraph below describes the
+queue as it stood before the last waves and is kept as history. None
 of them should be started from its checklist alone. Four change product or
 financial behaviour, three need infrastructure access or an owner decision, and
 the decision briefs are in section 9 and in each entry's Open questions. Two new entries were raised on
@@ -6353,7 +6356,38 @@ None.
 
 ### GAP-046 [CODE] No atomicity on stock quantity writes: lost updates and oversell
 
-> **Infrastructure half built 2026-09-25; the code half is still open.** The
+> **FIXED 2026-09-29, Wave 8.** The owner confirmed production answers
+> `db.hello().setName` with `rs0`, and the code half landed. Every handler
+> that writes stock, orders or money runs as one transaction through
+> `transactional` in `backend/src/utils/transaction.js`: sales
+> create/status/payment/delete/refund, service create/status/parts/payment/
+> cancel, and stock restock/adjust/transfer. A write conflict re-runs the
+> loser against the committed state, which closes both the lost update and
+> the oversell without rewriting the model methods. The compensating
+> releases in `createSalesOrder` and `createStockTransfer` are gone, since a
+> failure now rolls back with the transaction.
+>
+> The racing replay answers **200 with the existing order**: the loser's
+> retry sees the winner through the handler's own dedupe read, and a duplicate
+> key that escapes as an error re-runs the handler once. Its reservation is
+> rolled back by the abort, not by a cleanup. The old test asserted
+> `reservedQuantity` 0 after one order won and stayed pending; that was the
+> lost update itself (the loser's stale document overwrote the winner's
+> reservation, then released its own). The corrected assertion is 1.
+>
+> Jest runs on `MongoMemoryReplSet`, the oversell spec is un-skipped, and a
+> lost-update case (two three-unit sales from 10 leave 4, ledger rows 10 to 7
+> and 7 to 4) was added. Before the fix the oversell and replay cases failed;
+> after it the suite is 30 suites, 841 tests, none pending. Local compose runs
+> a replica set through `docker-compose.override.yml`, verified with a fresh
+> volume, a committed and an aborted transaction, and a restart.
+>
+> The app now **requires** a replica set; `docs/DEPLOYMENT.md` says not to
+> roll mongo back to a standalone. Cache invalidation inside a transaction is
+> deferred to after the commit. Stock adjustments and transfers are covered
+> too, beyond the order paths the entry named.
+>
+> **History: infrastructure half built 2026-09-25.** The
 > owner approved a single-node replica set with a Sunday 02:00 window. Only
 > the conversion ships for that window: the overlays run mongo with
 > `--replSet rs0` and a keyfile, and the deploy creates the keyfile once and

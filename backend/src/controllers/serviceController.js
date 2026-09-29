@@ -12,6 +12,7 @@ import { roundCurrency } from '../utils/currency.js';
 import { asObjectId } from '../utils/narrowing.js';
 import { canAccessBranch } from '../utils/branchScope.js';
 import { escapeRegex } from '../utils/regex.js';
+import { transactional } from '../utils/transaction.js';
 // The fields a list may be ordered by. `sortBy` is used as an object key, so an
 // allow-list is what keeps an arbitrary string out of that position; anything
 // outside it is rejected by the route rather than silently ignored.
@@ -203,7 +204,7 @@ export const getServiceOrder = asyncHandler(async (req, res) => {
  * @route   POST /api/services
  * @access  Private (Admin, Salesperson)
  */
-export const createServiceOrder = asyncHandler(async (req, res) => {
+export const createServiceOrder = transactional(async (req, res) => {
   const {
     clientRequestId,
     branch,
@@ -371,7 +372,7 @@ export const assignMechanic = asyncHandler(async (req, res) => {
  * @route   PUT /api/services/:id/status
  * @access  Private (Admin, Mechanic)
  */
-export const updateServiceOrderStatus = asyncHandler(async (req, res) => {
+export const updateServiceOrderStatus = transactional(async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -507,7 +508,7 @@ export const updateServiceOrderStatus = asyncHandler(async (req, res) => {
  * @route   PUT /api/services/:id/parts
  * @access  Private (Admin, Mechanic)
  */
-export const updatePartsUsed = asyncHandler(async (req, res) => {
+export const updatePartsUsed = transactional(async (req, res) => {
   const { partsUsed } = req.body;
   const order = await ServiceOrder.findById(req.params.id);
 
@@ -596,7 +597,7 @@ export const updatePartsUsed = asyncHandler(async (req, res) => {
  * @route   PUT /api/services/:id/payment
  * @access  Private (Admin, Salesperson)
  */
-export const updatePayment = asyncHandler(async (req, res) => {
+export const updatePayment = transactional(async (req, res) => {
   const { paymentMethod, amountPaid } = req.body;
   const order = await ServiceOrder.findById(req.params.id);
 
@@ -663,7 +664,7 @@ export const updatePayment = asyncHandler(async (req, res) => {
  * @route   DELETE /api/services/:id
  * @access  Private (Admin only)
  */
-export const cancelServiceOrder = asyncHandler(async (req, res) => {
+export const cancelServiceOrder = transactional(async (req, res) => {
   const order = await ServiceOrder.findById(req.params.id);
 
   if (!order) {

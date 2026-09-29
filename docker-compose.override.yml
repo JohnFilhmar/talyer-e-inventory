@@ -1,4 +1,5 @@
-# Local-development port publishing. Compose loads docker-compose.override.yml
+# Local-development settings: port publishing, and mongo as a replica set.
+# Compose loads docker-compose.override.yml
 # automatically for a bare `docker compose up` (no -f flags), which is exactly
 # what README.md and CLAUDE.md document: `docker compose up --build` then
 # `localhost:3000` / `localhost:5000`. The base docker-compose.yml deliberately
@@ -12,6 +13,36 @@
 # local one-liner working. Do not add anything here that should also apply to
 # staging/production; that belongs in the base file instead.
 services:
+  # A single-node replica set, as staging and production run (GAP-046). The
+  # stock and order handlers run in transactions, which a standalone rejects,
+  # so without this every sale fails locally.
+  #
+  # The overlays do this with a keyfile volume and a deploy step. Locally the
+  # keyfile is generated on each start instead: auth plus --replSet requires
+  # one, and a set with one member never uses it to talk to anyone. The
+  # healthcheck initiates the set on first start and reports healthy only once
+  # this node is primary, which is what the backend waits for.
+  mongo:
+    entrypoint:
+      - bash
+      - -c
+      - |
+        head -c 756 /dev/urandom | base64 | tr -d '\n' > /tmp/mongo-keyfile
+        chmod 400 /tmp/mongo-keyfile
+        chown mongodb:mongodb /tmp/mongo-keyfile
+        exec docker-entrypoint.sh mongod --replSet rs0 --keyFile /tmp/mongo-keyfile --bind_ip_all
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD"
+          --authenticationDatabase admin --eval
+          "try { rs.status() } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo:27017'}]}) }
+          if (!db.hello().isWritablePrimary) quit(1)"
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
   backend:
     ports:
       - "5000:5000"
