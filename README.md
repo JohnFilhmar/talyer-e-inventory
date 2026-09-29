@@ -1,7 +1,7 @@
 # Talyer E-Inventory System
 
 > **Status:** Deployed — production runs from `master`, staging from `staging`  
-> **Tests:** backend 841 passing across 30 suites · frontend 11 passing (Vitest)  
+> **Tests:** backend 855 passing across 32 suites · frontend 19 passing (Vitest) · 20 Playwright e2e  
 > **Clients:** Web (Next.js, offline-capable PWA) · Mobile (Expo, in development)
 
 A multi-branch inventory and business management system for motorparts and
@@ -69,7 +69,7 @@ Beyond the MVP feature set documented further down:
 | 6 | Service Orders | ✅ | ✅ | 38/38 | Complete |
 | - | User Management | ✅ | ✅ | -/- | Complete |
 
-**Total Backend Tests:** 841 passing across 30 suites  
+**Total Backend Tests:** 855 passing across 32 suites  
 **Total Features Implemented:** 7 major modules  
 **API Endpoints:** 88  
 **Database Models:** 11 models  
@@ -535,9 +535,9 @@ npm test -- --coverage     # Run with coverage report
 ```
 
 **Current Test Results:**
-- Backend: 841 passing (`concurrency.test.js` holds the GAP-046
+- Backend: 855 passing (`concurrency.test.js` holds the GAP-046
   oversell, lost-update and racing-replay cases)
-- Frontend: 11 passing (Vitest, the offline outbox classification table)
+- Frontend: 19 passing (Vitest: the offline outbox classification table and the public catalog data layer), plus 20 Playwright end-to-end checks of the public site (`npm run test:e2e`, needs a running stack)
 - Coverage: Comprehensive coverage of all MVP features
 
 ### Initial Setup
@@ -562,8 +562,9 @@ endpoints that do not exist and omitted about twenty that do, including every
 python scripts/gen_endpoints.py
 ```
 
-88 routes across ten routers. Paths are relative to the mount prefix in each heading. Every
-route requires a Bearer token except the five credential endpoints and the root index; the
+92 routes across eleven routers. Paths are relative to the mount prefix in each heading. Every
+route requires a Bearer token except the five credential endpoints, the root index and the four
+read-only `/api/public` catalog routes, which serialize an allow-list of product fields; the
 role each one demands is in the `authorize(...)` call in its route file, which is the only
 place that cannot drift.
 
@@ -674,6 +675,12 @@ place that cannot drift.
 - `PUT /:id/parts`
 - `PUT /:id/payment`
 - `DELETE /:id`
+
+### Public Catalog (`/api/public`)
+- `GET /products`
+- `GET /products/:id`
+- `GET /categories`
+- `GET /motorcycle-models`
 
 ## 🔒 Authentication & Authorization
 
@@ -935,7 +942,7 @@ Create Order → Validate Stock → Reserve Stock
 ├─────────────────────────────────────────────────────┤
 │             Integration Tests                       │
 │              (API Endpoints)                        │
-│  • 841 tests                                        │
+│  • 855 tests                                        │
 │  • Jest + Supertest                                 │
 │  • MongoDB Memory Server                            │
 ├─────────────────────────────────────────────────────┤

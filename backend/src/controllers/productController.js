@@ -8,6 +8,7 @@ import CacheUtil from '../utils/cache.js';
 import { escapeRegex } from '../utils/regex.js';
 import { asObjectId, asEnum } from '../utils/narrowing.js';
 import { pickFields } from '../utils/pickFields.js';
+import { parseMotorcycleModelFilter, productTextClauses } from '../utils/productSearch.js';
 import { CACHE_TTL, PAGINATION } from '../config/constants.js';
 
 /**
@@ -50,25 +51,6 @@ const PRODUCT_UPDATABLE_FIELDS = [
   'isActive',
   'isDiscontinued',
 ];
-
-/**
- * Normalises the `motorcycleModel` filter, which arrives either as a repeated
- * query param (`?motorcycleModel=a&motorcycleModel=b`, parsed by Express into
- * an array) or as one comma-joined string — the form the frontend sends, since
- * axios's default array serialisation appends `[]` to the key.
- *
- * @param {string|string[]|undefined} raw
- * @returns {string[]} ids, empty when nothing usable was supplied
- */
-const parseMotorcycleModelFilter = (raw) => {
-  if (raw === undefined || raw === null) return [];
-
-  const values = Array.isArray(raw) ? raw : String(raw).split(',');
-
-  return values
-    .map((value) => String(value).trim())
-    .filter((value) => /^[0-9a-fA-F]{24}$/.test(value));
-};
 
 /**
  * Verifies every id in a fitment list refers to a real motorcycle model.
@@ -295,31 +277,9 @@ export const searchProducts = asyncHandler(async (req, res) => {
   }
 
   if (q) {
-    const pattern = { $regex: escapeRegex(q), $options: 'i' };
-
-    // Mixed search: the same box resolves a part ("brake pad", a SKU, a
-    // barcode) and a motorcycle ("Click 125i"). Motorcycles are resolved to
-    // ids first, then folded into the same $or — a two-step that a single
-    // query cannot express, since the text lives in another collection.
-    const matchingMotorcycles = await MotorcycleModel.find({
-      $or: [{ make: pattern }, { model: pattern }, { code: pattern }]
-    })
-      .select('_id')
-      .lean();
-
-    const textOr = [
-      { name: pattern },
-      { sku: pattern },
-      { brand: pattern },
-      { productModel: pattern },
-      { barcode: pattern }
-    ];
-
-    if (matchingMotorcycles.length > 0) {
-      textOr.push({ motorcycleModels: { $in: matchingMotorcycles.map((m) => m._id) } });
-    }
-
-    query.$or = textOr;
+    // Mixed search: the same box resolves a part and a motorcycle. Shared with
+    // the public catalog, see utils/productSearch.js.
+    query.$or = await productTextClauses(q);
   }
 
   const products = await Product.find(query)

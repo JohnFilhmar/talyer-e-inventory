@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { useUploadProductImage, useDeleteProductImage, useSetProductImageAsPrimary, useUpdateProduct } from '@/hooks/useProducts';
 import type { ProductImage } from '@/types/product';
+import { resolveImageUrl } from '@/lib/images/resolveImageUrl';
 
 /** Matches multer's limit on the server, so the form cannot accept what the API refuses. */
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -23,20 +24,6 @@ interface ProductImageEditorProps {
   productId: string;
   images: ProductImage[];
   onImagesChange?: () => void;
-}
-
-/**
- * Resolve image URL - handles both full URLs and legacy relative paths
- */
-function resolveImageUrl(url: string): string {
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
-  }
-  if (url.startsWith('/uploads/')) {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-    return `${backendUrl}${url}`;
-  }
-  return url;
 }
 
 /**

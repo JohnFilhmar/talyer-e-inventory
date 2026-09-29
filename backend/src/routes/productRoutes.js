@@ -308,12 +308,18 @@ const listProductsValidation = [
   ...paginationRules()
 ];
 
+// Staff only. Customers read the catalog through /api/public, which serializes
+// an allow-list; these three reads return whole documents, cost price and
+// margin included.
+const STAFF_ROLES = [USER_ROLES.ADMIN, USER_ROLES.SALESPERSON, USER_ROLES.MECHANIC];
+
 // Routes
 // Search route must come before /:id to avoid conflicts
 router
   .route('/search')
   .get(
     protect,
+    authorize(...STAFF_ROLES),
     searchValidation,
     validate,
     searchProducts
@@ -323,6 +329,7 @@ router
   .route('/')
   .get(
     protect,
+    authorize(...STAFF_ROLES),
     listProductsValidation,
     validate,
     getProducts
@@ -339,6 +346,7 @@ router
   .route('/:id')
   .get(
     protect,
+    authorize(...STAFF_ROLES),
     productIdValidation,
     validate,
     getProduct

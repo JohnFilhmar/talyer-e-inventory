@@ -2,20 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { CatalogProductCard } from '@/components/catalog/CatalogProductCard';
+import type { PublicProduct } from '@/utils/validators/publicCatalog';
 
 // ============================================================================
 // TYPES & INTERFACES
 // ============================================================================
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  originalPrice?: number;
-  image: string;
-  category: string;
-  inStock: boolean;
-}
 
 interface Service {
   id: string;
@@ -45,60 +37,6 @@ interface Event {
 // ============================================================================
 // SAMPLE DATA (Replace with actual API data)
 // ============================================================================
-
-const SAMPLE_PRODUCTS: Product[] = [
-  {
-    id: '1',
-    name: 'Premium Brake Pads Set',
-    price: 89.99,
-    originalPrice: 119.99,
-    image: '/images/products/brake-pads.jpg',
-    category: 'Brakes',
-    inStock: true,
-  },
-  {
-    id: '2',
-    name: 'Synthetic Motor Oil 5W-30',
-    price: 45.99,
-    image: '/images/products/motor-oil.jpg',
-    category: 'Oils & Fluids',
-    inStock: true,
-  },
-  {
-    id: '3',
-    name: 'High-Performance Air Filter',
-    price: 34.99,
-    originalPrice: 44.99,
-    image: '/images/products/air-filter.jpg',
-    category: 'Filters',
-    inStock: true,
-  },
-  {
-    id: '4',
-    name: 'LED Headlight Bulbs (Pair)',
-    price: 79.99,
-    image: '/images/products/headlights.jpg',
-    category: 'Lighting',
-    inStock: false,
-  },
-  {
-    id: '5',
-    name: 'Spark Plugs Set (4pc)',
-    price: 28.99,
-    image: '/images/products/spark-plugs.jpg',
-    category: 'Engine',
-    inStock: true,
-  },
-  {
-    id: '6',
-    name: 'Car Battery 12V 60Ah',
-    price: 149.99,
-    originalPrice: 179.99,
-    image: '/images/products/battery.jpg',
-    category: 'Electrical',
-    inStock: true,
-  },
-];
 
 const SAMPLE_SERVICES: Service[] = [
   {
@@ -207,11 +145,11 @@ const SAMPLE_EVENTS: Event[] = [
 
 const NAV_LINKS = [
   { href: '/', label: 'Home' },
-  { href: '#products', label: 'Products' },
-  { href: '#services', label: 'Services' },
-  { href: '#sales', label: 'Sales' },
-  { href: '#about', label: 'About' },
-  { href: '#contact', label: 'Contact' },
+  { href: '/catalog', label: 'Catalog' },
+  { href: '/#services', label: 'Services' },
+  { href: '/#sales', label: 'Sales' },
+  { href: '/#about', label: 'About' },
+  { href: '/#contact', label: 'Contact' },
 ];
 
 // ============================================================================
@@ -221,7 +159,7 @@ const NAV_LINKS = [
 /**
  * Navigation Bar Component
  */
-const Navbar: React.FC = () => {
+export const Navbar: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -388,97 +326,43 @@ const EmptyState: React.FC<{ title: string; description: string }> = ({ title, d
 );
 
 /**
- * Product Card Component
+ * Featured Products Section. Renders nothing when no products loaded, so a
+ * backend outage hides the section rather than failing the landing page.
  */
-const ProductCard: React.FC<{ product: Product }> = ({ product }) => (
-  <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-shadow border border-gray-100 group">
-    {/* Image */}
-    <div className="relative h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
-      <div className="absolute inset-0 bg-linear-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-        <svg className="w-16 h-16 text-gray-300 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
+const FeaturedProductsSection: React.FC<{ products: PublicProduct[] }> = ({ products }) => {
+  if (products.length === 0) return null;
+  return (
+    <section id="products" className="py-16 lg:py-24 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl lg:text-4xl font-bold text-black">
+            Featured <span className="text-yellow-500">Products</span>
+          </h2>
+          <p className="mt-4 text-gray-600 max-w-2xl mx-auto">
+            Browse our selection of quality motor parts from trusted brands.
+            Everything you need to keep your vehicle in top condition.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+          {products.map((product) => (
+            <CatalogProductCard key={product._id} product={product} />
+          ))}
+        </div>
+        <div className="mt-12 text-center">
+          <Link
+            href="/catalog"
+            className="inline-flex items-center px-6 py-3 border-2 border-black text-black font-semibold rounded-lg hover:bg-black hover:text-white"
+          >
+            View All Products
+            <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+            </svg>
+          </Link>
+        </div>
       </div>
-      {product.originalPrice && (
-        <span className="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">
-          SALE
-        </span>
-      )}
-      {!product.inStock && (
-        <span className="absolute top-3 right-3 bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">
-          OUT OF STOCK
-        </span>
-      )}
-    </div>
-    
-    {/* Content */}
-    <div className="p-4">
-      <span className="text-xs font-medium text-yellow-600 uppercase tracking-wide">{product.category}</span>
-      <h3 className="mt-1 text-lg font-semibold text-black line-clamp-2">{product.name}</h3>
-      <div className="mt-2 flex items-center gap-2">
-        <span className="text-xl font-bold text-black">${product.price.toFixed(2)}</span>
-        {product.originalPrice && (
-          <span className="text-sm text-gray-400 line-through">${product.originalPrice.toFixed(2)}</span>
-        )}
-      </div>
-      <button
-        disabled={!product.inStock}
-        className={`mt-4 w-full py-2 rounded-lg font-medium transition-colors ${
-          product.inStock
-            ? 'bg-yellow-400 text-black hover:bg-yellow-500'
-            : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-        }`}
-      >
-        {product.inStock ? 'Add to Cart' : 'Out of Stock'}
-      </button>
-    </div>
-  </div>
-);
-
-/**
- * Featured Products Section
- */
-const FeaturedProductsSection: React.FC<{ products: Product[] }> = ({ products }) => (
-  <section id="products" className="py-16 lg:py-24 bg-white">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="text-center mb-12">
-        <h2 className="text-3xl lg:text-4xl font-bold text-black">
-          Featured <span className="text-yellow-500">Products</span>
-        </h2>
-        <p className="mt-4 text-gray-600 max-w-2xl mx-auto">
-          Browse our selection of quality motor parts from trusted brands. 
-          Everything you need to keep your vehicle in top condition.
-        </p>
-      </div>
-      
-      {products.length > 0 ? (
-        <>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-          <div className="mt-12 text-center">
-            <Link
-              href="/products"
-              className="inline-flex items-center px-6 py-3 border-2 border-black text-black font-semibold rounded-lg hover:bg-black hover:text-white transition-colors"
-            >
-              View All Products
-              <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-            </Link>
-          </div>
-        </>
-      ) : (
-        <EmptyState
-          title="No Featured Products Yet"
-          description="We're updating our inventory. Check back soon for amazing deals on quality motor parts!"
-        />
-      )}
-    </div>
-  </section>
-);
+    </section>
+  );
+};
 
 /**
  * Services Section
@@ -729,7 +613,8 @@ const AboutSection: React.FC = () => (
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
           </div>
-          <div className="absolute -bottom-6 -right-6 bg-yellow-400 text-black p-6 rounded-xl shadow-xl">
+          {/* Inset on phones: the -right-6 offset put this badge 8px past a 320px screen. */}
+          <div className="absolute -bottom-6 right-0 md:-right-6 bg-yellow-400 text-black p-6 rounded-xl shadow-xl">
             <div className="text-3xl font-bold">15+</div>
             <div className="text-sm">Years of Service</div>
           </div>
@@ -859,7 +744,7 @@ const NewsletterSection: React.FC = () => (
 /**
  * Footer Component
  */
-const Footer: React.FC = () => (
+export const Footer: React.FC = () => (
   <footer className="bg-black text-white">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -882,10 +767,10 @@ const Footer: React.FC = () => (
         <div>
           <h4 className="font-semibold text-yellow-400 mb-4">Quick Links</h4>
           <ul className="space-y-2">
-            <li><a href="#products" className="text-gray-400 hover:text-white text-sm">Products</a></li>
-            <li><a href="#services" className="text-gray-400 hover:text-white text-sm">Services</a></li>
-            <li><a href="#sales" className="text-gray-400 hover:text-white text-sm">Sales & Offers</a></li>
-            <li><a href="#about" className="text-gray-400 hover:text-white text-sm">About Us</a></li>
+            <li><Link href="/catalog" className="text-gray-400 hover:text-white text-sm">Catalog</Link></li>
+            <li><Link href="/#services" className="text-gray-400 hover:text-white text-sm">Services</Link></li>
+            <li><Link href="/#sales" className="text-gray-400 hover:text-white text-sm">Sales & Offers</Link></li>
+            <li><Link href="/#about" className="text-gray-400 hover:text-white text-sm">About Us</Link></li>
           </ul>
         </div>
         
@@ -893,7 +778,7 @@ const Footer: React.FC = () => (
         <div>
           <h4 className="font-semibold text-yellow-400 mb-4">Customer Service</h4>
           <ul className="space-y-2">
-            <li><a href="#contact" className="text-gray-400 hover:text-white text-sm">Contact Us</a></li>
+            <li><Link href="/#contact" className="text-gray-400 hover:text-white text-sm">Contact Us</Link></li>
             <li><a href="#" className="text-gray-400 hover:text-white text-sm">FAQs</a></li>
             <li><a href="#" className="text-gray-400 hover:text-white text-sm">Shipping Info</a></li>
             <li><a href="#" className="text-gray-400 hover:text-white text-sm">Returns Policy</a></li>
@@ -938,10 +823,9 @@ const Footer: React.FC = () => (
 // MAIN COMPONENT
 // ============================================================================
 
-function LandingPage() {
-  // In a real app, these would come from API calls or props
-  // Set to empty arrays to test fallback states
-  const [products] = useState<Product[]>(SAMPLE_PRODUCTS);
+/** The public landing page. `products` comes from the server entry in page.tsx. */
+function LandingPage({ products }: { products: PublicProduct[] }) {
+  // The remaining sections are still sample content; only products are live.
   const [services] = useState<Service[]>(SAMPLE_SERVICES);
   const [sales] = useState<SaleItem[]>(SAMPLE_SALES);
   const [events] = useState<Event[]>(SAMPLE_EVENTS);

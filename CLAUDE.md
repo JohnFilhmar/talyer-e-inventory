@@ -25,7 +25,7 @@ Two independent npm packages, no workspace root. Every command must be run from 
 # Backend (cd backend)
 npm run dev                       # nodemon on src/server.js, port 5000
 npm start                         # node src/server.js
-npm test                          # jest --runInBand (NODE_ENV=test), green: 30 suites, 841 tests
+npm test                          # jest --runInBand (NODE_ENV=test), green: 32 suites, 855 tests
 npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
@@ -513,6 +513,34 @@ The `withAuthGuard` / `withRoleGuard` HOCs in `middlewares/` are per-page opt-in
 of that layout, for admin-only pages. There is no Next.js `middleware.ts` — all guarding is
 client-side.
 
+### Public catalog
+
+The storefront is `/` (the newest 8 products) and `/catalog`, `/catalog/[product_id]` under
+`app/(public)/`. They are **server components**, unlike the rest of the app, so they are indexable
+and render without JavaScript. They read through [lib/public/catalogApi.ts](frontend/src/lib/public/catalogApi.ts),
+which validates every response with the Zod schemas in `utils/validators/publicCatalog.ts`, and
+never through `apiClient`. The backend side is the unauthenticated `/api/public` router
+([publicCatalogController.js](backend/src/controllers/publicCatalogController.js)). Four things are
+load-bearing:
+
+- **Every public read goes through `toPublicProduct`** in
+  [utils/publicProduct.js](backend/src/utils/publicProduct.js) over `.lean()` documents. It builds a
+  new object from an allow-list, so cost, margin and quantities cannot reach a visitor, and a field
+  added to `Product` stays private until someone adds it there. `Product` serializes virtuals, so a
+  hydrated document would also leak `profitMargin`.
+- **Stock labels read available stock** (`quantity - reservedQuantity`), not the model's
+  `stockStatus` virtual, which ignores reservations.
+- **The staff product reads are staff-only** (`authorize` admin, salesperson, mechanic). They used
+  to require only `protect`, so any self-registered customer could read cost prices.
+- **The whole public site shares one rate-limit bucket**, because every server-rendered request
+  reaches the backend from the frontend container's address. Normal traffic stays far below it
+  thanks to the 60 second caching on both sides. `TalyerPublicCatalogRateLimited` fires if it is
+  exhausted; the fix is forwarding the visitor's address, noted in
+  [publicRoutes.js](backend/src/routes/publicRoutes.js).
+
+Public data is up to about two minutes stale by design (Redis 60 s, Next revalidate 60 s); no
+mutation path invalidates it.
+
 ### Design constraints
 
 These moved here from `frontend/docs/Frontend-Guidelines.md` when that file was retired
@@ -672,7 +700,7 @@ backend. Check this first when every request 404s.
 ## Testing
 
 ```bash
-cd backend  && npm test        # jest --runInBand, 30 suites / 841 tests
+cd backend  && npm test        # jest --runInBand, 32 suites / 855 tests
 cd frontend && npm test        # vitest run
 ```
 
@@ -682,6 +710,21 @@ runtime and Dependabot holds its majors, so an LTS move stays deliberate.
 It covers the offline outbox's classification table, which `sync.ts` itself describes as a
 data-loss bug if it is wrong in either direction. `environment: 'node'`, since these are module
 tests; a component suite would opt into jsdom per file. CI runs it as `frontend-test`.
+
+**The public site has a Playwright suite** (`frontend/e2e/`, `npm run test:e2e`). It is not in CI:
+it needs a running stack, frontend on `E2E_BASE_URL` (default `http://localhost:3000`) and backend
+on `E2E_API_URL` (default `http://localhost:5000/api`), and it seeds through the admin API using
+`E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD`. Run it against the compose frontend container, not a host
+`next build`: a host build without the `NEXT_PUBLIC_IMAGE_HOST` build arg routes images through the
+optimizer, which refuses `localhost` (see the loopback note above), so the image check fails for a
+reason production never has. Three details:
+
+- **It seeds once, in `globalSetup`.** A `beforeAll` re-seeded every time a failed test restarted
+  the worker, and each seed spends an admin login against the 10-per-15-minutes auth limiter.
+- **Some checks reload until the public caches catch up** (up to 150 s): lists fetched before the
+  seed stay cached for about two minutes by design.
+- **`@playwright/test` is pinned exactly.** Each version expects its own Chromium build, so a caret
+  range lets a minor bump trigger a browser download.
 
 **`concurrency.test.js` is the only suite that fires requests at one document at once.** It
 holds the oversell, lost-update and racing-replay cases GAP-046 fixed. The oversell and replay
@@ -697,7 +740,7 @@ app.use(express.json());
 app.use('/api/stock', stockRoutes);
 ```
 
-`npm test` is green: 30 suites / 841 tests, verified by CI's `backend-test` job:
+`npm test` is green: 32 suites / 855 tests, verified by CI's `backend-test` job:
 
 ```bash
 npm test
@@ -803,6 +846,12 @@ only the built-in local/`backend`-hostname patterns are allowed). Both are `NEXT
 values, which Next.js inlines at build time — in Docker they are build args to
 [frontend/Dockerfile](frontend/Dockerfile), not runtime environment variables, and
 [docker-compose.yml](docker-compose.yml) passes them under `frontend.build.args`.
+
+`API_INTERNAL_URL` is the one runtime frontend variable. Server components use it for the public
+catalog reads, because inside the compose network `localhost` is the frontend container itself.
+[docker-compose.yml](docker-compose.yml) sets it to `http://backend:5000/api` in every
+environment, so it needs no deploy variable; outside Docker it falls back to
+`NEXT_PUBLIC_API_URL`.
 
 CORS is hand-rolled in `server.js` against `CORS.ALLOWED_ORIGINS` with `credentials: true`.
 `CORS_ALLOWED_ORIGINS` is comma-separated and falls back to `CLIENT_URL`; a new frontend origin

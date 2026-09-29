@@ -142,6 +142,7 @@ import stockRoutes from './routes/stockRoutes.js';
 import supplierRoutes from './routes/supplierRoutes.js';
 import salesRoutes from './routes/salesRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
+import publicRoutes from './routes/publicRoutes.js';
 
 // Mount routes
 app.use('/api/auth', apiLimiter, authRoutes);
@@ -154,6 +155,9 @@ app.use('/api/stock', apiLimiter, stockRoutes);
 app.use('/api/suppliers', apiLimiter, supplierRoutes);
 app.use('/api/sales', apiLimiter, salesRoutes);
 app.use('/api/services', apiLimiter, serviceRoutes);
+// The public storefront. Its limiter is applied per route inside the router,
+// so a 429 there keeps its route label; see routes/publicRoutes.js.
+app.use('/api/public', publicRoutes);
 
 // Health check endpoint.
 //

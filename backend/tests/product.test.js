@@ -1539,3 +1539,18 @@ describe('POST /api/products/:id/images', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe('staff product reads are closed to customers', () => {
+  it('answers 403 to a customer on list, search and detail', async () => {
+    // Customers read the catalog through /api/public. These routes return whole
+    // documents, cost price and margin included.
+    const { token } = await createTestUser({ role: 'customer', email: 'shopper@example.com' });
+    const category = await Category.create({ name: 'Brakes', code: 'BRK' });
+    const product = await Product.create({ name: 'Pad', category: category._id, costPrice: 1, sellingPrice: 2 });
+
+    for (const path of ['/api/products', '/api/products/search?q=pad', `/api/products/${product._id}`]) {
+      const res = await request(app).get(path).set('Authorization', `Bearer ${token}`);
+      expect(res.statusCode).toBe(403);
+    }
+  });
+});
