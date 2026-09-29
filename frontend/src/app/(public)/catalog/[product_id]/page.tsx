@@ -52,7 +52,7 @@ export default async function CatalogProductPage({ params }: { params: Params })
             </div>
           )}
         </div>
-        <div>
+        <div className="min-w-0 wrap-break-word">
           {product.category && (
             <p className="text-sm font-medium uppercase text-gray-500">{product.category.name}</p>
           )}

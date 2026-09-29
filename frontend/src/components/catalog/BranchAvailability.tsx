@@ -27,7 +27,7 @@ export function BranchAvailability({ branches }: BranchAvailabilityProps) {
           key={branch._id}
           className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
         >
-          <div>
+          <div className="min-w-0 wrap-break-word">
             <p className="font-bold text-black">{branch.name}</p>
             {branch.city && <p className="text-sm text-gray-500">{branch.city}</p>}
           </div>

@@ -29,7 +29,7 @@ export function CatalogProductCard({ product }: CatalogProductCardProps) {
   return (
     <Link
       href={`/catalog/${product._id}`}
-      className="flex h-full flex-col rounded-lg border border-gray-200 bg-white hover:border-yellow-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400"
+      className="flex h-full min-w-0 flex-col rounded-lg border border-gray-200 bg-white hover:border-yellow-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400"
     >
       <div className="relative aspect-square w-full rounded-t-lg bg-gray-100">
         {image ? (
@@ -46,7 +46,10 @@ export function CatalogProductCard({ product }: CatalogProductCardProps) {
           </div>
         )}
       </div>
-      <div className="flex flex-1 flex-col p-4">
+      {/* min-w-0 above and wrap-break-word here: one long unbroken word (a part
+          code, a model name) otherwise widens the grid column past a 320px
+          screen, since grid items default to min-width: auto. */}
+      <div className="flex flex-1 flex-col p-4 wrap-break-word">
         {product.category && (
           <p className="text-xs font-medium uppercase text-gray-500">{product.category.name}</p>
         )}
