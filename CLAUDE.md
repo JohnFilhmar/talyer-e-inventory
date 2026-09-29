@@ -25,7 +25,7 @@ Two independent npm packages, no workspace root. Every command must be run from 
 # Backend (cd backend)
 npm run dev                       # nodemon on src/server.js, port 5000
 npm start                         # node src/server.js
-npm test                          # jest --runInBand (NODE_ENV=test), green: 30 suites, 841 tests
+npm test                          # jest --runInBand (NODE_ENV=test), green: 32 suites, 855 tests
 npm test -- stock.test.js         # single suite
 npm test -- -t "should reject"    # single test by name
 npm run test:coverage
@@ -700,7 +700,7 @@ backend. Check this first when every request 404s.
 ## Testing
 
 ```bash
-cd backend  && npm test        # jest --runInBand, 30 suites / 841 tests
+cd backend  && npm test        # jest --runInBand, 32 suites / 855 tests
 cd frontend && npm test        # vitest run
 ```
 
@@ -710,6 +710,21 @@ runtime and Dependabot holds its majors, so an LTS move stays deliberate.
 It covers the offline outbox's classification table, which `sync.ts` itself describes as a
 data-loss bug if it is wrong in either direction. `environment: 'node'`, since these are module
 tests; a component suite would opt into jsdom per file. CI runs it as `frontend-test`.
+
+**The public site has a Playwright suite** (`frontend/e2e/`, `npm run test:e2e`). It is not in CI:
+it needs a running stack, frontend on `E2E_BASE_URL` (default `http://localhost:3000`) and backend
+on `E2E_API_URL` (default `http://localhost:5000/api`), and it seeds through the admin API using
+`E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD`. Run it against the compose frontend container, not a host
+`next build`: a host build without the `NEXT_PUBLIC_IMAGE_HOST` build arg routes images through the
+optimizer, which refuses `localhost` (see the loopback note above), so the image check fails for a
+reason production never has. Three details:
+
+- **It seeds once, in `globalSetup`.** A `beforeAll` re-seeded every time a failed test restarted
+  the worker, and each seed spends an admin login against the 10-per-15-minutes auth limiter.
+- **Some checks reload until the public caches catch up** (up to 150 s): lists fetched before the
+  seed stay cached for about two minutes by design.
+- **`@playwright/test` is pinned exactly.** Each version expects its own Chromium build, so a caret
+  range lets a minor bump trigger a browser download.
 
 **`concurrency.test.js` is the only suite that fires requests at one document at once.** It
 holds the oversell, lost-update and racing-replay cases GAP-046 fixed. The oversell and replay
@@ -725,7 +740,7 @@ app.use(express.json());
 app.use('/api/stock', stockRoutes);
 ```
 
-`npm test` is green: 30 suites / 841 tests, verified by CI's `backend-test` job:
+`npm test` is green: 32 suites / 855 tests, verified by CI's `backend-test` job:
 
 ```bash
 npm test
