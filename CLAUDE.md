@@ -662,7 +662,8 @@ cd frontend && npm test        # vitest run
 ```
 
 **The frontend suite is Vitest** ([vitest.config.ts](frontend/vitest.config.ts)), added with
-GAP-044 and pinned to 3.x: 4 and 5 require `@types/node` 22 or newer while the package pins 20.
+GAP-044. It is on 5.x, which needs `@types/node` 22 or newer; `@types/node` tracks the node:22
+runtime and Dependabot holds its majors, so an LTS move stays deliberate.
 It covers the offline outbox's classification table, which `sync.ts` itself describes as a
 data-loss bug if it is wrong in either direction. `environment: 'node'`, since these are module
 tests; a component suite would opt into jsdom per file. CI runs it as `frontend-test`.
@@ -926,11 +927,20 @@ real browser, so it passed cleanly while node-redis 6 went entirely unexercised.
 typecheck and `jest --passWithNoTests`, so a green run there says the app compiles and nothing
 more. Add it once mobile-app has tests worth gating on.
 
-The `/mobile-app` npm entry holds the Expo SDK's own packages back — `expo` and `react-native`
-below a minor, `expo-*`, `react-native-*`, `react` and `react-dom` below a major. `expo install
---fix` sets that whole set to what the installed SDK expects, so an individual bump past the `~`
-range leaves the app off-SDK and nothing in CI notices. An Expo SDK upgrade is a migration someone
-runs on purpose, not a pull request to review.
+The `/mobile-app` npm entry holds every SDK-owned package below a minor: `expo`, `react-native`,
+`expo-*`, `react-native-*`, `@react-native/*`, `react`, `react-dom`, `@types/react`, async-storage
+and the three presets (`babel-preset-expo`, `jest-expo`, `eslint-config-expo`). `jest`,
+`@types/jest`, `@babel/core` and `eslint` are held below a major, because those presets pin them.
+`expo install --fix` sets that whole set to what the installed SDK expects, so an individual bump
+past the `~` range leaves the app off-SDK. Holding only majors was not enough: a minor
+`react-native-reanimated` needed a newer `react-native` and broke `npm ci`. An Expo SDK upgrade is
+a migration someone runs on purpose, not a pull request to review.
+
+Three more holds name the condition that lifts them, in
+[dependabot.yml](.github/dependabot.yml): backend `mongoose >=9.10.0` (its mongodb driver 7.6
+fails the handshake under Jest, NODE-7832), and frontend `typescript` and `eslint` majors (the
+lint plugins inside `eslint-config-next` do not support TypeScript 7 or ESLint 10 yet).
+Frontend `@types/node` majors are held to track the node:22 runtime.
 
 The auto-merge job waits on the checks it finds at runtime rather than a hardcoded list of names,
 excluding only its own check run, so adding or renaming a CI job does not need an edit here. What

@@ -8,9 +8,8 @@ import path from 'path';
  * of bug (GAP-044).
  *
  * Vitest rather than Jest because the app is already a Vite-adjacent
- * TypeScript project and Jest would need its own transform chain. Pinned to 3.x
- * because 4 and 5 require `@types/node` 22 or newer and this package pins 20;
- * bumping that is a change to every type in the app, not a test-setup detail.
+ * TypeScript project and Jest would need its own transform chain. Vitest 4 and
+ * newer require `@types/node` 22 or newer, which matches the node:22 runtime.
  *
  * `environment: 'node'` on purpose. These suites cover module logic, not
  * components, so nothing here needs a DOM; a component suite would opt into
