@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { calculateProfitMargin, isPopulatedCategory } from '@/types/product';
 import type { Product } from '@/types/product';
 import { MotorcycleModelBadges } from '@/components/motorcycle-models';
+import { resolveImageUrl } from '@/lib/images/resolveImageUrl';
 
 interface ProductCardProps {
   product: Product;
@@ -19,22 +20,6 @@ interface ProductCardProps {
   /** Id currently being restored, so the card can show progress. */
   restoringId?: string | null;
   isAdmin?: boolean;
-}
-
-/**
- * Resolve image URL - handles both full URLs and legacy relative paths
- */
-function resolveImageUrl(url: string): string {
-  // Already a full URL
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
-  }
-  // Relative path from old uploads - prepend backend URL
-  if (url.startsWith('/uploads/')) {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-    return `${backendUrl}${url}`;
-  }
-  return url;
 }
 
 /**

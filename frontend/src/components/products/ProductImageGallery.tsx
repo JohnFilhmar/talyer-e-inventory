@@ -5,24 +5,8 @@ import Image from 'next/image';
 import { ChevronLeft, ChevronRight, Star, Trash2, Package, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import type { ProductImage } from '@/types/product';
+import { resolveImageUrl } from '@/lib/images/resolveImageUrl';
 
-/**
- * Resolve image URL to full URL
- * Handles both full URLs and legacy relative paths
- */
-function resolveImageUrl(url: string): string {
-  // If already a full URL, return as-is
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
-  }
-  // If relative path (legacy), prepend backend URL
-  if (url.startsWith('/uploads/')) {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-    return `${backendUrl}${url}`;
-  }
-  // Return as-is for other cases
-  return url;
-}
 
 interface ProductImageGalleryProps {
   images: ProductImage[];
