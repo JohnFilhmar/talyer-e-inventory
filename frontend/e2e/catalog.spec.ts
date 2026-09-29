@@ -212,9 +212,10 @@ test.describe('small screens', () => {
     expect(first && second && Math.abs(first.y - second.y) < 2).toBe(true);
   });
 
-  test('landing products fit 320px even with a long unbroken word', async ({ page }) => {
-    // The seed's motorcycle make is one long token, which used to widen the
-    // grid column 8px past the screen.
+  test('landing page fits 320px, products included', async ({ page }) => {
+    // The About badge used to sit 8px past a 320px screen. The seed's
+    // motorcycle make is also one long token, which would widen a product
+    // card's grid column without min-w-0 and overflow-wrap on the card.
     test.setTimeout(CACHE_CATCH_UP_MS + 30_000);
     await reloadUntil(page, '/', async () => {
       await expect(page.locator('#products').getByText(seed.fitted.name)).toBeVisible({ timeout: 3_000 });
