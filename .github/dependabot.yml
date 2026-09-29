@@ -89,10 +89,9 @@ updates:
         update-types:
           - version-update:semver-major
           - version-update:semver-minor
+      # Every update, patches too: the SDK pins react-native exactly, and even
+      # 0.81.6 peers on a newer react than the SDK's (npm ci ERESOLVE, #77).
       - dependency-name: react-native
-        update-types:
-          - version-update:semver-major
-          - version-update:semver-minor
       - dependency-name: expo-*
         update-types: [version-update:semver-major, version-update:semver-minor]
       - dependency-name: react-native-*
